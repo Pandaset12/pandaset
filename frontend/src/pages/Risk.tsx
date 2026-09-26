@@ -17,11 +17,11 @@ import type { AnalysisResponse } from "../api/portfolio";
 
 export default function Risk({
   analysis,
-  onAsk,
+  onExplain,
   onMethod,
 }: {
   analysis: AnalysisResponse;
-  onAsk: (q?: string) => void;
+  onExplain: () => void;
   onMethod: () => void;
 }) {
   const [pair, setPair] = useState<[string, string] | null>(null);
@@ -83,10 +83,7 @@ export default function Risk({
           <Info size={16} />
           How we measure risk
         </button>
-        <button
-          className="button dark"
-          onClick={() => onAsk("Explain my risk concentration")}
-        >
+        <button className="button dark" onClick={onExplain}>
           <ChatBubbleLeftRight size={16} />
           Explain my risk
         </button>

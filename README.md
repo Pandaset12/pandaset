@@ -6,12 +6,12 @@
 
 | Workspace           | What you can do                                                                                      |
 | ------------------- | ---------------------------------------------------------------------------------------------------- |
-| **Overview**        | Review sample performance, holdings, return attribution, and related research.                       |
-| **Risk & exposure** | Compare capital and risk contributions, inspect correlations, and see allocation breakdowns.         |
-| **Research**        | Search eight sample assets, compare companies, and follow links to official sources.                 |
-| **What-if lab**     | Change weights, try presets, compare modeled outcomes, and apply a scenario for the current session. |
+| **Overview**        | Review sample performance and request a briefing grounded in the saved analysis.                    |
+| **Risk & exposure** | Compare capital and risk contributions, inspect correlations, and explain the saved risk snapshot.    |
+| **Research**        | Search eight sample assets, compare companies, and summarize a selected official issuer page.        |
+| **What-if lab**     | Compare modeled outcomes and request an explanation before optionally applying a scenario.           |
 
-**Ask Panda** offers curated explanations using the app’s calculations. It is a guided demo, not a connected AI assistant.
+**Ask Panda** explains a saved analysis. Optional Gemini mode also adds a portfolio briefing, a focused risk explanation, a What-if comparison explanation, and summaries of selected official issuer pages. The default demo labels these actions and does not call Gemini.
 
 ## Quick start
 
@@ -32,7 +32,7 @@ This phase adds frontend authentication only. Sessions persist through the Supab
 
 | Command           | Purpose                                                       |
 | ----------------- | ------------------------------------------------------------- |
-| `npm test`        | Run the quant calculation and scenario tests.                 |
+| `npm test`        | Run the quant and frontend API contract tests.                |
 | `npm run build`   | Type-check and create the production app in `frontend/dist/`. |
 | `npm run preview` | Serve the production build locally.                           |
 
@@ -48,12 +48,14 @@ frontend/
     components/     Shared UI, charts, dialogs, and Ask Panda
     styles/         Feature styles and responsive rules
   public/           Favicon and self-hosted fonts
+  tests/            Frontend API request contract tests
 quant/
   analytics.ts      Portfolio and risk calculations
   data.ts           Illustrative assets and return series
   tests/            Calculation and scenario tests
 quant_engine/       Python analytics engine used by the backend
 backend/            Portfolio API, snapshots, and optional Gemini integration
+  tests/            API, quant integration, and Gemini workflow tests
 docs/               Design and verification notes
 ```
 
@@ -65,6 +67,6 @@ The root `package.json` provides the development, test, and build commands. The 
 
 `quant/analytics.ts` calculates compounded returns, linked return contributions, annualized volatility, correlations, risk contributions, and drawdown. The model assumes constant daily weights and excludes fees, taxes, deposits, and withdrawals. The methodology dialog in the app explains these assumptions alongside the results.
 
-Research links open external issuer and public-disclosure pages. PandaSet does not ingest their contents. The backend analyzes fictional sample prices and can optionally use Gemini for explanations. Ask Panda still uses curated frontend responses. API credentials must stay out of the browser bundle.
+Research links open external issuer and public-disclosure pages. A user can request an on-demand summary of the selected official issuer page when Gemini is configured; PandaSet does not crawl or ingest those pages in the background. The backend analyzes fictional sample prices. Ask Panda and the contextual explanations share one Gemini adapter, with workflow-specific prompts and tool access. API credentials must stay out of the browser bundle.
 
 See the [backend guide](backend/README.md), [Python quant guide](quant_engine/README.md), [design notes](docs/design-system.md), and [verification notes](docs/verification.md) for more detail. Font licenses are in `frontend/public/fonts/`.
