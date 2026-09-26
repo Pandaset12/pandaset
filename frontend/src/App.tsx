@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ArrowUpRight,
   ChatBubbleLeftRight,
@@ -9,6 +9,11 @@ import {
 } from "./components/icons";
 import { initialWeights, asOf } from "../../quant/data";
 import { validateWeights } from "../../quant/analytics";
+import {
+  analyzePortfolio,
+  type AnalysisResponse,
+  type Portfolio,
+} from "./api/portfolio";
 import { Brand } from "./components/UI";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { EditPortfolio } from "./components/EditPortfolio";
@@ -25,6 +30,13 @@ function Application() {
   const [method, setMethod] = useState(false);
   const [analyst, setAnalyst] = useState<string | null>(null);
   const [toast, setToast] = useState("");
+  const [backendResult, setBackendResult] = useState<{
+    portfolio: Portfolio;
+    analysis: AnalysisResponse;
+  } | null>(null);
+  const [analysisLoading, setAnalysisLoading] = useState(false);
+  const [analysisError, setAnalysisError] = useState("");
+  const analysisRequest = useRef(0);
   useEffect(() => {
     const fn = () => {
       setHash(location.hash || "#/");
@@ -48,13 +60,35 @@ function Application() {
   }, [route]);
   function apply(w: number[], source: "edit" | "scenario" = "edit") {
     if (!validateWeights(w)) return;
+    analysisRequest.current += 1;
+    setAnalysisLoading(false);
     setWeights([...w]);
+    setBackendResult(null);
+    setAnalysisError("");
     setEdit(false);
     setToast(
       source === "scenario"
         ? "Scenario applied for this browser session. Reloading restores the example portfolio."
         : "Sample portfolio updated for this browser session. Reloading restores the example portfolio.",
     );
+  }
+  async function runBackendAnalysis() {
+    const request = ++analysisRequest.current;
+    setAnalysisLoading(true);
+    setAnalysisError("");
+    try {
+      const result = await analyzePortfolio(weights);
+      if (request === analysisRequest.current) setBackendResult(result);
+    } catch (error) {
+      if (request === analysisRequest.current) {
+        setBackendResult(null);
+        setAnalysisError(
+          error instanceof Error ? error.message : "Demo API is unavailable.",
+        );
+      }
+    } finally {
+      if (request === analysisRequest.current) setAnalysisLoading(false);
+    }
   }
   const nav = [
     ["/", "Overview"],
@@ -117,6 +151,10 @@ function Application() {
           {route === "/" ? (
             <Overview
               weights={weights}
+              backendResult={backendResult}
+              analysisLoading={analysisLoading}
+              analysisError={analysisError}
+              onAnalyze={runBackendAnalysis}
               onEdit={() => setEdit(true)}
               onAsk={(q) => setAnalyst(q || "")}
               onMethod={() => setMethod(true)}

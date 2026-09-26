@@ -51,7 +51,7 @@ backend/            Portfolio API, snapshots, and optional Gemini integration
 docs/               Design and verification notes
 ```
 
-The root `package.json` provides the development, test, and build commands. The frontend imports the shared sample model from `quant/`. The frontend currently uses its local TypeScript model. The backend is a separate demo API that calls the Python quant engine; the frontend is not yet connected to that API.
+The root `package.json` provides the development, test, and build commands. The frontend imports the shared sample model from `quant/`. Overview can request a separate demo analysis from the backend API when the backend is running; its existing charts and tables still use the local TypeScript model. See the [backend guide](backend/README.md) to start the API.
 
 ## How the sample works
 
@@ -59,6 +59,6 @@ The root `package.json` provides the development, test, and build commands. The 
 
 `quant/analytics.ts` calculates compounded returns, linked return contributions, annualized volatility, correlations, risk contributions, and drawdown. The model assumes constant daily weights and excludes fees, taxes, deposits, and withdrawals. The methodology dialog in the app explains these assumptions alongside the results.
 
-Research links open external issuer and public-disclosure pages. PandaSet does not ingest their contents. The backend currently analyzes fictional sample prices and can optionally use Gemini for explanations. The frontend still uses its own sample data and curated responses. API credentials must stay out of the browser bundle.
+Research links open external issuer and public-disclosure pages. PandaSet does not ingest their contents. The backend analyzes fictional sample prices and can optionally use Gemini for explanations. Ask Panda still uses curated frontend responses. API credentials must stay out of the browser bundle.
 
 See the [backend guide](backend/README.md), [Python quant guide](quant_engine/README.md), [design notes](docs/design-system.md), and [verification notes](docs/verification.md) for more detail. Font licenses are in `frontend/public/fonts/`.

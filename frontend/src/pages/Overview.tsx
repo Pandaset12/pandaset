@@ -27,13 +27,22 @@ import {
   Empty,
 } from "../components/UI";
 import { LineChart } from "../components/LineChart";
+import type { AnalysisResponse, Portfolio } from "../api/portfolio";
 export default function Overview({
   weights,
+  backendResult,
+  analysisLoading,
+  analysisError,
+  onAnalyze,
   onEdit,
   onAsk,
   onMethod,
 }: {
   weights: number[];
+  backendResult: { portfolio: Portfolio; analysis: AnalysisResponse } | null;
+  analysisLoading: boolean;
+  analysisError: string;
+  onAnalyze: () => void;
   onEdit: () => void;
   onAsk: (q?: string) => void;
   onMethod: () => void;
@@ -88,6 +97,51 @@ export default function Overview({
           <ArrowUpRight size={17} />
         </button>
       </PageHeading>
+      <section className="backend-analysis" aria-label="Backend demo analysis">
+        <div>
+          <strong>Backend demo analysis</strong>
+          <p>
+            Calculated from fictional historical prices. The charts and tables
+            below remain TypeScript sample calculations.
+          </p>
+        </div>
+        <button
+          className="button subtle"
+          onClick={onAnalyze}
+          disabled={analysisLoading}
+        >
+          {analysisLoading ? "Analyzing…" : "Analyze with demo API"}
+        </button>
+        {analysisLoading && <p role="status">Running backend demo analysis…</p>}
+        {analysisError && (
+          <p role="alert">
+            {analysisError} Sample calculations remain available below.
+          </p>
+        )}
+        {backendResult && (
+          <div className="backend-analysis-results" role="status">
+            <span>
+              Demo return:{" "}
+              {backendResult.analysis.portfolio_return === null
+                ? "Unavailable"
+                : pct(backendResult.analysis.portfolio_return)}
+            </span>
+            <span>
+              Annualized volatility:{" "}
+              {pct(backendResult.analysis.portfolio_volatility)}
+            </span>
+            <span>
+              Largest position:{" "}
+              {backendResult.analysis.concentration.largest_position} (
+              {pct(backendResult.analysis.concentration.largest_weight)})
+            </span>
+            <small>
+              Saved analysis {backendResult.analysis.analysis_id} · Portfolio{" "}
+              {backendResult.portfolio.portfolio_id}
+            </small>
+          </div>
+        )}
+      </section>
       <div className="overview-top">
         <section
           className="performance-panel"
