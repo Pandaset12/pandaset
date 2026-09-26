@@ -128,13 +128,22 @@ def test_numerical_prose_rejected_even_with_valid_metric_reference(explanation):
         ))
 
 
-def test_web_tools_are_only_enabled_by_explicit_request():
+@pytest.mark.parametrize("options,expected_search,expected_url", [
+    ({}, True, True),
+    ({"web_search": True}, True, True),
+    ({"web_search": False}, False, False),
+    ({"web_search": False, "source_urls": ["https://www.sec.gov/"]}, False, True),
+])
+def test_web_tool_defaults_and_explicit_opt_out(options, expected_search, expected_url):
     raw = json.dumps({"explanation": "News provides context, not proof of causation.", "cited_fields": []})
     client = FakeClient(response_with_text(raw))
     asyncio.run(generate_answer(
-        AnalystRequest(question="Show external context", web_search=True),
+        AnalystRequest(question="Show external context", **options),
         demo_metrics(), settings(), client_factory=lambda **_: client,
     ))
-    tools = client.models.generate_content.call_args.kwargs["config"].tools
-    assert any(tool.google_search is not None for tool in tools)
-    assert any(tool.url_context is not None for tool in tools)
+    config = client.models.generate_content.call_args.kwargs["config"]
+    tools = config.tools or []
+    assert any(tool.google_search is not None for tool in tools) == expected_search
+    assert any(tool.url_context is not None for tool in tools) == expected_url
+    assert config.response_mime_type == "application/json"
+    assert "explanation" in config.response_json_schema["properties"]

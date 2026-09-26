@@ -47,7 +47,7 @@ def test_forged_number_in_model_prose_is_not_returned_by_v1(tmp_path, monkeypatc
     assert data["metrics"]["risk_contribution"]["NVDA"] == .41
 
 
-def test_valid_prose_uses_backend_rendered_numbers_and_no_web_tools_by_default(tmp_path, monkeypatch):
+def test_valid_prose_uses_backend_rendered_numbers_and_web_tools_by_default(tmp_path, monkeypatch):
     client = ModelClient({"explanation": "NVDA is the largest risk contributor in this snapshot.",
                           "cited_fields": ["risk_contribution.NVDA", "weights.NVDA"]})
     monkeypatch.setattr(gemini_service.genai, "Client", lambda **_: client)
@@ -64,7 +64,9 @@ def test_valid_prose_uses_backend_rendered_numbers_and_no_web_tools_by_default(t
     assert data["status"] == "complete"
     assert "41.0%" in data["answer"] and "30.0%" in data["answer"]
     assert data["answer"].startswith("FICTIONAL DEMO DATA.")
-    assert client.models.generate_content.call_args.kwargs["config"].tools is None
+    tools = client.models.generate_content.call_args.kwargs["config"].tools
+    assert any(tool.google_search is not None for tool in tools)
+    assert any(tool.url_context is not None for tool in tools)
     assert health["analyst_mode"] == "gemini"
     assert health["data_mode"] == "demo"
     assert health["storage_backend"] == "sqlite"

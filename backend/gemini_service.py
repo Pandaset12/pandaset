@@ -97,6 +97,7 @@ def extract_evidence(response: Any) -> dict[str, Any]:
         "sources": [],
         "grounding_supports": [],
         "search_suggestions_html": None,
+        "web_search_queries": [],
         "url_retrievals": [],
     }
     candidates = response.candidates or []
@@ -105,6 +106,7 @@ def extract_evidence(response: Any) -> dict[str, Any]:
     candidate = candidates[0]
     metadata = candidate.grounding_metadata
     if metadata:
+        result["web_search_queries"] = list(metadata.web_search_queries or [])
         # Preserve one entry for every chunk, including chunks without a web URL,
         # so grounding_supports indices still refer to the correct sources.
         for chunk in metadata.grounding_chunks or []:

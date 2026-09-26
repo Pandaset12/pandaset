@@ -50,7 +50,6 @@ Use the interactive docs' **Try it out** buttons:
 {
   "analysis_id": "paste-the-returned-analysis-id",
   "question": "What is my biggest risk?",
-  "web_search": false,
   "source_urls": []
 }
 ~~~
@@ -125,16 +124,32 @@ This is a conservative guard, not proof that every qualitative statement is true
 or that all possible numerical paraphrases are detected. It can also reject
 otherwise harmless number-like prose. Live answer quality still needs review.
 
-**Search is off by default.** Explicit `web_search: true` enables Google Search
-and URL Context. Explicit `source_urls` can enable URL Context alone, even with
-search off; they accept up to five public HTTPS pages. Omitting both options
-enables no web tools. This reads relevant pages, not a recursive site crawler.
+**Search is on by default for Ask requests in Gemini mode.** Omitting
+`web_search` enables Google Search and URL Context. Set `"web_search": false`
+to disable Google Search; with no `source_urls`, this disables all web tools.
+Explicit `source_urls` still enable URL Context when search is off. Demo mode
+never calls Gemini or web tools, regardless of these flags.
+
+| Ask request options | Google Search | URL Context |
+| --- | --- | --- |
+| Neither option supplied, or `web_search: true` | Enabled | Enabled |
+| `web_search: false`, no URLs | Disabled | Disabled |
+| `source_urls` supplied, search omitted | Enabled | Enabled |
+| `web_search: false` plus `source_urls` | Disabled | Enabled |
+
+Source URLs accept up to five HTTPS pages without credentials. Local hostnames,
+private domain suffixes, IP literals, and ambiguous empty hostname labels are
+rejected, including DNS trailing-dot variants such as `localhost.` and
+`metadata.google.internal.`. This is hostname syntax validation, not DNS or
+redirect resolution; content retrieval is performed by Google's managed tool,
+not a backend HTTP crawler. Enabled tools may not be used on every question.
 News explanations remain qualitative; numerical financial facts come from
 snapshot references. No subagents are required for this initial flow. Choose a
 model supporting structured output together with the requested tools.
 
-The response includes `sources`, `grounding_supports`, `url_retrievals` and
-`search_suggestions_html`. Preserve source array order: grounding indices refer
+The response includes `sources`, `grounding_supports`, `url_retrievals`,
+`web_search_queries` and `search_suggestions_html`. Search queries are copied
+from Google grounding metadata; empty evidence is not proof of a live search. Preserve source array order: grounding indices refer
 to it. Text offsets refer to `grounding_text` (the original JSON model response),
 **not** the parsed `answer`. The frontend must handle Google's
 [search display requirements](https://ai.google.dev/gemini-api/docs/generate-content/google-search)
@@ -143,6 +158,43 @@ and [URL retrieval status](https://ai.google.dev/gemini-api/docs/generate-conten
 Enabling Gemini does not enable live prices. Quant calculations run through the provider. Daily P&L
 attribution and natural-language execution of what-if calculations remain
 pending; the prompt instructs the model to explain those limitations.
+
+## Verify live Gemini through the API
+
+Mocked tests do not establish that a team key/model can combine tools and JSON.
+Google documents this combination for supported Gemini 3 models in its
+[structured output guide](https://ai.google.dev/gemini-api/docs/generate-content/structured-output).
+Account access, quota, current compatibility and evidence quality still require
+an actual API run with the configured model.
+
+After configuring `backend/.env` and installing development dependencies, run
+from the repository root:
+
+~~~powershell
+.\backend\.venv\Scripts\python.exe -m backend.scripts.verify_gemini_live --output backend/data/live-search-report.json
+~~~
+
+The verifier starts private local Uvicorn processes on unused ports with a
+temporary SQLite database. It uses `ANALYST_MODE=gemini`, creates a demo analysis,
+and calls `POST /api/v1/portfolios/demo/ask`. It checks:
+
+- Omitted `web_search`: `status: complete`, real search queries, web sources,
+  grounding supports and search display metadata.
+- Explicit `false`: complete snapshot response without search or URL evidence.
+- Explicit `source_urls`: successful retrieval, both with default search and
+  with Google Search explicitly disabled.
+- Intentional invalid model: `status: unavailable`, `GEMINI_UNAVAILABLE`, no
+  invented evidence, and unchanged saved metrics.
+
+This opt-in command makes four generation requests plus an intentional failing
+request; normal Gemini/search quota may apply. It does not modify your local
+server, saved portfolios or key file. The JSON report contains demo answers and
+public evidence, never the key. Exit 0 means every check passed, 1 means a check
+failed, and 2 means no key was configured. A complete answer without grounding
+on the search case is treated as unverified, not a successful search test.
+Read the sources/supports in the report before accepting answer quality.
+Tool configuration is also checked at the SDK boundary by the regression suite;
+the presence of a tool in configuration alone does not prove retrieval occurred.
 
 ## Team integration checklist
 

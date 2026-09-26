@@ -156,7 +156,7 @@ class QuestionInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     question: str = Field(min_length=1, max_length=4000)
-    web_search: bool = False
+    web_search: bool = True
     source_urls: list[AnyHttpUrl] = Field(default_factory=list, max_length=5)
 
     @field_validator("question")
@@ -171,10 +171,15 @@ class QuestionInput(BaseModel):
     @classmethod
     def public_https_urls(cls, urls: list[AnyHttpUrl]) -> list[AnyHttpUrl]:
         for url in urls:
-            host = (url.host or "").lower()
+            # A DNS root dot does not make localhost or a private suffix public.
+            # Check the canonical host after Pydantic's URL/IDNA normalization.
+            host = (url.host or "").lower().removesuffix(".")
             if url.scheme != "https" or url.username or url.password:
                 raise ValueError("Use public HTTPS URLs without credentials.")
-            if "." not in host or host.endswith((".localhost", ".local", ".internal")):
+            if (
+                "." not in host or any(not label for label in host.split("."))
+                or host.endswith((".localhost", ".local", ".internal"))
+            ):
                 raise ValueError("Use a public website domain.")
             try:
                 ipaddress.ip_address(host.strip("[]"))
@@ -210,6 +215,7 @@ class AnalystResponse(BaseModel):
     sources: list[dict[str, Any]] = Field(default_factory=list)
     grounding_supports: list[dict[str, Any]] = Field(default_factory=list)
     search_suggestions_html: str | None = None
+    web_search_queries: list[str] = Field(default_factory=list)
     url_retrievals: list[dict[str, Any]] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
     status: Literal["complete", "demo", "unavailable"] = "complete"
