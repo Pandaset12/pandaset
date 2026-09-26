@@ -1,0 +1,18 @@
+{
+  "portfolio_id": "demo",
+  "data_mode": "demo",
+  "data_as_of": null,
+  "lookback_trading_days": 252,
+  "data_source": "synthetic_fixture",
+  "freshness": "unknown",
+  "assumptions": ["Long-only fully invested example.", "Static fictional values; no market observations were used."],
+  "volatility_unit": "annualized_decimal",
+  "portfolio_volatility": 0.184,
+  "weights": {"NVDA": 0.30, "SPY": 0.40, "JPM": 0.20, "TLT": 0.10},
+  "risk_contribution": {"NVDA": 0.41, "SPY": 0.27, "JPM": 0.18, "TLT": 0.14},
+  "notes": [
+    "FICTIONAL DEMO DATA. These values are examples for interface development, not calculations from historical prices.",
+    "Risk contributions are relative shares of estimated portfolio volatility.",
+    "Individual asset volatility, correlations, daily P&L attribution, and what-if results are not supplied yet."
+  ]
+}

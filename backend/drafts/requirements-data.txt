@@ -1,0 +1,5 @@
+# Optional draft dependencies; not needed to run the current API.
+-r ../requirements.txt
+psycopg[binary]>=3.2,<4
+pymongo>=4.10,<5
+httpx>=0.28,<1

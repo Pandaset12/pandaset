@@ -46,11 +46,12 @@ quant/
   analytics.ts      Portfolio and risk calculations
   data.ts           Illustrative assets and return series
   tests/            Calculation and scenario tests
-backend/            Placeholder for a future service
+quant_engine/       Python analytics engine used by the backend
+backend/            Portfolio API, snapshots, and optional Gemini integration
 docs/               Design and verification notes
 ```
 
-The root `package.json` provides the development, test, and build commands. The frontend imports the shared sample model from `quant/`. There is **no backend implementation** yet.
+The root `package.json` provides the development, test, and build commands. The frontend imports the shared sample model from `quant/`. The frontend currently uses its local TypeScript model. The backend is a separate demo API that calls the Python quant engine; the frontend is not yet connected to that API.
 
 ## How the sample works
 
@@ -58,6 +59,6 @@ The root `package.json` provides the development, test, and build commands. The 
 
 `quant/analytics.ts` calculates compounded returns, linked return contributions, annualized volatility, correlations, risk contributions, and drawdown. The model assumes constant daily weights and excludes fees, taxes, deposits, and withdrawals. The methodology dialog in the app explains these assumptions alongside the results.
 
-Research links open external issuer and public-disclosure pages. PandaSet does not ingest their contents. A future backend can replace the sample data and curated analyst responses; API credentials must stay out of the browser bundle.
+Research links open external issuer and public-disclosure pages. PandaSet does not ingest their contents. The backend currently analyzes fictional sample prices and can optionally use Gemini for explanations. The frontend still uses its own sample data and curated responses. API credentials must stay out of the browser bundle.
 
-See [design notes](docs/design-system.md) and [verification notes](docs/verification.md) for more detail. Font licenses are in `frontend/public/fonts/`.
+See the [backend guide](backend/README.md), [Python quant guide](quant_engine/README.md), [design notes](docs/design-system.md), and [verification notes](docs/verification.md) for more detail. Font licenses are in `frontend/public/fonts/`.
