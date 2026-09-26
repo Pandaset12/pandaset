@@ -59,8 +59,10 @@ The default answer has `status: "demo"` and explicitly labels the fixture as
 fictional. It is a deterministic snapshot summary, not an arbitrary-question AI.
 The seeded allocation is NVDA 30%, SPY 40%, JPM 20%, TLT 10%. Any valid allocation
 using NVDA, MSFT, AAPL, JPM, VTI, TLT, AMD, GLD, or SPY can be analyzed and compared
-using seven fictional price rows (six daily returns). Unsupported symbols fail with 502; prices are never
+using seven fictional price rows (six daily returns). Unsupported symbols return 404; prices are never
 invented or filled. Weights must total one within 1e-10 and are never renormalized.
+Portfolios and proposed allocations accept at most eight symbols; a what-if comparison
+also requires the combined saved/proposed symbol set to stay within eight.
 Undefined risk shares and correlation cells remain `null`. The UTC midnight `as_of`
 is a sample session-date label, not a live quote or exchange closing timestamp.
 

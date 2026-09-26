@@ -17,9 +17,11 @@ from .gemini_service import (
     metric_summary,
     portfolio_briefing_summary,
 )
-from .providers import IntegrationPending, ProviderUnavailable, QuantProvider, get_provider
+from .market_data_errors import MarketHistoryNotFound, ProviderUnavailable, SymbolLimitExceeded
+from .providers import IntegrationPending, QuantProvider, get_provider
 from .research_sources import curated_research_source
 from .schemas import (
+    MAX_PORTFOLIO_SYMBOLS,
     AIWorkflowResponse,
     AllocationInput,
     AnalysisResponse,
@@ -190,6 +192,11 @@ def analyze(
             raise ValueError("Provider returned metrics for a different portfolio/allocation.")
     except IntegrationPending as exc:
         raise api_error(501, "QUANT_INTEGRATION_PENDING", str(exc)) from exc
+    except SymbolLimitExceeded as exc:
+        raise api_error(422, "SYMBOL_LIMIT_EXCEEDED", str(exc)) from exc
+    except MarketHistoryNotFound as exc:
+        log_failure("MARKET_HISTORY_NOT_FOUND", exc)
+        raise api_error(404, "MARKET_HISTORY_NOT_FOUND", "Market history is unavailable for one or more portfolio symbols.") from exc
     except (ValidationError, ValueError) as exc:
         log_failure("INVALID_PROVIDER_DATA", exc)
         raise api_error(502, "INVALID_PROVIDER_DATA", "Provider returned inconsistent analysis data.") from exc
@@ -212,15 +219,18 @@ def get_analysis(portfolio_id: str, analysis_id: str, store: PortfolioStore = De
 
 @router.get("/market-history", response_model=MarketHistoryResponse)
 def market_history(
-    symbols: list[str] = Query(min_length=1, max_length=8),
+    symbols: list[str] = Query(min_length=1, max_length=MAX_PORTFOLIO_SYMBOLS),
     lookback_days: int = Query(default=252, ge=1, le=1000),
     provider: QuantProvider = Depends(get_provider),
 ):
     normalized = [symbol.strip().upper() for symbol in symbols]
     if any(not symbol or len(symbol) > 20 for symbol in normalized) or len(set(normalized)) != len(normalized):
-        raise api_error(422, "INVALID_MARKET_HISTORY_REQUEST", "Provide one to eight unique supported symbols.")
+        raise api_error(422, "INVALID_MARKET_HISTORY_REQUEST", f"Provide one to {MAX_PORTFOLIO_SYMBOLS} unique symbols.")
     try:
         return provider.market_history(normalized, lookback_days)
+    except MarketHistoryNotFound as exc:
+        log_failure("MARKET_HISTORY_NOT_FOUND", exc)
+        raise api_error(404, "MARKET_HISTORY_UNAVAILABLE", "Market history is unavailable for one or more requested symbols.") from exc
     except ProviderUnavailable as exc:
         log_failure("MARKET_HISTORY_UNAVAILABLE", exc)
         raise api_error(502, "MARKET_HISTORY_UNAVAILABLE", "Market data is unavailable. If Twelve Data is selected, set TWELVE_DATA_API_KEY in backend/.env; also check the key, quota, requested symbols, and provider status.") from exc
@@ -517,13 +527,24 @@ def what_if(
     portfolio_id: str, request: AllocationInput,
     store: PortfolioStore = Depends(get_store), provider: QuantProvider = Depends(get_provider),
 ):
-    require_portfolio(store, portfolio_id)
+    portfolio = require_portfolio(store, portfolio_id)
+    symbol_count = len(set(portfolio.weights) | set(request.weights))
+    if symbol_count > MAX_PORTFOLIO_SYMBOLS:
+        raise api_error(
+            422, "SYMBOL_LIMIT_EXCEEDED",
+            f"Saved and proposed allocations may contain at most {MAX_PORTFOLIO_SYMBOLS} distinct symbols combined.",
+        )
     try:
         return provider.simulate(
             WhatIfRequest(portfolio_id=portfolio_id, proposed_weights=request.weights)
         )
     except IntegrationPending as exc:
         raise api_error(501, "QUANT_INTEGRATION_PENDING", str(exc)) from exc
+    except SymbolLimitExceeded as exc:
+        raise api_error(422, "SYMBOL_LIMIT_EXCEEDED", str(exc)) from exc
+    except MarketHistoryNotFound as exc:
+        log_failure("MARKET_HISTORY_NOT_FOUND", exc)
+        raise api_error(404, "MARKET_HISTORY_NOT_FOUND", "Market history is unavailable for one or more allocation symbols.") from exc
     except ProviderUnavailable as exc:
         log_failure("PROVIDER_UNAVAILABLE", exc)
         raise api_error(502, "PROVIDER_UNAVAILABLE", "What-if analysis is unavailable. Check the selected market-data provider, API key, quota, and supported symbols.") from exc

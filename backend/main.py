@@ -18,11 +18,11 @@ from .storage import PortfolioStore
 from .providers import (
     IntegrationPending,
     PortfolioNotFound,
-    ProviderUnavailable,
     QuantProvider,
     get_provider,
     demo_metrics,
 )
+from .market_data_errors import ProviderUnavailable
 from .schemas import (
     AnalystRequest,
     AnalystResponse,
@@ -114,12 +114,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @application.get("/health")
     def health(settings: Settings = Depends(get_settings)):
+        live_data = settings.market_data_provider == "twelvedata"
+        market_data_ready = not live_data or settings.has_twelve_data_key
         return {
             "status": "ok",
             "analyst_mode": settings.analyst_mode,
             "gemini_configured": settings.has_gemini_key,
-            "quant_integration": "quant_engine_sample_prices",
-            "data_mode": "live" if settings.market_data_provider == "twelvedata" else "demo",
+            "quant_integration": (
+                "quant_engine_twelvedata"
+                if settings.market_data_provider == "twelvedata"
+                else "quant_engine_sample_prices"
+            ),
+            "market_data_provider": settings.market_data_provider,
+            "market_data_ready": market_data_ready,
+            "data_mode": "live" if live_data else "demo",
             "storage_backend": "sqlite",
             "authentication_enabled": False,
         }

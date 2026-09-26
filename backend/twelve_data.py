@@ -7,10 +7,7 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 import pandas as pd
-
-
-class ProviderUnavailable(Exception):
-    """The requested market-data operation could not be completed."""
+from .market_data_errors import MarketHistoryNotFound, ProviderUnavailable
 
 
 class TwelveDataPriceProvider:
@@ -52,6 +49,8 @@ class TwelveDataPriceProvider:
         else:
             candidates = payload.get("data") if isinstance(payload.get("data"), dict) else payload
             item = next((value for key, value in candidates.items() if str(key).upper() == symbol), None)
+        if item is None:
+            raise MarketHistoryNotFound(f"Twelve Data has no history for {symbol}.")
         if not isinstance(item, dict) or item.get("status") == "error" or not isinstance(item.get("values"), list):
             raise ProviderUnavailable(f"Twelve Data has no usable history for {symbol}.")
         return item

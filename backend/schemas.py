@@ -7,6 +7,7 @@ from pydantic import AwareDatetime, AnyHttpUrl, BaseModel, ConfigDict, Field, fi
 
 
 DISCLAIMER = "For educational purposes only; not financial advice."
+MAX_PORTFOLIO_SYMBOLS = 8
 
 
 def check_weights(weights: dict[str, float]) -> dict[str, float]:
@@ -291,7 +292,7 @@ class WhatIfRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
 
     portfolio_id: str = Field(default="demo", min_length=1, max_length=64)
-    proposed_weights: dict[str, float] = Field(min_length=1, max_length=100)
+    proposed_weights: dict[str, float] = Field(min_length=1, max_length=MAX_PORTFOLIO_SYMBOLS)
 
     @field_validator("proposed_weights")
     @classmethod
@@ -312,7 +313,7 @@ class Holding(BaseModel):
 
 class AllocationInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    holdings: list[Holding] = Field(min_length=1, max_length=100)
+    holdings: list[Holding] = Field(min_length=1, max_length=MAX_PORTFOLIO_SYMBOLS)
 
     @model_validator(mode="after")
     def valid_allocation(self):

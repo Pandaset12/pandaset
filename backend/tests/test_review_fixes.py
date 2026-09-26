@@ -67,6 +67,8 @@ def test_valid_prose_uses_backend_rendered_numbers_and_no_web_tools_by_default(t
     assert client.models.generate_content.call_args.kwargs["config"].tools is None
     assert health["analyst_mode"] == "gemini"
     assert health["data_mode"] == "demo"
+    assert health["market_data_provider"] == "sample"
+    assert health["market_data_ready"] is True
     assert health["storage_backend"] == "sqlite"
     assert health["authentication_enabled"] is False
 
@@ -113,3 +115,15 @@ def test_unhandled_failure_is_safe_and_request_ids_are_unique(tmp_path, monkeypa
     assert invalid.json()["error"]["request_id"] == invalid.headers["X-Request-ID"]
     assert len({r.headers["X-Request-ID"] for r in [response, health, invalid]}) == 3
     assert "private-storage-value" not in response.text + caplog.text
+
+
+def test_live_health_reports_missing_twelve_data_key(tmp_path):
+    app = create_app(Settings(_env_file=None, market_data_provider="twelvedata",
+                              storage_path=tmp_path / "test.sqlite3"))
+    with TestClient(app) as api:
+        health = api.get("/health").json()
+    assert health["status"] == "ok"  # The process is live; the provider is not ready.
+    assert health["quant_integration"] == "quant_engine_twelvedata"
+    assert health["market_data_provider"] == "twelvedata"
+    assert health["market_data_ready"] is False
+    assert health["data_mode"] == "live"

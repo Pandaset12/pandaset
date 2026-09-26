@@ -9,7 +9,9 @@ from quant_engine import analyze_portfolio, compare_portfolios
 
 from .config import Settings, get_settings
 from .schemas import AnalysisSeries, AnalyticsSnapshot, MarketHistoryResponse, Portfolio, WhatIfRequest
-from .twelve_data import ProviderUnavailable, TwelveDataPriceProvider
+from .market_data_errors import MarketHistoryNotFound, ProviderUnavailable, SymbolLimitExceeded
+from .schemas import MAX_PORTFOLIO_SYMBOLS
+from .twelve_data import TwelveDataPriceProvider
 
 
 class PortfolioNotFound(Exception):
@@ -78,7 +80,7 @@ class SamplePriceProvider:
         fixture = json.loads(path.read_text("utf-8"))
         missing = set(symbols) - fixture["prices"].keys()
         if missing:
-            raise ProviderUnavailable("Sample history is unavailable for: " + ", ".join(sorted(missing)))
+            raise MarketHistoryNotFound("Sample history is unavailable for: " + ", ".join(sorted(missing)))
         return pd.DataFrame(
             {symbol: [float(value) for value in fixture["prices"][symbol]] for symbol in symbols},
             index=pd.to_datetime(fixture["dates"], utc=True),
@@ -176,6 +178,8 @@ class EngineQuantProvider:
         return self.analyze(self._portfolio(portfolio_id))
 
     def analyze(self, portfolio: Portfolio) -> AnalyticsSnapshot:
+        if len(portfolio.weights) > MAX_PORTFOLIO_SYMBOLS:
+            raise SymbolLimitExceeded(f"At most {MAX_PORTFOLIO_SYMBOLS} distinct symbols can be analyzed.")
         prices = self.prices.prices(sorted(portfolio.weights))
         report = analyze_portfolio(prices, portfolio.weights)
         return map_quant_report(report, portfolio.portfolio_id, self.prices)
@@ -183,6 +187,10 @@ class EngineQuantProvider:
     def simulate(self, request: WhatIfRequest) -> dict:
         baseline = self._portfolio(request.portfolio_id).weights
         symbols = sorted(set(baseline) | set(request.proposed_weights))
+        if len(symbols) > MAX_PORTFOLIO_SYMBOLS:
+            raise SymbolLimitExceeded(
+                f"The saved and proposed allocations may contain at most {MAX_PORTFOLIO_SYMBOLS} distinct symbols combined."
+            )
         prices = self.prices.prices(symbols)
         result = compare_portfolios(
             prices, {symbol: baseline.get(symbol, 0.0) for symbol in symbols},
