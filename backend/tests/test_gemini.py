@@ -14,6 +14,7 @@ from backend.gemini_service import (
     generate_answer,
     generate_research_summary,
     generate_scenario_workflow,
+    metric_summary,
     render_grounded_scenario,
     resolve_citations,
 )
@@ -168,6 +169,61 @@ def test_analysis_workflow_uses_its_prompt_and_no_web_tools():
     assert "series" not in context["portfolio_snapshot"]
     assert result["citations"][0].value == 0.41
     assert "FICTIONAL DEMO DATA" in result["answer"]
+
+
+def test_briefing_and_risk_use_distinct_saved_evidence():
+    metrics = demo_metrics()
+    metrics.portfolio_return = 0.08
+    briefing = FakeClient(response_with_text(json.dumps({
+        "explanation": "The saved sample shows portfolio growth.",
+        "cited_fields": ["portfolio_return", "weights.NVDA"],
+    })))
+    risk = FakeClient(response_with_text(json.dumps({
+        "explanation": "NVDA is the main contributor to estimated volatility.",
+        "cited_fields": ["risk_contribution.NVDA", "weights.NVDA"],
+    })))
+
+    briefing_result = asyncio.run(generate_analysis_workflow(
+        "analysis_briefing", "Brief this portfolio.", metrics, "analysis-42",
+        settings(), client_factory=lambda **_: briefing,
+    ))
+    risk_result = asyncio.run(generate_analysis_workflow(
+        "risk_explanation", "Explain my risk.", metrics, "analysis-42",
+        settings(), client_factory=lambda **_: risk,
+    ))
+
+    briefing_context = json.loads(briefing.models.generate_content.call_args.kwargs["contents"])
+    risk_context = json.loads(risk.models.generate_content.call_args.kwargs["contents"])
+    assert "portfolio_return" in briefing_context["available_metrics"]
+    assert "risk_contribution.NVDA" not in briefing_context["available_metrics"]
+    assert "risk_contribution" not in briefing_context["portfolio_snapshot"]
+    assert "risk_contribution.NVDA" in risk_context["available_metrics"]
+    assert "portfolio_return" not in risk_context["available_metrics"]
+    assert "portfolio_return" not in risk_context["portfolio_snapshot"]
+    assert [citation.field for citation in briefing_result["citations"]] == [
+        "portfolio_return", "weights.NVDA",
+    ]
+    assert [citation.field for citation in risk_result["citations"]] == [
+        "risk_contribution.NVDA", "weights.NVDA",
+    ]
+
+    wrong_field = FakeClient(response_with_text(json.dumps({
+        "explanation": "The portfolio has a recorded sample return.",
+        "cited_fields": ["portfolio_return"],
+    })))
+    with pytest.raises(GeminiUnavailable, match="not present"):
+        asyncio.run(generate_analysis_workflow(
+            "risk_explanation", "Explain my risk.", metrics, "analysis-42",
+            settings(), client_factory=lambda **_: wrong_field,
+        ))
+
+
+def test_risk_fallback_skips_undefined_contributions():
+    metrics = demo_metrics()
+    metrics.risk_contribution = {symbol: None for symbol in metrics.weights}
+    answer, citations = metric_summary(metrics)
+    assert "No relative volatility risk ranking" in answer
+    assert citations == []
 
 
 def test_scenario_citations_are_resolved_from_the_quant_comparison():

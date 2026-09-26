@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any, Literal, Type
 
 from google import genai
-from google.genai import types
+from google.genai import errors, types
 from pydantic import BaseModel
 
 from .config import Settings
@@ -103,6 +103,46 @@ def workflow_snapshot_context(metrics: AnalyticsSnapshot) -> dict[str, Any]:
         "assumptions",
     )
     return {field: snapshot[field] for field in fields}
+
+
+def analysis_workflow_evidence(
+    workflow: Literal["analysis_briefing", "risk_explanation"],
+    metrics: AnalyticsSnapshot,
+) -> tuple[dict[str, Any], dict[str, float]]:
+    """Give each workflow only the snapshot fields and metrics it can explain."""
+    provenance = {
+        "portfolio_id", "data_mode", "data_as_of", "lookback_trading_days",
+        "observation_count", "return_frequency", "volatility_unit",
+        "data_source", "freshness", "notes", "assumptions",
+    }
+    if workflow == "analysis_briefing":
+        snapshot_fields = {
+            "weights", "portfolio_return", "annualized_return", "max_drawdown",
+            "portfolio_volatility", "return_contribution",
+        }
+        metric_fields = {
+            "portfolio_return", "annualized_return", "max_drawdown",
+            "portfolio_volatility",
+        }
+        metric_prefixes = ("weights.", "return_contribution.")
+    else:
+        snapshot_fields = {
+            "weights", "portfolio_volatility", "risk_contribution",
+            "asset_volatility", "correlation_matrix",
+        }
+        metric_fields = {"portfolio_volatility"}
+        metric_prefixes = (
+            "weights.", "risk_contribution.", "asset_volatility.", "correlation.",
+        )
+    snapshot = workflow_snapshot_context(metrics)
+    catalog = metric_catalog(metrics)
+    return (
+        {key: value for key, value in snapshot.items() if key in provenance | snapshot_fields},
+        {
+            key: value for key, value in catalog.items()
+            if key in metric_fields or key.startswith(metric_prefixes)
+        },
+    )
 
 
 def scenario_metric_catalog(comparison: dict[str, Any]) -> tuple[dict[str, float], dict[str, str], bool]:
@@ -220,15 +260,33 @@ def render_grounded_scenario(
 
 def metric_summary(metrics: AnalyticsSnapshot) -> tuple[str, list[MetricCitation]]:
     prefix = "FICTIONAL DEMO DATA. " if metrics.data_mode == "demo" else ""
-    if metrics.portfolio_volatility == 0 or not metrics.risk_contribution:
+    ranked = {
+        symbol: value for symbol, value in metrics.risk_contribution.items()
+        if value is not None
+    }
+    if metrics.portfolio_volatility == 0 or not ranked:
         return prefix + "No relative volatility risk ranking is available for this snapshot.", []
-    symbol = max(metrics.risk_contribution, key=metrics.risk_contribution.get)
+    symbol = max(ranked, key=ranked.get)
     answer = (
-        prefix + f"{symbol} contributes {metrics.risk_contribution[symbol]:.1%} of "
+        prefix + f"{symbol} contributes {ranked[symbol]:.1%} of "
         f"estimated portfolio volatility, with {metrics.weights[symbol]:.1%} of capital. "
         "These are snapshot metrics, not a prediction or a computed rebalance."
     )
     return answer, resolve_citations([f"risk_contribution.{symbol}", f"weights.{symbol}"], metrics)
+
+
+def portfolio_briefing_summary(metrics: AnalyticsSnapshot) -> tuple[str, list[MetricCitation]]:
+    """Render a brief saved-metric summary when AI is disabled or unavailable."""
+    symbol = max(metrics.weights, key=metrics.weights.get)
+    facts = [f"{symbol} is the largest holding at {metrics.weights[symbol]:.1%} of capital."]
+    fields = [f"weights.{symbol}"]
+    if metrics.portfolio_return is not None:
+        facts.append(f"Return over the available sample is {metrics.portfolio_return:.1%}.")
+        fields.append("portfolio_return")
+    facts.append(f"Estimated annualized portfolio volatility is {metrics.portfolio_volatility:.1%}.")
+    fields.append("portfolio_volatility")
+    prefix = "FICTIONAL DEMO DATA. " if metrics.data_mode == "demo" else ""
+    return prefix + " ".join(facts), resolve_citations(fields, metrics)
 
 
 def extract_evidence(response: Any) -> dict[str, Any]:
@@ -306,6 +364,10 @@ async def _generate_structured(
         return draft, raw_text, extract_evidence(response)
     except TimeoutError as exc:
         raise GeminiUnavailable("Gemini exceeded the request time limit.") from exc
+    except errors.ServerError as exc:
+        if getattr(exc, "code", None) == 503:
+            raise GeminiUnavailable("Gemini is busy right now. Retry this request in a moment.") from exc
+        raise GeminiUnavailable("Gemini request failed. Please retry this request.") from exc
     except GeminiUnavailable:
         raise
     except Exception as exc:
@@ -358,19 +420,26 @@ async def generate_analysis_workflow(
     *,
     client_factory=None,
 ) -> dict[str, Any]:
+    snapshot, available_metrics = analysis_workflow_evidence(workflow, metrics)
     draft, raw_text, evidence = await _generate_structured(
         settings=settings,
         prompt=workflow_prompt(workflow),
         context={
             "question": question,
             "analysis_id": analysis_id,
-            "portfolio_snapshot": workflow_snapshot_context(metrics),
-            "available_metrics": metric_catalog(metrics),
+            "portfolio_snapshot": snapshot,
+            "available_metrics": available_metrics,
         },
         response_schema=GroundedAnswer,
         client_factory=client_factory,
     )
-    answer, citations = render_grounded_answer(draft, metrics)
+    answer, citations = _render_grounded_answer(
+        draft,
+        available_metrics,
+        metric_labels(metrics),
+        is_demo=metrics.data_mode == "demo",
+        heading="Briefing metrics" if workflow == "analysis_briefing" else "Risk metrics",
+    )
     return {"answer": answer, "citations": citations, "grounding_text": raw_text, **evidence}
 
 

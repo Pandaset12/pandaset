@@ -15,6 +15,7 @@ from .gemini_service import (
     generate_research_summary,
     generate_scenario_workflow,
     metric_summary,
+    portfolio_briefing_summary,
 )
 from .providers import IntegrationPending, ProviderUnavailable, QuantProvider, get_provider
 from .research_sources import curated_research_source
@@ -272,6 +273,7 @@ async def analysis_workflow_response(
     store: PortfolioStore,
     settings: Settings,
 ) -> AIWorkflowResponse:
+    title = "Portfolio briefing" if workflow == "analysis_briefing" else "Risk explanation"
     try:
         metrics, _ = await run_in_threadpool(
             store.get_analysis, portfolio_id, request.analysis_id
@@ -281,6 +283,11 @@ async def analysis_workflow_response(
     warnings = list(metrics.notes)
     if metrics.freshness == "stale":
         warnings.append("This saved snapshot contains stale market data.")
+    fallback, citations = (
+        portfolio_briefing_summary(metrics)
+        if workflow == "analysis_briefing"
+        else metric_summary(metrics)
+    )
     if settings.analyst_mode == "demo":
         warnings.append("Offline demo response; Gemini was not called.")
         return AIWorkflowResponse(
@@ -288,7 +295,8 @@ async def analysis_workflow_response(
             analyst_mode="demo",
             status="demo",
             analysis_id=request.analysis_id,
-            answer="AI explanations are disabled in demo mode. The saved analysis and its calculated metrics remain available.",
+            answer=f"{title} is disabled in demo mode. Saved metrics: {fallback}",
+            citations=citations,
             warnings=warnings,
         )
     try:
@@ -308,7 +316,8 @@ async def analysis_workflow_response(
             analyst_mode="gemini",
             status="unavailable",
             analysis_id=request.analysis_id,
-            answer="AI explanation is unavailable. The saved analysis and its calculated metrics remain available.",
+            answer=f"{title} is unavailable right now. Saved metrics: {fallback}",
+            citations=citations,
             warnings=warnings,
             error_code=error_code,
         )

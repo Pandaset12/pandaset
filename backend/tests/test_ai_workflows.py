@@ -48,6 +48,31 @@ def test_workflow_endpoints_return_scoped_demo_responses(tmp_path):
         assert unknown.status_code == 404
 
 
+def test_unavailable_briefing_and_risk_return_different_saved_metrics(tmp_path, monkeypatch):
+    settings = Settings(
+        _env_file=None, analyst_mode="gemini", gemini_api_key="test-only",
+        storage_path=tmp_path / "unavailable.sqlite3",
+    )
+    monkeypatch.setattr(
+        api_v1, "generate_analysis_workflow",
+        AsyncMock(side_effect=GeminiUnavailable("Gemini is busy right now.")),
+    )
+    with TestClient(create_app(settings)) as client:
+        analysis = client.post("/api/v1/portfolios/demo/analysis").json()
+        payload = {"analysis_id": analysis["analysis_id"]}
+        briefing = client.post("/api/v1/portfolios/demo/briefing", json=payload).json()
+        risk = client.post("/api/v1/portfolios/demo/risk/explanation", json=payload).json()
+
+    assert briefing["status"] == risk["status"] == "unavailable"
+    assert briefing["error_code"] == risk["error_code"] == "GEMINI_UNAVAILABLE"
+    assert briefing["answer"] != risk["answer"]
+    assert "largest holding" in briefing["answer"]
+    assert "estimated portfolio volatility" in risk["answer"]
+    assert {item["field"] for item in briefing["citations"]} != {
+        item["field"] for item in risk["citations"]
+    }
+
+
 def test_scenario_request_is_validated_and_does_not_mutate_portfolio(tmp_path):
     settings = Settings(_env_file=None, analyst_mode="demo", storage_path=tmp_path / "scenario.sqlite3")
     with TestClient(create_app(settings)) as client:

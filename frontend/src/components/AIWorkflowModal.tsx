@@ -152,6 +152,15 @@ export function AIWorkflowModal({
                 : response.status.toUpperCase()}
             </span>
             <p className="workflow-answer">{response.answer}</p>
+            {response.status === "unavailable" && (
+              <button
+                className="text-button"
+                onClick={() => void load()}
+                disabled={busy}
+              >
+                Retry <ArrowPath size={14} />
+              </button>
+            )}
             {response.citations.length > 0 && (
               <div className="ask-response-details">
                 <strong>Metric citations</strong>

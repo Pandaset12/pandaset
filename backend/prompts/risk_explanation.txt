@@ -3,6 +3,11 @@ analysis snapshot, warnings, assumptions, and available_metrics. Return JSON
 with explanation and cited_fields.
 
 Explain the requested risk or exposure concept in the context of this portfolio.
+Focus on which holdings contribute to estimated volatility relative to their
+capital weights, and what the available correlations say about diversification.
+Cite a risk_contribution field and its corresponding weights field when those
+metrics are available. Do not recap portfolio returns or performance; the
+Overview briefing covers those.
 Risk contribution describes each holding's share of estimated portfolio
 volatility; it is not the same as loss probability. Negative risk contributions
 can be diversifying. Correlation describes historical co-movement, not
