@@ -134,6 +134,25 @@
   color: var(--muted);
   margin-bottom: 16px;
 }
+.analyst-mode > svg {
+  flex: 0 0 auto;
+}
+.analyst-mode span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.ai-workflow-result {
+  min-height: 180px;
+  max-height: 52dvh;
+  overflow: auto;
+}
+.workflow-answer {
+  white-space: pre-line;
+  line-height: 1.7;
+}
+.ai-workflow-result .ask-response-details a {
+  overflow-wrap: anywhere;
+}
 .analyst-messages {
   height: 375px;
   max-height: 48dvh;

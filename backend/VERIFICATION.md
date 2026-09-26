@@ -1,52 +1,74 @@
-# Review verification - 2026-09-26
+# API/search verification - 2026-09-26
 
-Scope: Backend #2 application API and Gemini adapter on Windows / Python 3.12.14.
+Scope: Backend application API and Gemini search fixes, integrated with the
+team's uploaded shared AI workflows at 78f9aa2. Python 3.12 on Windows.
+The review branch is backend-v3-gemini-search.
 
-Verified:
-- Installed the declared dependencies in a fresh virtual environment.
-- `python -m pytest backend/tests -q`: **50 passed** in the existing environment
-  and the fresh environment.
-- `python -m pip check`: no broken requirements.
-- Python compilation completed successfully.
-- Started a real Uvicorn process in the fresh environment with an isolated database.
-  Health, interactive docs and OpenAPI returned 200. Creating a portfolio returned
-  201; analysis creation, saved-analysis retrieval and demo ask returned 200.
-  Unsupported what-if returned 501; an unknown portfolio returned 404.
-- The smoke process was stopped after testing; it used a separate port and did
-  not replace any existing local server.
+## Executed checks
 
-The test runner emits one upstream Starlette/httpx deprecation warning. It does
-not fail the tests.
+- Backend regression suite: **114 passed**.
+- Python quant-engine suite: **83 passed**; financial formulas are unchanged.
+- Frontend/API client and TypeScript quant tests: **19 passed**.
+- Production TypeScript/Vite build: passed.
+- Python dependency consistency: passed.
+- Real local Uvicorn HTTP smoke: portfolio creation (201), quant analysis,
+  saved analysis retrieval, offline ask, and what-if (200), unknown portfolio
+  (404), and trailing-dot local URL rejection (422). OpenAPI declares the Ask
+  search default as true.
+- The teammate's shared AI branch was also checked separately before combining
+  the changes: its 74 backend tests passed.
+- The live verifier's CLI and missing-key preflight were exercised. No key was
+  configured, so it stopped without making a Gemini request.
 
-Not verified: live Gemini responses/search, live market data, the team quant
-module, MongoDB, Tiger Data, hosted deployment, or frontend-to-backend integration.
-Gemini boundary tests use mocked SDK responses. The default analytics are
-explicitly fictional fixture values.
+The backend suite emits one upstream Starlette/httpx deprecation warning.
 
-The remote `codex/frontend` branch currently uses local sample calculations and
-canned chat replies. Connecting it to v1 and reconciling the demo allocations
-remains team integration work. Frontend weights are percentages (30); API weights
-are decimals (0.30). Convert them at the frontend API boundary.
+## What the automated tests establish
 
-## Quant review and recovered-draft follow-up
+An Ask request that omits web_search passes Google Search and URL Context to
+the shared SDK adapter alongside the JSON output schema. Explicit false passes
+neither tool unless source_urls are provided, in which case URL Context alone
+is enabled. Other workflow tool permissions are unchanged.
 
-The isolated quant-engine checkout at 500c77c passed all 83 tests with NumPy
-2.5.3 and pandas 3.0.6. This does not mean it is integrated into this API.
-Compatibility probes reproduced issues documented in docs/QUANT_REVIEW.md.
+Regression tests cover trailing-dot local/private hostnames, Unicode dot
+normalization, IP literals, credentials, and malformed empty hostname labels.
+They also check the actual v1 route before the SDK boundary, immutable snapshot
+metrics, unavailable responses on SDK failure, and preservation of source
+indices, retrieval status, search queries and search display metadata.
 
-The restored draft fixture reader loaded 28 fictional daily bars across four
-symbols, with timezone-aware dates and consistent price metadata. This smoke
-check did not call the live provider or either database. The backend test suite
-was rerun after restoring the inactive drafts.
+These are mocked SDK tests. They do not prove that Google accepted a live
+request or returned usable grounding.
 
-## Review fixes
+## Live verification still pending
 
-Search now defaults off. Gemini returns qualitative prose plus metric IDs;
-numeric facts are rendered by the backend. Regression tests reject fabricated
-numeric prose despite a valid citation, test explicit versus default web tools,
-and verify safe fallbacks. Qualitative answer accuracy still requires live QA.
+No configured Gemini key was available during this review. We have **not**
+verified status=complete, real grounding sources/supports, actual Google Search
+queries, successful URL retrieval, or the intentional invalid-model failure
+against the team's Google account.
 
-Response request IDs correlate with structured error logs. Tests cover provider
-and unexpected failures, validation responses, unique IDs, CORS visibility and
-omission of secret-bearing exception messages. Access control, hosted storage
-and the real quant/data provider remain unimplemented integration work.
+Run the opt-in verifier after configuring backend/.env:
+
+~~~powershell
+.\backend\.venv\Scripts\python.exe -m backend.scripts.verify_gemini_live --output backend/data/live-search-report.json
+~~~
+
+It starts its own API processes and temporary database, creates a demo analysis,
+and tests default search, opt-out, explicit URLs with and without search, and an
+upstream failure. See README.md for evidence expectations and exit codes. Review
+the returned source/support records and answer text; HTTP 200 alone is not a pass.
+
+## Team handoff
+
+- Gemini: provide the local server key, confirm model/quota, run and inspect the
+  live verification report. Keep credentials out of Git and chat.
+- Frontend: Ask Panda already calls the API, but its current chat component does
+  not render the returned search grounding or Google's search suggestions.
+  Connect those displays and respect grounding_text offsets before presenting
+  grounded answers as a finished feature.
+- Data/infrastructure: the active price provider still reads fictional samples.
+  Real adjusted historical prices, freshness/source metadata, MongoDB and Tiger
+  Data remain unconnected. Coordinate ownership before replacing that provider.
+- Deployment: hosted persistence and access controls remain team rollout work.
+
+This report supersedes the older scaffold verification: quant and frontend API
+integration now exist, and Ask search now defaults on. Live market data and live
+Gemini/search validation must still be reported separately.

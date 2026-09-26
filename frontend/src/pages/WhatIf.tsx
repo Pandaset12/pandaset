@@ -21,13 +21,13 @@ export default function WhatIf({
   analysis,
   weights,
   onApply,
-  onAsk,
+  onExplainScenario,
   query,
 }: {
   analysis: AnalysisResponse;
   weights: number[];
   onApply: (weights: number[]) => Promise<boolean>;
-  onAsk: (q?: string) => void;
+  onExplainScenario: (weights: number[]) => void;
   query: URLSearchParams;
 }) {
   const [draft, setDraft] = useState(() => {
@@ -354,11 +354,8 @@ export default function WhatIf({
               <div className="scenario-result-actions">
                 <button
                   className="text-button"
-                  onClick={() =>
-                    onAsk(
-                      `Explain this scenario comparison for saved analysis ${analysis.analysis_id}.`,
-                    )
-                  }
+                  disabled={busy || stale || !comparison || !valid}
+                  onClick={() => onExplainScenario(draft)}
                 >
                   <Scale size={16} />
                   Explain the trade-offs

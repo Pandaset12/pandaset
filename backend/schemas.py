@@ -227,6 +227,72 @@ class AnalystResponse(BaseModel):
     error_code: str | None = None
 
 
+AI_WORKFLOWS = Literal[
+    "analysis_briefing",
+    "risk_explanation",
+    "scenario_explanation",
+    "research_summary",
+]
+
+
+class AnalysisWorkflowRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    analysis_id: str = Field(min_length=1, max_length=80)
+    question: str = Field(default="Summarize the most useful findings.", min_length=1, max_length=1000)
+
+    @field_validator("question")
+    @classmethod
+    def nonempty_workflow_question(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("Question cannot be blank.")
+        return value
+
+
+class ScenarioExplanationRequest(AnalysisWorkflowRequest):
+    proposed_weights: dict[str, float] = Field(min_length=1, max_length=100)
+
+    @field_validator("proposed_weights")
+    @classmethod
+    def valid_proposed_weights(cls, weights: dict[str, float]) -> dict[str, float]:
+        normalized = {symbol.strip().upper(): weight for symbol, weight in weights.items()}
+        if len(normalized) != len(weights):
+            raise ValueError("Duplicate symbols are not allowed after normalization.")
+        return check_weights(normalized)
+
+
+class ResearchSummaryDraft(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    summary: str = Field(min_length=1, max_length=6000)
+    key_points: list[str] = Field(default_factory=list, max_length=6)
+
+
+class ResearchSummaryRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    source_id: Literal["issuer"] = "issuer"
+
+
+class AIWorkflowResponse(BaseModel):
+    workflow: AI_WORKFLOWS
+    analyst_mode: Literal["demo", "gemini"]
+    status: Literal["complete", "demo", "unavailable"]
+    answer: str
+    analysis_id: str | None = None
+    symbol: str | None = None
+    source_url: str | None = None
+    citations: list[MetricCitation] = Field(default_factory=list)
+    sources: list[dict[str, Any]] = Field(default_factory=list)
+    grounding_supports: list[dict[str, Any]] = Field(default_factory=list)
+    url_retrievals: list[dict[str, Any]] = Field(default_factory=list)
+    grounding_text: str | None = None
+    warnings: list[str] = Field(default_factory=list)
+    disclaimer: str = DISCLAIMER
+    error_code: str | None = None
+
+
 class WhatIfRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
 

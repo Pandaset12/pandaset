@@ -1,6 +1,6 @@
 # PortfolioLens application API + Gemini
 
-Backend #2 owns the frontend API, input validation, analysis orchestration,
+The backend owns the frontend API, input validation, analysis orchestration,
 saved snapshots, Gemini prompts, and error handling. Market ingestion, Tiger Data,
 MongoDB infrastructure and financial formulas belong to the data/quant teammates.
 See [the shared HLD](../PortfolioLens-HLD.md) and [integration design](INTEGRATION.md).
@@ -74,6 +74,10 @@ is a sample session-date label, not a live quote or exchange closing timestamp.
 | GET | `/api/v1/portfolios/{id}/analyses/{analysis_id}` | Read that snapshot |
 | POST | `/api/v1/portfolios/{id}/ask` | Explain exactly the selected saved snapshot |
 | POST | `/api/v1/portfolios/{id}/what-if` | Compare saved and proposed holdings on common sample prices |
+| POST | `/api/v1/portfolios/{id}/briefing` | Write a briefing from one saved analysis |
+| POST | `/api/v1/portfolios/{id}/risk/explanation` | Explain risk using one saved analysis |
+| POST | `/api/v1/portfolios/{id}/what-if/explanation` | Recalculate and explain a proposal against a saved analysis |
+| POST | `/api/v1/research/{symbol}/summary` | Summarize the allowlisted issuer source for a supported symbol |
 
 Holdings use `{"symbol":"NVDA","weight":0.3}`. Weights are finite long-only
 decimals and must sum to 1 (tolerance 1e-10). Duplicate symbols are rejected
@@ -81,8 +85,10 @@ after normalization. We never silently rescale inputs.
 
 V1 errors use `{"error":{"code":"...","message":"..."}}`. Input errors are
 422, missing objects 404, pending quant integration 501, and provider errors 502.
-AI failures on the v1 ask route return HTTP 200 with `status: "unavailable"`,
-`error_code`, warnings and the original metrics. The frontend must check
+AI failures on Ask Panda and the contextual workflow routes return HTTP 200
+with `status: "unavailable"`, an `error_code` when available, and warnings.
+Saved metrics or the selected Research source remain accessible. Quant-provider
+failures on What-if routes still use HTTP errors. The frontend must check
 `status`; HTTP 200 does not imply that an AI explanation succeeded.
 
 Every application response includes a server-generated `X-Request-ID`.
@@ -112,10 +118,16 @@ is not used by this service. Never commit actual keys.
 | CORS_ORIGINS | Comma-separated frontend origins; localhost ports 3000 and 5173 |
 | STORAGE_PATH | Optional override for the SQLite file |
 
-Gemini requests use a versioned prompt, JSON response schema, a bounded timeout
-and at most two HTTP attempts. The model returns qualitative `explanation`
-and `cited_fields`. The backend renders the numerical facts from those IDs
-using the saved snapshot; numbers are displayed as rounded percentages.
+All Gemini-backed actions use one server-side adapter with a versioned,
+workflow-specific prompt and JSON response schema, a bounded timeout, and at
+most two HTTP attempts. Each action receives only its scoped context: Ask Panda
+gets its selected snapshot, default search tools and any supplied source URLs; Overview and
+Risk get one validated snapshot; What-if gets the server-calculated baseline,
+proposal, differences, and assumptions; Research gets one curated source URL.
+Portfolio workflows return qualitative `explanation` and `cited_fields`. The
+backend renders numerical facts from those IDs using its own snapshot or
+comparison catalog. These are single requests without sub-agents or
+cross-request memory.
 
 Numeric literals (including Unicode numerals) and common English number words
 in model prose are rejected. A failed validation produces the existing safe
@@ -147,17 +159,24 @@ News explanations remain qualitative; numerical financial facts come from
 snapshot references. No subagents are required for this initial flow. Choose a
 model supporting structured output together with the requested tools.
 
+Other workflows retain scoped tool access: Briefing, Risk and What-if use no
+web tools. Research uses URL Context only for its curated official issuer URL;
+it does not use Google Search or crawl pages in the background.
+
 The response includes `sources`, `grounding_supports`, `url_retrievals`,
 `web_search_queries` and `search_suggestions_html`. Search queries are copied
-from Google grounding metadata; empty evidence is not proof of a live search. Preserve source array order: grounding indices refer
-to it. Text offsets refer to `grounding_text` (the original JSON model response),
+from Google grounding metadata; empty evidence is not proof of a live search.
+Preserve source array order: grounding indices refer to it. Text offsets refer to `grounding_text` (the original JSON model response),
 **not** the parsed `answer`. The frontend must handle Google's
 [search display requirements](https://ai.google.dev/gemini-api/docs/generate-content/google-search)
 and [URL retrieval status](https://ai.google.dev/gemini-api/docs/generate-content/url-context).
 
-Enabling Gemini does not enable live prices. Quant calculations run through the provider. Daily P&L
+Enabling Gemini does not enable live prices. Quant calculations run through the
+provider before any scenario explanation. The explanation route cannot apply or
+save proposed holdings; the existing explicit frontend confirmation remains the
+only way to apply a scenario to the current browser session. Daily P&L
 attribution and natural-language execution of what-if calculations remain
-pending; the prompt instructs the model to explain those limitations.
+unsupported.
 
 ## Verify live Gemini through the API
 
