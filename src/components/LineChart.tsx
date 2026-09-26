@@ -100,7 +100,7 @@ export function LineChart({
                 x2={width - pad.right + 3}
                 y1={y(value)}
                 y2={y(value)}
-                stroke="#35414a"
+                stroke="#43515b"
                 strokeDasharray="3 5"
               />
               <text

@@ -9,11 +9,11 @@ An investment research desk with editorial clarity: open page structures, precis
 | Role                  | Value               |
 | --------------------- | ------------------- |
 | Page background       | `#000000`           |
-| Panel surface         | `#11171d`           |
-| Raised surface        | `#1a232b`           |
+| Panel surface         | `#1f2b34`           |
+| Raised surface        | `#2a3943`           |
 | Primary text          | `#e4eaee`           |
 | Secondary text        | `#9caab4`           |
-| Rules                 | `#35414a`           |
+| Rules                 | `#4d5d68`           |
 | Filled action         | `#3c5968`           |
 | Chart and link accent | `#89a4b4`           |
 | Positive values       | `#8cae99`           |
