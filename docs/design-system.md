@@ -17,7 +17,9 @@ An investment research desk with editorial clarity: open page structures, precis
 | Secondary text   | `#a4aea5`           |
 | Rules            | `#3c4940`           |
 | Brass accent     | `#c2a36b`           |
-| Filled action    | `#786037`           |
+| Primary action   | `#c2a36b`           |
+| Action hover     | `#d1b77f`           |
+| Secondary series | `#9ba496`           |
 | Positive values  | `#7fa487`           |
 | Negative values  | `#d07d72`           |
 | Panel corners    | 7px                 |
@@ -29,6 +31,7 @@ Instrument Serif supplies the editorial hierarchy; DM Sans supplies controls, pr
 ## Data visualization
 
 - Solid brass lines show the primary series; dashed sage-gray lines show the comparison.
+- Sage-gray bars distinguish secondary series from the primary brass series.
 - SVG viewboxes follow the measured container width, preserving readable axis labels on small screens.
 - Charts have descriptive accessible names and keyboard-operable timeline sliders with date/value readouts.
 - Paired bars compare capital weights with covariance-based risk contributions.

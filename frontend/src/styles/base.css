@@ -52,9 +52,9 @@
   --brass: #c2a36b;
   --brass-dark: #907447;
   --comparison: #9ba496;
-  --bar-secondary: #82704b;
-  --action: #786037;
-  --action-hover: #806335;
+  --bar-secondary: var(--comparison);
+  --action: var(--brass);
+  --action-hover: #d1b77f;
   --ink-on-accent: #17150f;
   --positive: #7fa487;
   --negative: #d07d72;
@@ -177,7 +177,7 @@ svg {
   left: 12px;
   z-index: 200;
   background: var(--action);
-  color: var(--ink);
+  color: var(--ink-on-accent);
   padding: 12px;
   transform: translateY(-160%);
 }
@@ -228,10 +228,10 @@ svg {
 }
 .button.dark {
   background: var(--action);
-  color: var(--ink);
+  color: var(--ink-on-accent);
 }
 .button.dark:hover:not(:disabled) {
-  background: var(--selected);
+  background: var(--action-hover);
   box-shadow: 0 3px 9px #00000033;
 }
 .button.subtle {
@@ -373,7 +373,7 @@ svg {
   align-items: center;
   gap: 8px;
   background: var(--action);
-  color: var(--ink);
+  color: var(--ink-on-accent);
   font-size: 0.875rem;
   font-weight: 600;
   border-radius: 5px;
