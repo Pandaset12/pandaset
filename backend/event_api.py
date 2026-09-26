@@ -19,12 +19,13 @@ from .event_agents import answer_run_question
 from .event_jobs import FACTOR_SYMBOLS
 from .event_schemas import ChatRequest, ConfirmRequest, DraftRequest, validate_shocks
 from .event_templates import EventTemplateNotFound, get_event_template, list_event_templates
-from .gemini_service import GeminiRateLimited, gemini_cooldown_remaining
+from .gemini_service import (GeminiRateLimited, GeminiUnavailable,
+                             gemini_cooldown_remaining, generate_analysis_workflow)
 from .instruments import SUPPORTED_INSTRUMENTS, resolve_instrument, search_instruments
 from .mongo_store import (IdempotencyConflict, InvalidTransition, MongoPortfolioStore,
                           QuotaExceeded, RecordNotFound, ReservationInProgress)
 from .providers import map_quant_report
-from .schemas import PortfolioInput
+from .schemas import AIWorkflowResponse, AnalysisWorkflowRequest, AnalyticsSnapshot, PortfolioInput
 from .storage import SnapshotNotFound
 from .twelve_data import CoverageError, ProviderUnavailable, RateLimitError, TwelveDataPriceProvider
 
@@ -212,6 +213,39 @@ async def list_analyses(portfolio_id: str, limit: int = Query(default=10, ge=1, 
          "price_provenance": item.get("price_snapshot", {}).get("provenance", {})}
         for item in records
     ]}
+
+
+async def _saved_analysis_workflow(workflow: str, portfolio_id: str,
+                                   body: AnalysisWorkflowRequest, context) -> AIWorkflowResponse:
+    store, user, settings = context
+    record = await _call(store.get_analysis_record, user.user_id, portfolio_id, body.analysis_id)
+    if record is None:
+        raise _not_found()
+    metrics = AnalyticsSnapshot.model_validate(record["metrics"])
+    try:
+        output = await generate_analysis_workflow(
+            workflow, body.question, metrics, body.analysis_id, settings,
+        )
+    except GeminiRateLimited as exc:
+        raise _gemini_rate_limit_error(exc.retry_after_seconds) from exc
+    except GeminiUnavailable as exc:
+        raise _error(502, "GEMINI_UNAVAILABLE", str(exc)) from exc
+    return AIWorkflowResponse(
+        workflow=workflow, analyst_mode="gemini", status="complete",
+        analysis_id=body.analysis_id, **output,
+    )
+
+
+@router.post("/portfolios/{portfolio_id}/briefing", response_model=AIWorkflowResponse)
+async def saved_briefing(portfolio_id: str, body: AnalysisWorkflowRequest,
+                         context=Depends(_store)):
+    return await _saved_analysis_workflow("analysis_briefing", portfolio_id, body, context)
+
+
+@router.post("/portfolios/{portfolio_id}/risk/explanation", response_model=AIWorkflowResponse)
+async def saved_risk_explanation(portfolio_id: str, body: AnalysisWorkflowRequest,
+                                 context=Depends(_store)):
+    return await _saved_analysis_workflow("risk_explanation", portfolio_id, body, context)
 
 
 @router.get("/instruments")

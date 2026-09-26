@@ -3,6 +3,10 @@ import { ArrowUpRight, Check, XMark as X } from "./components/icons";
 import { Brand } from "./components/UI";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { EditPortfolio } from "./components/EditPortfolio";
+import {
+  AIWorkflowModal,
+  type AIWorkflowAction,
+} from "./components/AIWorkflowModal";
 import { AuthScreen } from "./components/AuthScreen";
 import { AuthBoundary } from "./components/AuthBoundary";
 import { PortfolioOnboarding } from "./components/onboarding/PortfolioOnboarding";
@@ -42,6 +46,7 @@ function Application({ onSignOut }: { onSignOut: () => Promise<void> }) {
   const [onboarding, setOnboarding] = useState(false);
   const [edit, setEdit] = useState(false);
   const [toast, setToast] = useState("");
+  const [aiAction, setAiAction] = useState<AIWorkflowAction | null>(null);
   const listGuard = useRef(createRequestGuard());
   const analysisGuard = useRef(createRequestGuard());
 
@@ -126,6 +131,8 @@ function Application({ onSignOut }: { onSignOut: () => Promise<void> }) {
     if (selectedId && listState === "ready") void loadAnalysis(selectedId);
     return () => analysisGuard.current.invalidate();
   }, [selectedId, listState, loadAnalysis]);
+  useEffect(() => setAiAction(null), [selectedId]);
+  useEffect(() => setAiAction(null), [hash]);
 
   useEffect(() => {
     if (!selected) {
@@ -403,9 +410,7 @@ function Application({ onSignOut }: { onSignOut: () => Promise<void> }) {
                     "Portfolio chat is available in a completed event run.",
                   )
                 }
-                onBrief={() =>
-                  setToast("Briefing is unavailable for this saved analysis.")
-                }
+                onBrief={() => setAiAction({ workflow: "analysis_briefing" })}
                 onMethod={() =>
                   setToast(
                     "This analysis uses saved adjusted-price history and the displayed data source.",
@@ -417,9 +422,11 @@ function Application({ onSignOut }: { onSignOut: () => Promise<void> }) {
                 analysis={analysis}
                 assets={assets}
                 onExplain={() =>
-                  setToast(
-                    "Risk explanation is unavailable for this saved analysis.",
-                  )
+                  setAiAction({
+                    workflow: "risk_explanation",
+                    question:
+                      "Explain the main sources of risk in this saved portfolio analysis.",
+                  })
                 }
                 onMethod={() =>
                   setToast(
@@ -472,6 +479,16 @@ function Application({ onSignOut }: { onSignOut: () => Promise<void> }) {
           error={analysisError}
           onClose={() => setEdit(false)}
           onSave={apply}
+        />
+      )}
+      {aiAction && selected && analysis && (
+        <AIWorkflowModal
+          key={`${analysis.analysis_id}-${aiAction.workflow}`}
+          action={aiAction}
+          portfolioId={selected.portfolio_id}
+          analysisId={analysis.analysis_id}
+          authenticated
+          onClose={() => setAiAction(null)}
         />
       )}
       {toast && (

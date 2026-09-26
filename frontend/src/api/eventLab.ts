@@ -5,6 +5,7 @@ import type {
   PortfolioInput,
   MetricSnapshot,
   AnalysisResponse,
+  AIWorkflowResponse,
 } from "./portfolio";
 
 export class EventLabError extends Error {
@@ -162,6 +163,25 @@ export const listAnalyses = async (id: string) =>
 export const getSavedAnalysis = (portfolioId: string, analysisId: string) =>
   eventRequest<SavedAnalysis>(
     `/portfolios/${encodeURIComponent(portfolioId)}/analyses/${encodeURIComponent(analysisId)}`,
+  );
+export const requestSavedAnalysisBriefing = (
+  portfolioId: string,
+  analysisId: string,
+) =>
+  eventRequest<AIWorkflowResponse>(
+    `/portfolios/${encodeURIComponent(portfolioId)}/briefing`,
+    "POST",
+    { analysis_id: analysisId },
+  );
+export const requestSavedRiskExplanation = (
+  portfolioId: string,
+  analysisId: string,
+  question: string,
+) =>
+  eventRequest<AIWorkflowResponse>(
+    `/portfolios/${encodeURIComponent(portfolioId)}/risk/explanation`,
+    "POST",
+    { analysis_id: analysisId, question },
   );
 export const searchInstruments = async (q: string, signal?: AbortSignal) =>
   (

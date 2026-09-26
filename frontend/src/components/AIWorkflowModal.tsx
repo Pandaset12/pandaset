@@ -2,6 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowPath, ArrowUpRight, InformationCircle } from "./icons";
 import { Modal } from "./UI";
 import {
+  requestSavedAnalysisBriefing,
+  requestSavedRiskExplanation,
+} from "../api/eventLab";
+import {
   createRequestGuard,
   requestAnalysisBriefing,
   requestResearchSummary,
@@ -61,11 +65,13 @@ export function AIWorkflowModal({
   action,
   portfolioId,
   analysisId,
+  authenticated = false,
   onClose,
 }: {
   action: AIWorkflowAction;
   portfolioId: string;
   analysisId: string;
+  authenticated?: boolean;
   onClose: () => void;
 }) {
   const [response, setResponse] = useState<AIWorkflowResponse | null>(null);
@@ -81,13 +87,21 @@ export function AIWorkflowModal({
     try {
       const result =
         action.workflow === "analysis_briefing"
-          ? await requestAnalysisBriefing(portfolioId, analysisId)
+          ? await (authenticated
+              ? requestSavedAnalysisBriefing(portfolioId, analysisId)
+              : requestAnalysisBriefing(portfolioId, analysisId))
           : action.workflow === "risk_explanation"
-            ? await requestRiskExplanation(
-                portfolioId,
-                analysisId,
-                action.question,
-              )
+            ? await (authenticated
+                ? requestSavedRiskExplanation(
+                    portfolioId,
+                    analysisId,
+                    action.question,
+                  )
+                : requestRiskExplanation(
+                    portfolioId,
+                    analysisId,
+                    action.question,
+                  ))
             : action.workflow === "scenario_explanation"
               ? await requestScenarioExplanation(
                   portfolioId,
