@@ -1,4 +1,4 @@
-"""Twelve Data daily-price adapter. Secrets and upstream payloads never reach API errors."""
+"""Twelve Data daily-price adapter; never exposes credentials or upstream payloads."""
 import json
 import math
 from datetime import date
@@ -10,7 +10,7 @@ import pandas as pd
 
 
 class ProviderUnavailable(Exception):
-    pass
+    """The requested market-data operation could not be completed."""
 
 
 class TwelveDataPriceProvider:
@@ -19,8 +19,6 @@ class TwelveDataPriceProvider:
     freshness = "unknown"
 
     def __init__(self, api_key: str, timeout_seconds: float = 15):
-        if not api_key:
-            raise ProviderUnavailable("Twelve Data is not configured.")
         self._api_key = api_key
         self._timeout_seconds = timeout_seconds
 
@@ -45,16 +43,23 @@ class TwelveDataPriceProvider:
 
     @staticmethod
     def _series(payload: dict, symbol: str) -> dict:
-        candidates = payload.get("data") if isinstance(payload.get("data"), dict) else payload
-        item = next((v for k, v in candidates.items() if str(k).upper() == symbol), None)
-        if not isinstance(item, dict) or item.get("status") == "error" or ("code" in item and "values" not in item):
-            raise ProviderUnavailable(f"Twelve Data has no usable history for {symbol}.")
-        if not isinstance(item.get("values"), list):
+        if isinstance(payload.get("values"), list):
+            meta = payload.get("meta") or {}
+            if str(meta.get("symbol", symbol)).upper() == symbol:
+                item = payload
+            else:
+                item = None
+        else:
+            candidates = payload.get("data") if isinstance(payload.get("data"), dict) else payload
+            item = next((value for key, value in candidates.items() if str(key).upper() == symbol), None)
+        if not isinstance(item, dict) or item.get("status") == "error" or not isinstance(item.get("values"), list):
             raise ProviderUnavailable(f"Twelve Data has no usable history for {symbol}.")
         return item
 
     def prices(self, symbols: list[str], lookback_days: int = 252) -> pd.DataFrame:
         normalized = [symbol.strip().upper() for symbol in symbols]
+        if not self._api_key:
+            raise ProviderUnavailable("Twelve Data is selected but TWELVE_DATA_API_KEY is not configured.")
         if not normalized or len(normalized) > 8 or len(set(normalized)) != len(normalized):
             raise ProviderUnavailable("Twelve Data requests require one to eight unique symbols.")
         if not 1 <= lookback_days <= 1000:
