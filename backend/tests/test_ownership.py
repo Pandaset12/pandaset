@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 
 from backend.config import Settings
 from backend.main import create_app
-from backend.storage import PortfolioStore
+from backend.storage import PortfolioStore, StalePortfolio
 
 
 @pytest.fixture
@@ -81,3 +81,39 @@ def test_legacy_sqlite_migrates_without_assigning_owner(tmp_path):
     assert store.list_for_owner(str(uuid4())) == []
     with sqlite3.connect(path) as db:
         assert db.execute("SELECT owner_id FROM portfolios WHERE portfolio_id='legacy'").fetchone() == (None,)
+
+
+def test_update_preserves_identity_and_owner_and_invalidates_old_analyses(client):
+    api, users = client
+    owner = {"Authorization": "Bearer owner"}
+    other = {"Authorization": "Bearer other"}
+    created = api.post("/api/v1/portfolios", json={
+        "name": "Original", "holdings": [{"symbol": "SPY", "weight": 1.0}],
+    }, headers=owner).json()
+    portfolio_id = created["portfolio_id"]
+    path = f"/api/v1/portfolios/{portfolio_id}"
+    analysis = api.post(path + "/analysis", headers=owner)
+    assert analysis.status_code == 200, analysis.text
+    analysis_id = analysis.json()["analysis_id"]
+    old_metrics, _ = api.app.state.store.get_analysis(portfolio_id, analysis_id)
+
+    replacement = {"name": "Updated", "holdings": [{"symbol": "TLT", "weight": 1.0}]}
+    assert api.put(path, json=replacement).status_code == 401
+    assert api.put(path, json=replacement, headers=other).status_code == 404
+    assert api.put(path, json={"name": "Bad", "holdings": []}, headers=owner).status_code == 422
+    for _ in range(2):
+        updated_response = api.put(path, json=replacement, headers=owner)
+        assert updated_response.status_code == 200, updated_response.text
+        updated = updated_response.json()
+        assert updated["portfolio_id"] == portfolio_id
+        assert updated["created_at"] == created["created_at"]
+        assert updated["holdings"] == replacement["holdings"]
+        assert len(api.get("/api/v1/portfolios", headers=owner).json()) == 1
+    assert api.get(path, headers=owner).json()["holdings"] == replacement["holdings"]
+    assert api.get(path, headers=other).status_code == 404
+    assert api.get(path + f"/analyses/{analysis_id}", headers=owner).status_code == 404
+    with pytest.raises(StalePortfolio):
+        api.app.state.store.save_analysis(old_metrics, users["owner"])
+    refreshed = api.post(path + "/analysis", headers=owner)
+    assert refreshed.status_code == 200, refreshed.text
+    assert refreshed.json()["weights"] == {"TLT": 1.0}

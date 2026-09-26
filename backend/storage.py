@@ -11,6 +11,10 @@ class SnapshotNotFound(Exception):
     pass
 
 
+class StalePortfolio(Exception):
+    pass
+
+
 class PortfolioStore:
     """Small persistent demo store; each operation owns its SQLite connection."""
 
@@ -78,6 +82,27 @@ class PortfolioStore:
             ).fetchone()
         return Portfolio.model_validate_json(row[0]) if row else None
 
+    def update(self, portfolio_id: str, owner_id: str, request: PortfolioInput) -> Portfolio | None:
+        with self.connection() as connection:
+            row = connection.execute(
+                "SELECT payload FROM portfolios WHERE portfolio_id = ? AND owner_id = ?",
+                (portfolio_id, owner_id),
+            ).fetchone()
+            if row is None:
+                return None
+            previous = Portfolio.model_validate_json(row[0])
+            updated = Portfolio(
+                **request.model_dump(), portfolio_id=portfolio_id,
+                created_at=previous.created_at,
+            )
+            connection.execute(
+                "UPDATE portfolios SET payload = ? WHERE portfolio_id = ? AND owner_id = ?",
+                (updated.model_dump_json(), portfolio_id, owner_id),
+            )
+            if updated.weights != previous.weights:
+                connection.execute("DELETE FROM analyses WHERE portfolio_id = ?", (portfolio_id,))
+        return updated
+
     def list_for_owner(self, owner_id: str) -> list[Portfolio]:
         with self.connection() as connection:
             rows = connection.execute(
@@ -85,10 +110,16 @@ class PortfolioStore:
             ).fetchall()
         return [Portfolio.model_validate_json(row[0]) for row in rows]
 
-    def save_analysis(self, metrics: AnalyticsSnapshot) -> tuple[str, datetime]:
+    def save_analysis(self, metrics: AnalyticsSnapshot, owner_id: str) -> tuple[str, datetime]:
         analysis_id = "analysis_" + uuid4().hex
         created_at = datetime.now(timezone.utc)
         with self.connection() as connection:
+            row = connection.execute(
+                "SELECT payload FROM portfolios WHERE portfolio_id = ? AND owner_id = ?",
+                (metrics.portfolio_id, owner_id),
+            ).fetchone()
+            if row is None or Portfolio.model_validate_json(row[0]).weights != metrics.weights:
+                raise StalePortfolio(metrics.portfolio_id)
             connection.execute(
                 "INSERT INTO analyses VALUES (?, ?, ?, ?)",
                 (analysis_id, metrics.portfolio_id, created_at.isoformat(), metrics.model_dump_json()),

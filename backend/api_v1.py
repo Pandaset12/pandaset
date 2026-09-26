@@ -36,7 +36,7 @@ from .schemas import (
     ScenarioExplanationRequest,
     WhatIfRequest,
 )
-from .storage import PortfolioStore, SnapshotNotFound
+from .storage import PortfolioStore, SnapshotNotFound, StalePortfolio
 
 
 router = APIRouter(prefix="/api/v1", tags=["PortfolioLens v1"])
@@ -182,6 +182,18 @@ def get_portfolio(portfolio_id: str, store: PortfolioStore = Depends(get_store),
     return require_portfolio(store, portfolio_id, owner_id)
 
 
+@router.put("/portfolios/{portfolio_id}", response_model=Portfolio)
+def update_portfolio(
+    portfolio_id: str, request: PortfolioInput,
+    store: PortfolioStore = Depends(get_store), owner_id: str = Depends(current_user_id),
+):
+    require_portfolio(store, portfolio_id, owner_id)
+    updated = store.update(portfolio_id, owner_id, request)
+    if updated is None:
+        raise api_error(404, "PORTFOLIO_NOT_FOUND", "Portfolio not found.")
+    return updated
+
+
 @router.post("/portfolios/{portfolio_id}/analysis", response_model=AnalysisResponse)
 def analyze(
     portfolio_id: str, store: PortfolioStore = Depends(get_store),
@@ -203,7 +215,10 @@ def analyze(
     except Exception as exc:
         log_failure("PROVIDER_UNAVAILABLE", exc)
         raise api_error(502, "PROVIDER_UNAVAILABLE", "Analysis provider is currently unavailable.") from exc
-    analysis_id, created_at = store.save_analysis(metrics)
+    try:
+        analysis_id, created_at = store.save_analysis(metrics, owner_id)
+    except StalePortfolio as exc:
+        raise api_error(409, "PORTFOLIO_CHANGED", "Portfolio changed during analysis. Retry analysis.") from exc
     return analysis_response(metrics, analysis_id, created_at)
 
 

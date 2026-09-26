@@ -34,11 +34,20 @@ export function portfolioNameError(name: string): string | undefined {
 }
 
 // Integer percentage units avoid rounding 99.999999% up to a valid allocation.
-export function parsePercentage(value: string): number | null {
+export function parsePercentage(
+  value: string,
+  allowZero = false,
+): number | null {
   const trimmed = value.trim();
   if (!/^(?:\d+(?:\.\d{0,6})?|\.\d{1,6})$/.test(trimmed)) return null;
   const number = Number(trimmed);
-  if (!Number.isFinite(number) || number <= 0 || number > 100) return null;
+  if (
+    !Number.isFinite(number) ||
+    number < 0 ||
+    (!allowZero && number === 0) ||
+    number > 100
+  )
+    return null;
   const [whole, fraction = ""] = trimmed.split(".");
   return Number(whole || 0) * PERCENT_SCALE + Number(fraction.padEnd(6, "0"));
 }

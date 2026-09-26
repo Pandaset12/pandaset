@@ -1,88 +1,168 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 import { ArrowPath as RotateCcw, Check } from "./icons";
-import { assets, initialWeights } from "../../../quant/data";
-import { validateWeights } from "../../../quant/analytics";
+import type { Asset } from "../../../quant/data";
+import {
+  formatPercentage,
+  MAX_HOLDINGS,
+  parsePercentage,
+} from "./onboarding/portfolioDraft";
+import { TickerSearch, type SearchTickers } from "./onboarding/TickerSearch";
+import { parsePercentageDraft, workspaceAsset } from "../workspace/holdings";
 import { Modal, AssetMark } from "./UI";
+
+type Row = { asset: Asset; percentage: string };
 
 export function EditPortfolio({
   weights,
+  holdings,
   busy,
   error,
+  searchTickers,
   onClose,
   onSave,
 }: {
   weights: number[];
+  holdings: Asset[];
   busy: boolean;
   error: string;
+  searchTickers: SearchTickers;
   onClose: () => void;
-  onSave: (w: number[]) => Promise<boolean>;
+  onSave: (weights: number[], symbols: string[]) => Promise<boolean>;
 }) {
-  const [draft, setDraft] = useState([...weights]);
-  const total = draft.reduce((a, b) => a + b, 0);
-  const valid = validateWeights(draft);
+  const inputId = useId();
+  const initialRows = () =>
+    holdings.map((asset, index) => ({
+      asset,
+      percentage: String(weights[index]),
+    }));
+  const [rows, setRows] = useState<Row[]>(initialRows);
+  const values = parsePercentageDraft(rows.map(({ percentage }) => percentage));
+  const valid =
+    values !== null &&
+    rows.every(({ percentage }) => parsePercentage(percentage) !== null);
+  const totalUnits = rows.reduce(
+    (sum, row) => sum + (parsePercentage(row.percentage, true) ?? 0),
+    0,
+  );
+  const [adding, setAdding] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const locked = busy || saving;
+
   return (
-    <Modal
-      title="Save a new sample portfolio"
-      onClose={busy ? () => undefined : onClose}
-    >
+    <Modal title="Edit portfolio" onClose={locked ? () => undefined : onClose}>
       <p className="modal-description">
-        Set the allocation for each sample asset. Saving creates a new
-        portfolio; your current portfolio stays available in the selector.
-        Weights should add up to 100%.
+        Add or remove holdings and set their allocations. Saving updates this
+        portfolio.
       </p>
       <div className="edit-weights">
-        {assets.map((a, i) => (
-          <label key={a.symbol}>
-            <span>
-              <AssetMark asset={a} small />
-              <strong>{a.symbol}</strong>
-              <small>{a.short}</small>
+        {rows.map(({ asset, percentage }) => (
+          <div className="edit-holding-row" key={asset.symbol}>
+            <span className="edit-holding-name">
+              <AssetMark asset={asset} small />
+              <strong>{asset.symbol}</strong>
+              <small>{asset.short}</small>
             </span>
-            <span className="edit-weight-input">
+            <label className="edit-weight-input">
               <input
-                aria-label={`${a.symbol} portfolio allocation`}
-                type="number"
-                min="0"
-                max="100"
-                step="1"
-                value={draft[i]}
-                disabled={busy}
-                onChange={(e) =>
-                  setDraft(
-                    draft.map((v, j) => (i === j ? Number(e.target.value) : v)),
+                aria-label={`${asset.symbol} portfolio allocation`}
+                type="text"
+                inputMode="decimal"
+                value={percentage}
+                disabled={locked}
+                onChange={(event) =>
+                  setRows((current) =>
+                    current.map((row) =>
+                      row.asset.symbol === asset.symbol
+                        ? { ...row, percentage: event.target.value }
+                        : row,
+                    ),
                   )
                 }
               />
               %
-            </span>
-          </label>
+            </label>
+            <button
+              className="text-button"
+              type="button"
+              disabled={locked}
+              aria-label={`Remove ${asset.symbol}`}
+              onClick={() =>
+                setRows((current) =>
+                  current.filter((row) => row.asset.symbol !== asset.symbol),
+                )
+              }
+            >
+              Remove
+            </button>
+          </div>
         ))}
       </div>
+      {adding ? (
+        <TickerSearch
+          inputId={inputId}
+          selectedSymbols={rows.map(({ asset }) => asset.symbol)}
+          searchTickers={searchTickers}
+          disabled={locked || rows.length >= MAX_HOLDINGS}
+          onSelect={(ticker) => {
+            if (rows.some(({ asset }) => asset.symbol === ticker.symbol))
+              return;
+            setRows((current) => [
+              ...current,
+              {
+                asset: {
+                  ...workspaceAsset(ticker.symbol),
+                  name: ticker.name ?? ticker.symbol,
+                  short: ticker.name ?? ticker.symbol,
+                },
+                percentage: "",
+              },
+            ]);
+            setAdding(false);
+          }}
+        />
+      ) : (
+        <button
+          className="text-button edit-add-holding"
+          type="button"
+          disabled={locked || rows.length >= MAX_HOLDINGS}
+          onClick={() => setAdding(true)}
+        >
+          + Add holding
+        </button>
+      )}
       <div className={`allocation-total ${valid ? "valid" : "invalid"}`}>
         <span>Total allocation</span>
-        <strong>{Number(total.toFixed(2))}%</strong>
+        <strong>{formatPercentage(totalUnits)}%</strong>
       </div>
       {!valid && (
         <p className="field-error" role="alert">
-          Allocations must total 100%, with each value between 0% and 100%.
+          Enter a weight above 0% for every holding and total exactly 100%.
         </p>
       )}
       <div className="modal-actions">
         <button
           className="text-button"
-          disabled={busy}
-          onClick={() => setDraft([...initialWeights])}
+          disabled={locked}
+          onClick={() => {
+            setRows(initialRows());
+            setAdding(false);
+          }}
         >
-          <RotateCcw size={15} />
-          Restore example
+          <RotateCcw size={15} /> Restore current
         </button>
         <button
           className="button dark"
-          disabled={!valid || busy}
-          onClick={() => void onSave(draft)}
+          disabled={!valid || locked}
+          onClick={() => {
+            if (!values) return;
+            setSaving(true);
+            void onSave(
+              values,
+              rows.map(({ asset }) => asset.symbol),
+            ).finally(() => setSaving(false));
+          }}
         >
-          {busy ? "Saving…" : "Save as new portfolio"}
-          <Check size={16} />
+          {locked ? "Saving…" : "Save changes"} <Check size={16} />
         </button>
       </div>
       {error && (
@@ -91,7 +171,7 @@ export function EditPortfolio({
         </p>
       )}
       <p className="small-text muted">
-        The new portfolio is saved to your account.
+        Changes to this portfolio are saved to your account.
       </p>
     </Modal>
   );

@@ -6,7 +6,7 @@ import {
   Scale,
   InformationCircle as Info,
 } from "../components/icons";
-import { assets } from "../../../quant/data";
+import type { Asset } from "../../../quant/data";
 import { pct, pp } from "../../../quant/analytics";
 import {
   comparePortfolio,
@@ -16,31 +16,42 @@ import {
 } from "../api/portfolio";
 import { AssetMark, PageHeading, SectionTitle, Modal } from "../components/UI";
 import { LineChart } from "../components/LineChart";
+import { parsePercentageDraft, workspaceAsset } from "../workspace/holdings";
+import {
+  PERCENT_SCALE,
+  parsePercentage,
+  isValidSymbol,
+  normalizeSymbol,
+} from "../components/onboarding/portfolioDraft";
 
 export default function WhatIf({
   analysis,
+  holdings,
   weights,
   onApply,
   onExplainScenario,
   query,
 }: {
   analysis: AnalysisResponse;
+  holdings: Asset[];
   weights: number[];
-  onApply: (weights: number[]) => Promise<boolean>;
-  onExplainScenario: (weights: number[]) => void;
+  onApply: (weights: number[], symbols: string[]) => Promise<boolean>;
+  onExplainScenario: (weights: number[], symbols: string[]) => void;
   query: URLSearchParams;
 }) {
-  const [draft, setDraft] = useState(() => {
+  const [scenarioAssets, setScenarioAssets] = useState(holdings);
+  const [newSymbol, setNewSymbol] = useState("");
+  const [draftText, setDraftText] = useState(() => {
     const next = [...weights];
-    const reduced = assets.findIndex(
+    const reduced = holdings.findIndex(
       (asset) => asset.symbol === query.get("reduce"),
     );
-    if (reduced >= 0) {
+    if (reduced >= 0 && next.length > 1) {
       const amount = Math.min(10, next[reduced]);
       next[reduced] -= amount;
-      next[reduced === 5 ? 4 : 5] += amount;
+      next[reduced === 0 ? 1 : 0] += amount;
     }
-    return next;
+    return next.map(String);
   });
   const [comparison, setComparison] = useState<{
     weights: number[];
@@ -52,14 +63,17 @@ export default function WhatIf({
   const [applying, setApplying] = useState(false);
   const requestId = useRef(createRequestGuard());
   useEffect(() => () => requestId.current.invalidate(), []);
-  const total = draft.reduce((sum, value) => sum + value, 0);
-  const valid =
-    draft.length === assets.length &&
-    draft.every(
-      (value) => Number.isFinite(value) && value >= 0 && value <= 100,
-    ) &&
-    Math.abs(total - 100) < 0.001;
-  const changed = draft.some((value, index) => value !== weights[index]);
+  const draft = draftText.map((text) => {
+    const units = parsePercentage(text, true);
+    return units === null ? Number.NaN : units / PERCENT_SCALE;
+  });
+  const total = draftText.reduce(
+    (sum, text) => sum + (parsePercentage(text, true) ?? 0) / PERCENT_SCALE,
+    0,
+  );
+  const symbols = scenarioAssets.map(({ symbol }) => symbol);
+  const valid = parsePercentageDraft(draftText) !== null;
+  const changed = draft.some((value, index) => value !== (weights[index] ?? 0));
   const stale =
     !!comparison &&
     draft.some((value, index) => value !== comparison.weights[index]);
@@ -73,26 +87,36 @@ export default function WhatIf({
       const largestRisk = Object.entries(analysis.risk_contribution)
         .filter(([, value]) => value !== null)
         .sort((a, b) => (b[1] ?? 0) - (a[1] ?? 0))[0];
-      const index = assets.findIndex(
+      const index = scenarioAssets.findIndex(
         (asset) => asset.symbol === largestRisk?.[0],
       );
       if (index < 0) return;
+      const target = scenarioAssets.findIndex(
+        (_, candidate) => candidate !== index,
+      );
+      if (target < 0) return;
       const amount = Math.min(10, next[index]);
       next[index] -= amount;
-      next[4] += amount;
+      next[target] += amount;
     } else if (kind === "bonds") {
+      const bond = scenarioAssets.findIndex((asset) => asset.symbol === "TLT");
+      if (bond < 0) return;
       const index = next.reduce(
-        (best, value, i) => (i !== 5 && value > next[best] ? i : best),
+        (best, value, i) => (i !== bond && value > next[best] ? i : best),
         0,
       );
+      if (index === bond) return;
       const amount = Math.min(15, next[index]);
       next[index] -= amount;
-      next[5] += amount;
-    } else
-      assets.forEach((_, index) => {
-        next[index] = index < 5 ? 16 : index === 5 ? 20 : 0;
+      next[bond] += amount;
+    } else {
+      const share = Math.floor((100 / next.length) * 1000000) / 1000000;
+      next.forEach((_, index) => {
+        next[index] =
+          index === next.length - 1 ? 100 - share * (next.length - 1) : share;
       });
-    setDraft(next);
+    }
+    setDraftText(next.map(String));
   }
 
   async function calculate() {
@@ -101,7 +125,11 @@ export default function WhatIf({
     setBusy(true);
     setError("");
     try {
-      const response = await comparePortfolio(analysis.portfolio_id, draft);
+      const response = await comparePortfolio(
+        analysis.portfolio_id,
+        draft,
+        symbols,
+      );
       if (requestId.current.isCurrent(id))
         setComparison({ weights: [...draft], response });
     } catch (reason) {
@@ -131,7 +159,7 @@ export default function WhatIf({
   async function applyScenario() {
     if (!comparison || stale) return;
     setApplying(true);
-    if (await onApply(comparison.weights)) setConfirm(false);
+    if (await onApply(comparison.weights, symbols)) setConfirm(false);
     setApplying(false);
   }
 
@@ -151,6 +179,7 @@ export default function WhatIf({
         <button
           disabled={
             busy ||
+            scenarioAssets.length < 2 ||
             !Object.values(analysis.risk_contribution).some(
               (value) => value !== null,
             )
@@ -161,7 +190,11 @@ export default function WhatIf({
           <ArrowRight size={14} />
         </button>
         <button
-          disabled={busy || weights[5] === 100}
+          disabled={
+            busy ||
+            !scenarioAssets.some((asset) => asset.symbol === "TLT") ||
+            scenarioAssets.length < 2
+          }
           onClick={() => preset("bonds")}
         >
           More Treasury exposure
@@ -179,7 +212,11 @@ export default function WhatIf({
               className="text-button"
               aria-label="Reset scenario"
               disabled={busy}
-              onClick={() => setDraft([...weights])}
+              onClick={() => {
+                setScenarioAssets(holdings);
+                setDraftText(weights.map(String));
+                setComparison(null);
+              }}
             >
               <ArrowPath size={16} />
               Reset
@@ -191,28 +228,27 @@ export default function WhatIf({
             <span>Proposed</span>
           </div>
           <div className="allocation-editor">
-            {assets.map((asset, index) => (
+            {scenarioAssets.map((asset, index) => (
               <div className="editor-row" key={asset.symbol}>
                 <div className="editor-asset">
                   <AssetMark asset={asset} small />
                   <strong>{asset.symbol}</strong>
                 </div>
-                <span className="current-weight">{weights[index]}%</span>
+                <span className="current-weight">{weights[index] ?? 0}%</span>
                 <div className="weight-input">
                   <input
-                    type="number"
-                    min="0"
-                    max="100"
-                    step="1"
+                    type="text"
                     inputMode="decimal"
                     aria-label={`${asset.symbol} proposed allocation`}
-                    aria-invalid={draft[index] < 0 || draft[index] > 100}
-                    value={draft[index]}
+                    aria-invalid={
+                      parsePercentage(draftText[index], true) === null
+                    }
+                    value={draftText[index]}
                     disabled={busy}
                     onChange={(event) =>
-                      setDraft(
-                        draft.map((value, i) =>
-                          i === index ? Number(event.target.value) : value,
+                      setDraftText(
+                        draftText.map((value, i) =>
+                          i === index ? event.target.value : value,
                         ),
                       )
                     }
@@ -222,16 +258,43 @@ export default function WhatIf({
               </div>
             ))}
           </div>
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              const symbol = normalizeSymbol(newSymbol);
+              if (!isValidSymbol(symbol) || symbols.includes(symbol)) return;
+              setScenarioAssets((current) => [
+                ...current,
+                workspaceAsset(symbol),
+              ]);
+              setDraftText((current) => [...current, "0"]);
+              setComparison(null);
+              setNewSymbol("");
+            }}
+          >
+            <label htmlFor="scenario-add-symbol">
+              Add a ticker to this scenario
+            </label>
+            <input
+              id="scenario-add-symbol"
+              value={newSymbol}
+              onChange={(event) => setNewSymbol(event.target.value)}
+              aria-label="Ticker to add"
+            />
+            <button type="submit" className="text-button">
+              Add holding
+            </button>
+          </form>
           <div
             className={`allocation-total ${valid ? "valid" : "invalid"}`}
             aria-live="polite"
           >
             <span>Total allocation</span>
-            <strong>{Number(total.toFixed(2))}%</strong>
+            <strong>{Number(total.toFixed(6))}%</strong>
           </div>
           {!valid && (
             <p className="field-error" role="alert">
-              {draft.some((value) => value < 0 || value > 100)
+              {draftText.some((value) => parsePercentage(value, true) === null)
                 ? "Each allocation must be between 0% and 100%."
                 : `${total < 100 ? "Allocate" : "Remove"} ${Math.abs(100 - total).toFixed(1)}% to reach 100%.`}
             </p>
@@ -331,8 +394,8 @@ export default function WhatIf({
                   </tr>
                   <tr>
                     <th>Largest holding</th>
-                    <td>{largest(weights)}</td>
-                    <td>{largest(comparedWeights)}</td>
+                    <td>{largest(weights, holdings)}</td>
+                    <td>{largest(comparedWeights, scenarioAssets)}</td>
                     <td>
                       {pp(
                         largestWeight(comparedWeights) - largestWeight(weights),
@@ -355,7 +418,7 @@ export default function WhatIf({
                 <button
                   className="text-button"
                   disabled={busy || stale || !comparison || !valid}
-                  onClick={() => onExplainScenario(draft)}
+                  onClick={() => onExplainScenario(draft, symbols)}
                 >
                   <Scale size={16} />
                   Explain the trade-offs
@@ -466,9 +529,9 @@ export default function WhatIf({
   );
 }
 
-function largest(allocation: number[]) {
+function largest(allocation: number[], holdings: Asset[]) {
   const index = allocation.indexOf(Math.max(...allocation));
-  return `${assets[index].symbol} · ${allocation[index]}%`;
+  return `${holdings[index].symbol} · ${allocation[index]}%`;
 }
 function largestWeight(allocation: number[]) {
   return Math.max(...allocation) / 100;

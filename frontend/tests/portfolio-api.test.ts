@@ -11,6 +11,8 @@ import {
   portfolioInput,
   listPortfolios,
   setApiAccessToken,
+  verifyPortfolioHistory,
+  updatePortfolio,
 } from "../src/api/portfolio";
 
 const originalFetch = globalThis.fetch;
@@ -31,6 +33,74 @@ test("portfolio requests use the current access token", async () => {
   await listPortfolios();
   setApiAccessToken(null);
   assert.deepEqual(seen, ["Bearer first-token", "Bearer refreshed-token"]);
+});
+
+test("What-if accepts persisted symbols and fractional allocations outside the sample UI list", async () => {
+  let payload: unknown;
+  stubFetch((_url, init) => {
+    payload = JSON.parse(String(init?.body));
+    return {};
+  });
+  await comparePortfolio("saved", [25.5, 74.5], ["SPY", "TLT"]);
+  assert.deepEqual(payload, {
+    holdings: [
+      { symbol: "SPY", weight: 0.255 },
+      { symbol: "TLT", weight: 0.745 },
+    ],
+  });
+});
+
+test("unsupported edited tickers fail sample-history verification before save", async () => {
+  stubFetch((url) => {
+    assert.match(url, /symbols=TSLA/);
+    return {
+      ok: false,
+      status: 502,
+      json: async () => ({ error: { message: "Unavailable" } }),
+    } as Response;
+  });
+  await assert.rejects(
+    verifyPortfolioHistory([{ symbol: "TSLA", weight: 1 }]),
+    /TSLA/,
+  );
+});
+
+test("Edit sends an authenticated PUT for the existing portfolio ID", async () => {
+  const calls: {
+    url: string;
+    method: string;
+    body: unknown;
+    token: string | null;
+  }[] = [];
+  stubFetch((url, init) => {
+    calls.push({
+      url,
+      method: init?.method ?? "GET",
+      body: JSON.parse(String(init?.body)),
+      token: new Headers(init?.headers).get("Authorization"),
+    });
+    return {
+      portfolio_id: "saved",
+      name: "Updated",
+      holdings: [{ symbol: "SPY", weight: 1 }],
+      created_at: "2026-09-26T00:00:00Z",
+    };
+  });
+  setApiAccessToken("owner-token");
+  const updated = await updatePortfolio("saved", {
+    name: "Updated",
+    holdings: [{ symbol: "SPY", weight: 1 }],
+  });
+  setApiAccessToken(null);
+  assert.equal(updated.portfolio_id, "saved");
+  assert.deepEqual(calls, [
+    {
+      url: "/api/v1/portfolios/saved",
+      method: "PUT",
+      body: { name: "Updated", holdings: [{ symbol: "SPY", weight: 1 }] },
+      token: "Bearer owner-token",
+    },
+  ]);
 });
 
 function stubFetch(handler: (url: string, init?: RequestInit) => unknown) {

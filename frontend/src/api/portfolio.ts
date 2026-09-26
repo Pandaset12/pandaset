@@ -143,8 +143,20 @@ export function portfolioInput(
   };
 }
 
-function allocation(weights: number[]) {
-  return portfolioInput(weights).holdings;
+function allocation(weights: number[], symbols?: string[]) {
+  if (!symbols) return portfolioInput(weights).holdings;
+  if (
+    weights.length !== symbols.length ||
+    !weights.every(
+      (weight) => Number.isFinite(weight) && weight >= 0 && weight <= 100,
+    ) ||
+    Math.abs(weights.reduce((sum, weight) => sum + weight, 0) - 100) >= 0.000001
+  ) {
+    throw new Error("Allocations must total 100%.");
+  }
+  return symbols.flatMap((symbol, index) =>
+    weights[index] > 0 ? [{ symbol, weight: weights[index] / 100 }] : [],
+  );
 }
 
 const requestsInFlight = new Map<string, Promise<unknown>>();
@@ -211,6 +223,17 @@ export function createPortfolio(input: PortfolioInput, signal?: AbortSignal) {
   });
 }
 
+export function updatePortfolio(portfolioId: string, input: PortfolioInput) {
+  return request<Portfolio>(
+    `/api/v1/portfolios/${encodeURIComponent(portfolioId)}`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+}
+
 export function analyzeExistingPortfolio(portfolio: Portfolio) {
   return post<AnalysisResponse>(
     `/api/v1/portfolios/${encodeURIComponent(portfolio.portfolio_id)}/analysis`,
@@ -252,10 +275,31 @@ export function getMarketHistory(symbols: string[], lookbackDays = 252) {
   return request<MarketHistoryResponse>(`/api/v1/market-history?${query}`);
 }
 
-export function comparePortfolio(portfolioId: string, weights: number[]) {
+export async function verifyPortfolioHistory(
+  holdings: Holding[],
+  signal?: AbortSignal,
+) {
+  for (const holding of holdings) {
+    if (signal?.aborted) throw new DOMException("Cancelled", "AbortError");
+    try {
+      await getMarketHistory([holding.symbol], 2);
+    } catch {
+      throw new Error(
+        `Could not verify sample price history for ${holding.symbol}. Try again or choose another ticker.`,
+      );
+    }
+  }
+  if (signal?.aborted) throw new DOMException("Cancelled", "AbortError");
+}
+
+export function comparePortfolio(
+  portfolioId: string,
+  weights: number[],
+  symbols?: string[],
+) {
   return post<WhatIfResponse>(
     `/api/v1/portfolios/${encodeURIComponent(portfolioId)}/what-if`,
-    { holdings: allocation(weights) },
+    { holdings: allocation(weights, symbols) },
   );
 }
 
@@ -295,13 +339,17 @@ export function requestScenarioExplanation(
   portfolioId: string,
   analysisId: string,
   weights: number[],
+  symbols?: string[],
 ) {
   return post<AIWorkflowResponse>(
     `/api/v1/portfolios/${encodeURIComponent(portfolioId)}/what-if/explanation`,
     {
       analysis_id: analysisId,
       proposed_weights: Object.fromEntries(
-        allocation(weights).map(({ symbol, weight }) => [symbol, weight]),
+        allocation(weights, symbols).map(({ symbol, weight }) => [
+          symbol,
+          weight,
+        ]),
       ),
       question:
         "Explain the trade-offs across the current, proposed, and change metrics.",
