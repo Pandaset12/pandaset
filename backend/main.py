@@ -19,11 +19,11 @@ from .storage import PortfolioStore
 from .price_cache import RecentPriceCache
 from .providers import (
     IntegrationPending,
-    ProviderUnavailable,
     QuantProvider,
     get_provider,
     demo_metrics,
 )
+from .market_data_errors import MarketHistoryNotFound, ProviderUnavailable, SymbolLimitExceeded
 from .schemas import (
     AnalystRequest,
     AnalystResponse,
@@ -117,12 +117,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @application.get("/health")
     def health(settings: Settings = Depends(get_settings)):
+        live_data = settings.market_data_provider == "twelvedata"
+        market_data_ready = not live_data or settings.has_twelve_data_key
         return {
-            "status": "ok",
+            "status": "ok" if market_data_ready else "degraded",
             "analyst_mode": settings.analyst_mode,
             "gemini_configured": settings.has_gemini_key,
-            "quant_integration": "quant_engine_sample_prices",
-            "data_mode": "demo",
+            "quant_integration": (
+                "quant_engine_twelvedata"
+                if settings.market_data_provider == "twelvedata"
+                else "quant_engine_sample_prices"
+            ),
+            "market_data_provider": settings.market_data_provider,
+            "market_data_ready": market_data_ready,
+            "data_mode": "live" if live_data else "demo",
             "storage_backend": "sqlite",
             "authentication_enabled": settings.authentication_enabled,
         }
@@ -130,9 +138,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def read_metrics(portfolio: Portfolio, provider: QuantProvider) -> AnalyticsSnapshot:
         try:
             return provider.analyze(portfolio)
+        except MarketHistoryNotFound as exc:
+            raise HTTPException(status_code=404, detail={
+                "code": "market_history_not_found", "message": "Market history is unavailable for one or more portfolio symbols."
+            }) from exc
+        except SymbolLimitExceeded as exc:
+            raise HTTPException(status_code=422, detail={
+                "code": "symbol_limit_exceeded", "message": str(exc)
+            }) from exc
         except ProviderUnavailable as exc:
             raise HTTPException(status_code=502, detail={
-                "code": "provider_unavailable", "message": "Sample price data is unavailable."
+                "code": "provider_unavailable", "message": "Market data is unavailable from the selected provider."
             }) from exc
         except IntegrationPending as exc:
             raise HTTPException(status_code=501, detail={
@@ -193,9 +209,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         portfolio = require_portfolio(store, request.portfolio_id, owner_id)
         try:
             return provider.simulate(request, portfolio)
+        except MarketHistoryNotFound as exc:
+            raise HTTPException(status_code=404, detail={
+                "code": "market_history_not_found", "message": "Market history is unavailable for one or more allocation symbols."
+            }) from exc
+        except SymbolLimitExceeded as exc:
+            raise HTTPException(status_code=422, detail={
+                "code": "symbol_limit_exceeded", "message": str(exc)
+            }) from exc
         except ProviderUnavailable as exc:
             raise HTTPException(status_code=502, detail={
-                "code": "provider_unavailable", "message": "Sample price data is unavailable."
+                "code": "provider_unavailable", "message": "Market data is unavailable from the selected provider."
             }) from exc
         except IntegrationPending as exc:
             raise HTTPException(

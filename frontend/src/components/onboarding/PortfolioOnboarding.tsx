@@ -431,7 +431,7 @@ export function PortfolioOnboarding({
             />
             {holdings.length >= MAX_HOLDINGS && (
               <p className="po-help" role="status">
-                You’ve reached the limit of 100 holdings.
+                You’ve reached the limit of {MAX_HOLDINGS} holdings.
               </p>
             )}
             <div className="po-holdings-heading">

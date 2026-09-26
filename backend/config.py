@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     gemini_timeout_seconds: float = Field(default=45, gt=0, le=120)
     supabase_url: str | None = None
     supabase_anon_key: SecretStr | None = None
+    market_data_provider: Literal["sample", "twelvedata"] = "sample"
+    twelve_data_api_key: SecretStr | None = None
+    market_data_timeout_seconds: float = Field(default=15, gt=0, le=60)
 
     @property
     def authentication_enabled(self) -> bool:
@@ -30,6 +33,10 @@ class Settings(BaseSettings):
     @property
     def has_gemini_key(self) -> bool:
         return bool(self.gemini_api_key and self.gemini_api_key.get_secret_value())
+
+    @property
+    def has_twelve_data_key(self) -> bool:
+        return bool(self.twelve_data_api_key and self.twelve_data_api_key.get_secret_value())
 
 
 @lru_cache

@@ -3,20 +3,20 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Protocol
 
-from fastapi import Request
 import pandas as pd
+from fastapi import Depends, Request
 from quant_engine import analyze_portfolio, compare_portfolios
 
+from .config import Settings, get_settings
 from .schemas import AnalysisSeries, AnalyticsSnapshot, MarketHistoryResponse, Portfolio, WhatIfRequest
-from .price_cache import CachedPriceProvider, RecentPriceCache
+from .price_cache import CachedPriceProvider
+from .market_data_errors import MarketHistoryNotFound, ProviderUnavailable, SymbolLimitExceeded
+from .schemas import MAX_PORTFOLIO_SYMBOLS
+from .twelve_data import TwelveDataPriceProvider
 
 
 class IntegrationPending(Exception):
     pass
-
-
-class ProviderUnavailable(Exception):
-    """Data adapters should wrap network/database failures in this exception."""
 
 
 @lru_cache(maxsize=1)
@@ -64,13 +64,16 @@ class DemoQuantProvider:
 
 class SamplePriceProvider:
     """Existing fictional daily-price fixture; never live market data."""
+    data_mode = "demo"
+    data_source = "synthetic_fixture"
+    freshness = "unknown"
 
     def prices(self, symbols: list[str], lookback_days: int = 252) -> pd.DataFrame:
         path = Path(__file__).parent / "drafts" / "data_pipeline" / "sample_prices.json"
         fixture = json.loads(path.read_text("utf-8"))
         missing = set(symbols) - fixture["prices"].keys()
         if missing:
-            raise ProviderUnavailable("Sample history is unavailable for: " + ", ".join(sorted(missing)))
+            raise MarketHistoryNotFound("Sample history is unavailable for: " + ", ".join(sorted(missing)))
         return pd.DataFrame(
             {symbol: [float(value) for value in fixture["prices"][symbol]] for symbol in symbols},
             index=pd.to_datetime(fixture["dates"], utc=True),
@@ -81,81 +84,97 @@ def build_market_history(prices_provider, symbols: list[str], lookback_days: int
     frame = prices_provider.prices(symbols, lookback_days=lookback_days).tail(lookback_days + 1)
     if len(frame) < 2:
         raise ProviderUnavailable("At least two dated prices are required for market history.")
-    series = {
+    asset_index = {
         symbol: [float(value / frame[symbol].iloc[0]) for value in frame[symbol].tolist()]
         for symbol in symbols
     }
+    data_mode = getattr(prices_provider, "data_mode", "demo")
+    data_source = getattr(prices_provider, "data_source", "synthetic_fixture")
+    warning = (
+        "Adjusted daily end-of-day prices; not intraday real-time quotes."
+        if data_mode == "live" else "FICTIONAL sample prices; not live market observations."
+    )
     return MarketHistoryResponse(
         symbols=symbols,
         dates=[stamp.strftime("%Y-%m-%d") for stamp in frame.index],
-        asset_index=series,
-        data_mode="demo",
-        data_source="synthetic_fixture",
-        freshness="unknown",
+        asset_index=asset_index,
+        data_mode=data_mode,
+        data_source=data_source,
+        freshness=getattr(prices_provider, "freshness", "unknown"),
         requested_lookback_days=lookback_days,
         observation_count=len(frame) - 1,
-        warnings=["FICTIONAL sample prices; not live market observations."],
+        warnings=[warning],
     )
 
 
-def map_quant_report(report: dict, portfolio_id: str) -> AnalyticsSnapshot:
-    """Map the sample-price report explicitly, without normalizing weights or metrics."""
+def map_quant_report(report: dict, portfolio_id: str, prices_provider=None) -> AnalyticsSnapshot:
+    """Map quant output with source provenance; formulas remain in quant_engine."""
     metadata = report["metadata"]
     symbols = list(report["weights"])
-    dates = [metadata["start_date"][:10], *[date[:10] for date in report["series"]["dates"]]]
+    dates = [metadata["start_date"][:10], *[day[:10] for day in report["series"]["dates"]]]
     portfolio_index = [1.0, *[1 + value for value in report["series"]["portfolio_cumulative_returns"]]]
     asset_index = {
         symbol: [1.0, *[1 + value for value in report["series"]["asset_cumulative_returns"][symbol]]]
         for symbol in symbols
     }
-    return_contribution = {
-        symbol: report["assets"][symbol]["return_contribution"] for symbol in symbols
-    }
+    return_contribution = {symbol: report["assets"][symbol]["return_contribution"] for symbol in symbols}
     series = AnalysisSeries(
         dates=dates, portfolio_index=portfolio_index, asset_index=asset_index,
         return_contribution=return_contribution,
     )
+    data_mode = getattr(prices_provider, "data_mode", "demo")
+    data_source = getattr(prices_provider, "data_source", "synthetic_fixture")
+    source_note = (
+        "Adjusted daily end-of-day prices; not intraday real-time quotes."
+        if data_mode == "live" else "FICTIONAL sample prices; not live market observations."
+    )
     return AnalyticsSnapshot(
-        portfolio_id=portfolio_id, data_mode="demo",
+        portfolio_id=portfolio_id, data_mode=data_mode,
         data_as_of=metadata["end_date"],
         lookback_trading_days=metadata["return_observations"],
         observation_count=metadata["return_observations"],
         portfolio_return=report["portfolio"]["cumulative_return"],
         annualized_return=report["portfolio"]["geometric_annualized_return"],
         max_drawdown=report["portfolio"]["maximum_drawdown"],
-        return_contribution=return_contribution,
-        series=series,
+        return_contribution=return_contribution, series=series,
         portfolio_volatility=report["portfolio"]["annualized_volatility"],
         weights=report["weights"],
-        asset_volatility={symbol: asset["annualized_volatility"]
-                          for symbol, asset in report["assets"].items()},
-        risk_contribution={symbol: asset["percentage_risk_contribution"]
-                           for symbol, asset in report["assets"].items()},
+        asset_volatility={symbol: item["annualized_volatility"] for symbol, item in report["assets"].items()},
+        risk_contribution={symbol: item["percentage_risk_contribution"] for symbol, item in report["assets"].items()},
         correlation_matrix=report["matrices"]["correlation"],
-        data_source="synthetic_fixture", freshness="unknown",
-        notes=[*report["warnings"], "FICTIONAL sample prices; not live market observations."],
+        data_source=data_source,
+        freshness=getattr(prices_provider, "freshness", "unknown"),
+        notes=[*report["warnings"], source_note],
         assumptions=[*metadata["assumptions"],
                      "UTC midnight labels a session date, not an exchange closing instant.",
-                     "Fictional prices are treated as adjusted daily prices for this demo.",
+                     ("Vendor adjusted daily closes are used; historical values may be revised."
+                      if data_mode == "live" else "Fictional prices are treated as adjusted daily prices for this demo."),
                      f"Price window: {metadata['start_date']} through {metadata['end_date']}; "
                      f"annualization: {metadata['periods_per_year']} observations per year."],
     )
 
 
 class EngineQuantProvider:
-    """Quant integration using the saved allocation and demo price history."""
+    """Quant integration using saved allocations and the selected daily price source."""
 
     def __init__(self, store, prices=None):
         self.store = store
         self.prices = prices if prices is not None else SamplePriceProvider()
 
     def analyze(self, portfolio: Portfolio) -> AnalyticsSnapshot:
+        if len(portfolio.weights) > MAX_PORTFOLIO_SYMBOLS:
+            raise SymbolLimitExceeded(f"At most {MAX_PORTFOLIO_SYMBOLS} distinct symbols can be analyzed.")
         prices = self.prices.prices(sorted(portfolio.weights))
-        return map_quant_report(analyze_portfolio(prices, portfolio.weights), portfolio.portfolio_id)
+        report = analyze_portfolio(prices, portfolio.weights)
+        return map_quant_report(report, portfolio.portfolio_id, self.prices)
 
     def simulate(self, request: WhatIfRequest, portfolio: Portfolio) -> dict:
         baseline = portfolio.weights
         symbols = sorted(set(baseline) | set(request.proposed_weights))
+        if len(symbols) > MAX_PORTFOLIO_SYMBOLS:
+            raise SymbolLimitExceeded(
+                f"The saved and proposed allocations may contain at most {MAX_PORTFOLIO_SYMBOLS} distinct symbols combined."
+            )
         prices = self.prices.prices(symbols)
         result = compare_portfolios(
             prices, {symbol: baseline.get(symbol, 0.0) for symbol in symbols},
@@ -163,8 +182,8 @@ class EngineQuantProvider:
         )
         differences = result["portfolio_metric_differences"]
         return {
-            "current_analysis": map_quant_report(result["baseline"], request.portfolio_id).model_dump(mode="json"),
-            "proposed_analysis": map_quant_report(result["proposed"], request.portfolio_id).model_dump(mode="json"),
+            "current_analysis": map_quant_report(result["baseline"], request.portfolio_id, self.prices).model_dump(mode="json"),
+            "proposed_analysis": map_quant_report(result["proposed"], request.portfolio_id, self.prices).model_dump(mode="json"),
             "delta": {"portfolio_return": differences["cumulative_return"],
                       "portfolio_volatility": differences["annualized_volatility"],
                       "annualized_return": differences["geometric_annualized_return"],
@@ -176,8 +195,13 @@ class EngineQuantProvider:
         return build_market_history(self.prices, symbols, lookback_days)
 
 
-def get_provider(request: Request) -> QuantProvider:
+def get_provider(request: Request, settings: Settings = Depends(get_settings)) -> QuantProvider:
+    if settings.market_data_provider == "twelvedata":
+        key = settings.twelve_data_api_key.get_secret_value() if settings.has_twelve_data_key else ""
+        prices = TwelveDataPriceProvider(key, timeout_seconds=settings.market_data_timeout_seconds)
+    else:
+        prices = SamplePriceProvider()
     return EngineQuantProvider(
         request.app.state.store,
-        prices=CachedPriceProvider(SamplePriceProvider(), request.app.state.price_cache),
+        prices=CachedPriceProvider(prices, request.app.state.price_cache),
     )

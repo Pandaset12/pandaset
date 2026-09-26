@@ -104,7 +104,7 @@ test("duplicates are rejected after case and whitespace normalization", () => {
   assert.match(result.errors.rows.AAPL, /already/);
 });
 
-test("names, ticker syntax, empty holdings and holding count enforce the current API contract", () => {
+test("names, ticker syntax, empty holdings and the eight-holding API limit are enforced", () => {
   const one = [{ symbol: "AAPL", percentage: "100" }];
   assert.ok(validatePortfolioDraft("", one).errors.name);
   assert.ok(validatePortfolioDraft(" ".repeat(3), one).errors.name);
@@ -121,16 +121,17 @@ test("names, ticker syntax, empty holdings and holding count enforce the current
   }
   for (const symbol of ["BRK.B", "ETH-USD", "^GSPC", "AAPL"])
     assert.equal(isValidSymbol(symbol), true);
+  assert.equal(MAX_HOLDINGS, 8);
   const rows: HoldingDraft[] = Array.from(
     { length: MAX_HOLDINGS },
     (_, index) => ({
       symbol: "T" + index,
-      percentage: "1",
+      percentage: "12.5",
     }),
   );
   assert.ok(validatePortfolioDraft("Full", rows).payload);
-  rows.push({ symbol: "EXTRA", percentage: "1" });
-  assert.ok(validatePortfolioDraft("Too many", rows).errors.holdings);
+  rows.push({ symbol: "EXTRA", percentage: "0.1" });
+  assert.match(validatePortfolioDraft("Too many", rows).errors.holdings ?? "", /up to 8 holdings/);
   assert.equal(validatePortfolioDraft("Too many", rows).payload, null);
 });
 

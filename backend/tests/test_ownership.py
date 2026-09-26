@@ -5,8 +5,9 @@ from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
+from pydantic import SecretStr
 
-from backend.config import Settings
+from backend.config import Settings, get_settings
 from backend.main import create_app
 from backend.storage import PortfolioStore, SnapshotNotFound, StalePortfolio
 from backend.schemas import PortfolioInput
@@ -144,6 +145,40 @@ def test_preflight_history_is_reused_by_following_analysis(client, monkeypatch):
     analysis = api.post(f"/api/v1/portfolios/{created.json()['portfolio_id']}/analysis", headers=headers)
     assert analysis.status_code == 200, analysis.text
     assert calls == [(("SPY",), 252), (("TLT",), 252)]
+
+
+def test_twelve_data_preflight_is_reused_by_analysis(client, monkeypatch):
+    from backend.twelve_data import TwelveDataPriceProvider
+
+    api, _ = client
+    sample_settings = api.app.dependency_overrides[get_settings]()
+    live_settings = sample_settings.model_copy(update={
+        "market_data_provider": "twelvedata",
+        "twelve_data_api_key": SecretStr("test-key"),
+    })
+    monkeypatch.setitem(api.app.dependency_overrides, get_settings, lambda: live_settings)
+    calls = []
+
+    def fetch(self, symbols, outputsize):
+        calls.append((tuple(symbols), outputsize))
+        return {"meta": {"symbol": symbols[0]}, "values": [
+            {"datetime": f"2026-09-{day:02d}", "close": str(100 + day)}
+            for day in range(18, 26)
+        ]}
+
+    monkeypatch.setattr(TwelveDataPriceProvider, "_fetch", fetch)
+    preflight = api.get("/api/v1/market-history", params={"symbols": ["SPY"], "lookback_days": 2})
+    assert preflight.status_code == 200, preflight.text
+    assert preflight.json()["data_mode"] == "live"
+    headers = {"Authorization": "Bearer owner"}
+    created = api.post("/api/v1/portfolios", json={"name": "Live", "holdings": [
+        {"symbol": "SPY", "weight": 1.0},
+    ]}, headers=headers)
+    assert created.status_code == 201, created.text
+    analysis = api.post(f"/api/v1/portfolios/{created.json()['portfolio_id']}/analysis", headers=headers)
+    assert analysis.status_code == 200, analysis.text
+    assert analysis.json()["data_mode"] == "live"
+    assert calls == [(("SPY",), 253)]
 
 
 def test_concurrent_update_cannot_leave_an_old_analysis_after_commit(client, monkeypatch):

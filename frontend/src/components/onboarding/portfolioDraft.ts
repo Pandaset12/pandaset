@@ -1,6 +1,6 @@
 import type { PortfolioInput } from "../../api/portfolio";
 
-export const MAX_HOLDINGS = 100;
+export const MAX_HOLDINGS = 8;
 export const MAX_NAME_LENGTH = 100;
 export const PERCENT_SCALE = 1_000_000;
 export const FULL_ALLOCATION = 100 * PERCENT_SCALE;
@@ -67,7 +67,7 @@ export function validatePortfolioDraft(
   if (!holdings.length)
     errors.holdings = "Add at least one holding to continue.";
   if (holdings.length > MAX_HOLDINGS)
-    errors.holdings = "A portfolio can contain up to 100 holdings.";
+    errors.holdings = `A portfolio can contain up to ${MAX_HOLDINGS} holdings.`;
 
   let totalUnits = 0;
   const symbols = new Set<string>();
