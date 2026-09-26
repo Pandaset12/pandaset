@@ -5,20 +5,11 @@ import {
   ArrowRight,
   AdjustmentsHorizontal as SlidersHorizontal,
   ChatBubbleLeftRight,
-  Eye,
-  Plus,
   MagnifyingGlass as Search,
-  ChevronDown,
   InformationCircle as Info,
 } from "../components/icons";
-import { assets, portfolioValue, researchNotes } from "../../../quant/data";
-import {
-  analyze,
-  assetPath,
-  money,
-  pct,
-  signedPct,
-} from "../../../quant/analytics";
+import { assets, researchNotes } from "../../../quant/data";
+import { pct, signedPct } from "../../../quant/analytics";
 import {
   AssetMark,
   PageHeading,
@@ -27,59 +18,73 @@ import {
   Empty,
 } from "../components/UI";
 import { LineChart } from "../components/LineChart";
-import type { AnalysisResponse, Portfolio } from "../api/portfolio";
+import type { AnalysisResponse } from "../api/portfolio";
+
 export default function Overview({
-  weights,
-  backendResult,
-  analysisLoading,
-  analysisError,
-  onAnalyze,
+  analysis,
   onEdit,
   onAsk,
   onMethod,
 }: {
-  weights: number[];
-  backendResult: { portfolio: Portfolio; analysis: AnalysisResponse } | null;
-  analysisLoading: boolean;
-  analysisError: string;
-  onAnalyze: () => void;
+  analysis: AnalysisResponse;
   onEdit: () => void;
   onAsk: (q?: string) => void;
   onMethod: () => void;
 }) {
-  const [period, setPeriod] = useState(252);
   const [view, setView] = useState<"holdings" | "drivers">("holdings");
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<"weight" | "return">("weight");
-  const metrics = analyze(weights, period);
-  const annual = analyze(weights);
-  const top = assets[annual.topRisk];
-  const maxGain = Math.max(0, ...metrics.contributions);
-  const maxLoss = Math.max(0, ...metrics.contributions.map((v) => -v));
-  const contributionRange = maxGain + maxLoss || 1;
-  const zeroPosition = 5 + (maxLoss / contributionRange) * 90;
   const holdings = assets
-    .map((asset, i) => ({ asset, i }))
+    .map((asset) => ({
+      asset,
+      weight: analysis.weights[asset.symbol] ?? 0,
+      symbol: asset.symbol,
+    }))
     .filter(
-      ({ asset, i }) =>
-        weights[i] > 0 &&
+      ({ asset, weight }) =>
+        weight > 0 &&
         `${asset.symbol} ${asset.name}`
           .toLowerCase()
           .includes(search.toLowerCase()),
     )
     .sort((a, b) =>
       sort === "weight"
-        ? weights[b.i] - weights[a.i]
-        : metrics.contributions[b.i] - metrics.contributions[a.i],
+        ? b.weight - a.weight
+        : (analysis.return_contribution?.[b.symbol] ?? -Infinity) -
+          (analysis.return_contribution?.[a.symbol] ?? -Infinity),
     );
-  const periodLabel =
-    period === 21
-      ? "past month"
-      : period === 63
-        ? "past 3 months"
-        : period === 126
-          ? "past 6 months"
-          : "past year";
+  const topRisk = Object.entries(analysis.risk_contribution)
+    .filter(([, value]) => value !== null)
+    .sort((a, b) => (b[1] ?? 0) - (a[1] ?? 0))[0];
+  const topAsset = assets.find((asset) => asset.symbol === topRisk?.[0]);
+  const chartValues = analysis.series?.portfolio_index;
+  const chartDates = analysis.series?.dates ?? [];
+  const portfolioSeries = chartValues?.every(
+    (value): value is number => value !== null,
+  )
+    ? chartValues
+    : null;
+  const benchmark = analysis.series?.asset_index.VTI;
+  const benchmarkSeries = benchmark?.every(
+    (value): value is number => value !== null,
+  )
+    ? benchmark
+    : undefined;
+  const sectors = Object.entries(
+    assets.reduce<Record<string, number>>((grouped, asset) => {
+      grouped[asset.sector] =
+        (grouped[asset.sector] ?? 0) + (analysis.weights[asset.symbol] ?? 0);
+      return grouped;
+    }, {}),
+  ).filter(([, value]) => value > 0);
+  const returnContributions = Object.values(analysis.return_contribution ?? {});
+  const contributionRange = Math.max(
+    0.0001,
+    ...returnContributions
+      .filter((value): value is number => value !== null)
+      .map(Math.abs),
+  );
+
   return (
     <>
       <PageHeading title="Portfolio overview">
@@ -87,59 +92,28 @@ export default function Overview({
           <SlidersHorizontal size={16} />
           Edit portfolio
         </button>
-        <button
-          className="button dark"
-          onClick={() => {
-            location.hash = "#/what-if";
-          }}
-        >
+        <a className="button dark" href="#/what-if">
           Explore a what-if
           <ArrowUpRight size={17} />
-        </button>
+        </a>
       </PageHeading>
-      <section className="backend-analysis" aria-label="Backend demo analysis">
+      <section className="backend-analysis" aria-label="Saved backend analysis">
         <div>
-          <strong>Backend demo analysis</strong>
+          <strong>
+            {analysis.data_mode === "demo"
+              ? "Backend demo analysis"
+              : "Backend analysis"}
+          </strong>
           <p>
-            Calculated from fictional historical prices. The charts and tables
-            below remain TypeScript sample calculations.
+            Analysis {analysis.analysis_id} · portfolio {analysis.portfolio_id}{" "}
+            · {analysis.observation_count ?? "—"} daily return observations
           </p>
         </div>
-        <button
-          className="button subtle"
-          onClick={onAnalyze}
-          disabled={analysisLoading}
-        >
-          {analysisLoading ? "Analyzing…" : "Analyze with demo API"}
-        </button>
-        {analysisLoading && <p role="status">Running backend demo analysis…</p>}
-        {analysisError && (
-          <p role="alert">
-            {analysisError} Sample calculations remain available below.
-          </p>
-        )}
-        {backendResult && (
-          <div className="backend-analysis-results" role="status">
-            <span>
-              Demo return:{" "}
-              {backendResult.analysis.portfolio_return === null
-                ? "Unavailable"
-                : pct(backendResult.analysis.portfolio_return)}
-            </span>
-            <span>
-              Annualized volatility:{" "}
-              {pct(backendResult.analysis.portfolio_volatility)}
-            </span>
-            <span>
-              Largest position:{" "}
-              {backendResult.analysis.concentration.largest_position} (
-              {pct(backendResult.analysis.concentration.largest_weight)})
-            </span>
-            <small>
-              Saved analysis {backendResult.analysis.analysis_id} · Portfolio{" "}
-              {backendResult.portfolio.portfolio_id}
-            </small>
-          </div>
+        <span>
+          {analysis.data_quality.source} · {analysis.data_quality.freshness}
+        </span>
+        {analysis.data_quality.warnings.length > 0 && (
+          <small>{analysis.data_quality.warnings[0]}</small>
         )}
       </section>
       <div className="overview-top">
@@ -150,65 +124,56 @@ export default function Overview({
           <div className="performance-head">
             <div>
               <div className="eyebrow" id="performance-title">
-                PORTFOLIO VALUE{" "}
+                PORTFOLIO RETURN{" "}
                 <button
                   className="inline-icon"
-                  aria-label="About sample portfolio data"
+                  aria-label="About portfolio data"
                   onClick={onMethod}
                 >
                   <Info size={13} />
                 </button>
               </div>
               <div className="large-value">
-                {money(portfolioValue)}
-                <span>.00</span>
+                {analysis.portfolio_return === null
+                  ? "Unavailable"
+                  : signedPct(analysis.portfolio_return)}
               </div>
               <div
-                className={`return-caption ${metrics.return >= 0 ? "positive" : "negative"}`}
+                className={`return-caption ${(analysis.portfolio_return ?? 0) >= 0 ? "positive" : "negative"}`}
               >
-                {metrics.return >= 0 ? (
+                {(analysis.portfolio_return ?? 0) >= 0 ? (
                   <ArrowUpRight size={17} />
                 ) : (
                   <ArrowDownRight size={17} />
-                )}{" "}
-                {signedPct(metrics.return)}{" "}
-                <span>
-                  (
-                  {money(
-                    portfolioValue - portfolioValue / (1 + metrics.return),
-                  )}
-                  ) <span className="muted">{periodLabel}</span>
-                </span>
+                )}
+                {analysis.annualized_return === null
+                  ? "Annualized return unavailable"
+                  : `${signedPct(analysis.annualized_return)} annualized`}
+                <span className="muted"> over the available sample</span>
               </div>
             </div>
-            <div className="segmented" aria-label="Performance period">
-              {[
-                [21, "1M"],
-                [63, "3M"],
-                [126, "6M"],
-                [252, "1Y"],
-              ].map(([days, label]) => (
-                <button
-                  key={days}
-                  aria-pressed={period === days}
-                  onClick={() => setPeriod(Number(days))}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
+            <span className="label-chip">
+              {analysis.lookback_days} return observations
+            </span>
           </div>
-          <LineChart
-            series={metrics.path}
-            secondary={assetPath(4, period)}
-            secondaryLabel="U.S. market proxy (VTI)"
-            currency
-            endValue={portfolioValue}
-          />
+          {portfolioSeries && portfolioSeries.length > 1 ? (
+            <LineChart
+              dates={chartDates}
+              series={portfolioSeries}
+              secondary={benchmarkSeries}
+              secondaryLabel="VTI sample history"
+              label="Portfolio index"
+              compact
+            />
+          ) : (
+            <p className="api-state" role="status">
+              Dated portfolio history is unavailable for this saved analysis.
+            </p>
+          )}
           <div className="performance-bottom">
             <span>
-              Both lines model growth from the same start · Dollar axis shows
-              modeled value
+              Normalized portfolio value · based on the backend’s available
+              dates
             </span>
             <button className="text-button" onClick={onMethod}>
               Data & methodology
@@ -218,50 +183,54 @@ export default function Overview({
         </section>
         <aside className="focus-panel">
           <div className="focus-label">
-            <Eye size={16} />
             <span>IN FOCUS</span>
             <span className="edition">01 / RISK</span>
           </div>
-          <h2>
-            {annual.risk[annual.topRisk] > weights[annual.topRisk] / 100 ? (
-              <>
-                A larger share
-                <br />
-                of the risk.
-              </>
-            ) : (
-              <>
-                Your leading
-                <br />
-                risk contributor.
-              </>
-            )}
-          </h2>
-          <p>
-            {top.short} is {pct(weights[annual.topRisk] / 100, 0)} of your
-            portfolio, but contributes {pct(annual.risk[annual.topRisk], 0)} of
-            its estimated volatility.
-          </p>
-          <div className="focus-bars">
-            <div>
-              <span>Capital allocated</span>
-              <strong>{pct(weights[annual.topRisk] / 100, 0)}</strong>
-            </div>
-            <div className="focus-track">
-              <i style={{ width: `${weights[annual.topRisk]}%` }} />
-            </div>
-            <div>
-              <span>Share of portfolio risk</span>
-              <strong>{pct(annual.risk[annual.topRisk], 0)}</strong>
-            </div>
-            <div className="focus-track bright">
-              <i
-                style={{
-                  width: `${Math.max(0, annual.risk[annual.topRisk] * 100)}%`,
-                }}
-              />
-            </div>
-          </div>
+          {topAsset && topRisk?.[1] !== null ? (
+            <>
+              <h2>{topAsset.short} leads estimated risk contribution.</h2>
+              <p>
+                {topAsset.symbol} is{" "}
+                {pct(analysis.weights[topAsset.symbol] ?? 0, 0)} of capital and
+                accounts for {pct(topRisk[1] ?? 0, 0)} of estimated portfolio
+                volatility.
+              </p>
+              <div className="focus-bars">
+                <div>
+                  <span>Capital allocated</span>
+                  <strong>
+                    {pct(analysis.weights[topAsset.symbol] ?? 0, 0)}
+                  </strong>
+                </div>
+                <div className="focus-track">
+                  <i
+                    style={{
+                      width: `${(analysis.weights[topAsset.symbol] ?? 0) * 100}%`,
+                    }}
+                  />
+                </div>
+                <div>
+                  <span>Share of portfolio risk</span>
+                  <strong>{pct(topRisk[1] ?? 0, 0)}</strong>
+                </div>
+                <div className="focus-track bright">
+                  <i
+                    style={{
+                      width: `${Math.max(0, (topRisk[1] ?? 0) * 100)}%`,
+                    }}
+                  />
+                </div>
+              </div>
+            </>
+          ) : (
+            <>
+              <h2>Risk contribution unavailable.</h2>
+              <p>
+                The backend did not return a defined risk estimate for this
+                analysis.
+              </p>
+            </>
+          )}
           <a href="#/risk" className="focus-link">
             See the full risk picture
             <ArrowRight size={18} />
@@ -270,43 +239,39 @@ export default function Overview({
       </div>
       <div className="metric-strip">
         <div>
-          <span>
-            Annualized volatility{" "}
-            <button
-              className="inline-icon"
-              onClick={onMethod}
-              aria-label="Explain annualized volatility"
-            >
-              <Info size={13} />
-            </button>
-          </span>
+          <span>Annualized volatility</span>
           <strong>
-            {pct(annual.volatility)}
-            <small>Estimated from 1 year</small>
+            {pct(analysis.portfolio_volatility)}
+            <small>Backend estimate</small>
           </strong>
         </div>
         <div>
           <span>Largest drawdown</span>
           <strong>
-            {pct(annual.maxDrawdown)}
-            <small>Peak-to-trough fall · 1 year</small>
+            {analysis.max_drawdown === null
+              ? "Unavailable"
+              : pct(analysis.max_drawdown)}
+            <small>Peak-to-trough · available history</small>
           </strong>
         </div>
         <div>
           <span>Direct technology allocation</span>
           <strong>
-            {pct(annual.sectors.find(([s]) => s === "Technology")?.[1] || 0, 0)}
-            <small>Excludes stocks held in funds</small>
+            {pct(
+              (analysis.weights.NVDA ?? 0) +
+                (analysis.weights.MSFT ?? 0) +
+                (analysis.weights.AAPL ?? 0) +
+                (analysis.weights.AMD ?? 0),
+              0,
+            )}
+            <small>Direct holdings only</small>
           </strong>
         </div>
         <div>
           <span>Holdings</span>
           <strong>
-            {weights
-              .filter((w) => w > 0)
-              .length.toString()
-              .padStart(2, "0")}
-            <small>Across {annual.sectors.length} categories</small>
+            {Object.keys(analysis.weights).length.toString().padStart(2, "0")}
+            <small>Across {sectors.length} categories</small>
           </strong>
         </div>
       </div>
@@ -319,7 +284,7 @@ export default function Overview({
                   aria-pressed={view === "holdings"}
                   onClick={() => setView("holdings")}
                 >
-                  Positions
+                  Holdings
                 </button>
                 <button
                   aria-pressed={view === "drivers"}
@@ -328,74 +293,46 @@ export default function Overview({
                   Return drivers
                 </button>
               </div>
-              <button
-                className="icon-button bordered"
-                onClick={onEdit}
-                aria-label="Add or edit holdings"
+              <label className="search-field">
+                <Search size={15} />
+                <input
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  aria-label="Search holdings"
+                  placeholder="Search"
+                />
+              </label>
+              <select
+                aria-label="Sort holdings"
+                value={sort}
+                onChange={(event) =>
+                  setSort(event.target.value as "weight" | "return")
+                }
               >
-                <Plus size={18} />
-              </button>
+                <option value="weight">By allocation</option>
+                <option value="return">By return impact</option>
+              </select>
             </div>
           </SectionTitle>
-          <div className="table-tools">
-            <label className="search-field">
-              <Search size={16} />
-              <input
-                type="search"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Find a holding"
-                aria-label="Find a holding"
-              />
-            </label>
-            {view === "holdings" ? (
-              <button
-                className="text-button"
-                onClick={() => setSort(sort === "weight" ? "return" : "weight")}
-              >
-                By {sort === "weight" ? "allocation" : "contribution"}
-                <ChevronDown size={14} />
-              </button>
-            ) : (
-              <span className="small-text muted">By contribution</span>
-            )}
-          </div>
           {view === "holdings" ? (
             <div className="table-scroll">
               <table className="holdings-table">
                 <thead>
                   <tr>
-                    <th scope="col">Asset</th>
-                    <th scope="col" className="align-right">
-                      Allocation
-                    </th>
-                    <th scope="col" className="align-right">
-                      Value
-                    </th>
-                    <th scope="col" className="align-right">
-                      Return impact{" "}
-                      <span className="sub-label">
-                        {period === 252
-                          ? "1 year"
-                          : period === 126
-                            ? "6 months"
-                            : period === 63
-                              ? "3 months"
-                              : "1 month"}
-                      </span>
-                    </th>
-                    <th scope="col">
-                      <span className="sr-only">Research</span>
-                    </th>
+                    <th>Holding</th>
+                    <th className="align-right">Allocation</th>
+                    <th className="align-right">Return contribution</th>
+                    <th>Risk contribution</th>
+                    <th />
                   </tr>
                 </thead>
                 <tbody>
-                  {holdings.map(({ asset, i }) => (
+                  {holdings.map(({ asset, weight }) => (
                     <tr key={asset.symbol}>
-                      <td>
+                      <th>
                         <a
-                          className="asset-cell"
                           href={`#/research?symbol=${asset.symbol}`}
+                          className="table-asset"
                         >
                           <AssetMark asset={asset} />
                           <span>
@@ -403,28 +340,19 @@ export default function Overview({
                             <small>{asset.short}</small>
                           </span>
                         </a>
-                      </td>
-                      <td className="align-right">
-                        <div className="allocation-cell">
-                          <span>{weights[i]}%</span>
-                          <div>
-                            <i
-                              style={{
-                                width: `${weights[i] * 2}%`,
-                                background: asset.color,
-                              }}
-                            />
-                          </div>
-                        </div>
-                      </td>
+                      </th>
+                      <td className="align-right">{pct(weight, 0)}</td>
                       <td className="align-right numeric">
-                        {money((portfolioValue * weights[i]) / 100)}
+                        {analysis.return_contribution?.[asset.symbol] == null
+                          ? "Unavailable"
+                          : signedPct(
+                              analysis.return_contribution[asset.symbol]!,
+                            )}
                       </td>
-                      <td
-                        className={`align-right numeric ${metrics.contributions[i] >= 0 ? "positive" : "negative"}`}
-                      >
-                        {metrics.contributions[i] >= 0 ? "+" : ""}
-                        {(metrics.contributions[i] * 100).toFixed(2)} pp
+                      <td>
+                        {analysis.risk_contribution[asset.symbol] == null
+                          ? "Unavailable"
+                          : pct(analysis.risk_contribution[asset.symbol]!)}
                       </td>
                       <td>
                         <a
@@ -443,57 +371,55 @@ export default function Overview({
           ) : (
             <div
               className="return-drivers"
-              aria-label="Ranked return contributions"
+              aria-label="Ranked backend return contributions"
             >
-              {[...holdings]
+              {holdings
+                .slice()
                 .sort(
                   (a, b) =>
-                    metrics.contributions[b.i] - metrics.contributions[a.i],
+                    (analysis.return_contribution?.[b.asset.symbol] ??
+                      -Infinity) -
+                    (analysis.return_contribution?.[a.asset.symbol] ??
+                      -Infinity),
                 )
-                .map(({ asset, i }) => (
-                  <a
-                    href={`#/research?symbol=${asset.symbol}`}
-                    className="driver-row"
-                    key={asset.symbol}
-                  >
-                    <span>{asset.symbol}</span>
-                    <div
-                      className="driver-track"
-                      style={
-                        { "--zero": `${zeroPosition}%` } as React.CSSProperties
-                      }
-                    >
-                      <i
-                        className={metrics.contributions[i] < 0 ? "loss" : ""}
-                        style={{
-                          width: `${(Math.abs(metrics.contributions[i]) / contributionRange) * 90}%`,
-                          left: `${zeroPosition + (Math.min(0, metrics.contributions[i]) / contributionRange) * 90}%`,
-                        }}
-                      />
+                .map(({ asset }) => {
+                  const contribution =
+                    analysis.return_contribution?.[asset.symbol];
+                  return (
+                    <div className="driver-row" key={asset.symbol}>
+                      <span>{asset.symbol}</span>
+                      <div className="driver-track">
+                        <i
+                          className={
+                            contribution !== null &&
+                            contribution !== undefined &&
+                            contribution < 0
+                              ? "loss"
+                              : ""
+                          }
+                          style={{
+                            width: `${Math.min(100, (Math.abs(contribution ?? 0) / contributionRange) * 100)}%`,
+                          }}
+                        />
+                      </div>
+                      <strong>
+                        {contribution == null
+                          ? "Unavailable"
+                          : signedPct(contribution)}
+                      </strong>
                     </div>
-                    <strong
-                      className={
-                        metrics.contributions[i] >= 0 ? "positive" : "negative"
-                      }
-                    >
-                      {metrics.contributions[i] >= 0 ? "+" : ""}
-                      {(metrics.contributions[i] * 100).toFixed(2)} pp
-                    </strong>
-                  </a>
-                ))}
+                  );
+                })}
             </div>
           )}
           {holdings.length === 0 && (
             <Empty title="No matching holdings">
-              Try a company name or ticker.
-              <button className="text-button" onClick={() => setSearch("")}>
-                Clear search
-              </button>
+              Try another company name or ticker.
             </Empty>
           )}
           <p className="table-footnote">
-            Return impact is each holding’s contribution to the portfolio’s
-            return.
+            Return contribution comes from the saved backend analysis. Undefined
+            values stay unavailable.
           </p>
         </section>
         <section className="briefing">
@@ -501,25 +427,25 @@ export default function Overview({
             <TextLink to="#/research">Research</TextLink>
           </SectionTitle>
           {researchNotes
-            .filter((n) =>
-              n.symbols.some(
-                (s) => weights[assets.findIndex((a) => a.symbol === s)] > 0,
+            .filter((note) =>
+              note.symbols.some(
+                (symbol) => (analysis.weights[symbol] ?? 0) > 0,
               ),
             )
             .slice(0, 3)
-            .map((note, i) => (
+            .map((note, index) => (
               <a
                 className="briefing-item"
                 key={note.id}
                 href={`#/research?note=${note.id}`}
               >
-                <span className="note-index">0{i + 1}</span>
+                <span className="note-index">0{index + 1}</span>
                 <div>
-                  <div className="eyebrow">{note.category}</div>
+                  <div className="eyebrow">EDITORIAL PRIMER</div>
                   <h3>{note.title}</h3>
                   <div className="briefing-meta">
-                    {note.symbols.slice(0, 3).map((s) => (
-                      <span key={s}>{s}</span>
+                    {note.symbols.slice(0, 3).map((symbol) => (
+                      <span key={symbol}>{symbol}</span>
                     ))}
                     <ArrowUpRight size={16} />
                   </div>

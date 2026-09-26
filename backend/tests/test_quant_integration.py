@@ -40,6 +40,8 @@ def test_creation_analysis_mapping_persistence_and_ask(client):
     analysis = response.json()
     assert analysis["weights"] == weights
     assert analysis["portfolio_return"] == report["portfolio"]["cumulative_return"]
+    assert analysis["annualized_return"] == report["portfolio"]["geometric_annualized_return"]
+    assert analysis["max_drawdown"] == report["portfolio"]["maximum_drawdown"]
     assert analysis["portfolio_volatility"] == report["portfolio"]["annualized_volatility"]
     assert analysis["asset_volatility"] == {
         symbol: asset["annualized_volatility"] for symbol, asset in report["assets"].items()
@@ -48,6 +50,13 @@ def test_creation_analysis_mapping_persistence_and_ask(client):
         symbol: asset["percentage_risk_contribution"] for symbol, asset in report["assets"].items()
     }
     assert analysis["correlation_matrix"] == report["matrices"]["correlation"]
+    assert analysis["return_contribution"] == {
+        symbol: asset["return_contribution"] for symbol, asset in report["assets"].items()
+    }
+    assert analysis["series"]["dates"] == ["2026-09-17", "2026-09-18", "2026-09-21", "2026-09-22", "2026-09-23", "2026-09-24", "2026-09-25"]
+    assert analysis["series"]["portfolio_index"][0] == 1.0
+    assert len(analysis["series"]["portfolio_index"]) == 7
+    assert analysis["series"]["asset_index"]["NVDA"][-1] == pytest.approx(1 + report["assets"]["NVDA"]["cumulative_return"])
     assert analysis["observation_count"] == analysis["lookback_days"] == 6
     assert analysis["as_of"] == "2026-09-25T00:00:00Z"
     assert analysis["data_mode"] == "demo"
@@ -94,6 +103,9 @@ def test_what_if_union_and_deltas_use_saved_baseline_without_mutation(client):
     assert result["delta"] == {
         "portfolio_return": expected["portfolio_metric_differences"]["cumulative_return"],
         "portfolio_volatility": expected["portfolio_metric_differences"]["annualized_volatility"],
+        "annualized_return": expected["portfolio_metric_differences"]["geometric_annualized_return"],
+        "max_drawdown": (expected["proposed"]["portfolio"]["maximum_drawdown"]
+                         - expected["baseline"]["portfolio"]["maximum_drawdown"]),
     }
     assert client.get(f"/api/v1/portfolios/{portfolio_id}").json() == before
     legacy = client.post("/api/what-if", json={
@@ -159,3 +171,35 @@ def test_missing_sample_history_fails_instead_of_fabricating_prices(client):
     })
     assert response.status_code == 502
     assert response.json()["error"]["code"] == "PROVIDER_UNAVAILABLE"
+
+
+def test_market_history_is_aligned_limited_and_explicitly_demo(client):
+    response = client.get("/api/v1/market-history", params={"symbols": ["nvda", "VTI"], "lookback_days": 2})
+    assert response.status_code == 200, response.text
+    history = response.json()
+    assert history["symbols"] == ["NVDA", "VTI"]
+    assert history["dates"] == ["2026-09-23", "2026-09-24", "2026-09-25"]
+    assert history["asset_index"]["NVDA"][0] == history["asset_index"]["VTI"][0] == 1.0
+    assert all(len(values) == len(history["dates"]) for values in history["asset_index"].values())
+    assert history["requested_lookback_days"] == 2
+    assert history["observation_count"] == 2
+    assert history["data_mode"] == "demo"
+    assert history["data_source"] == "synthetic_fixture"
+    assert history["freshness"] == "unknown"
+    assert "FICTIONAL" in history["warnings"][0]
+
+
+def test_market_history_rejects_unsupported_and_malformed_requests(client):
+    unsupported = client.get("/api/v1/market-history", params={"symbols": ["UNKNOWN"]})
+    assert unsupported.status_code == 404
+    assert unsupported.json()["error"]["code"] == "MARKET_HISTORY_UNAVAILABLE"
+    duplicate = client.get("/api/v1/market-history", params={"symbols": ["nvda", "NVDA"]})
+    assert duplicate.status_code == 422
+
+
+def test_short_market_history_returns_available_rows_without_extrapolation(client):
+    response = client.get("/api/v1/market-history", params={"symbols": ["GLD"], "lookback_days": 252})
+    assert response.status_code == 200
+    history = response.json()
+    assert history["observation_count"] == 6
+    assert len(history["dates"]) == 7

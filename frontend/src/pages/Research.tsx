@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ArrowUpRight,
   ArrowRight,
@@ -10,13 +10,12 @@ import {
   MagnifyingGlass as Search,
 } from "../components/icons";
 import { assets, researchNotes, assetBySymbol } from "../../../quant/data";
+import { signedPct } from "../../../quant/analytics";
 import {
-  assetPath,
-  covarianceMatrix,
-  pct,
-  signedPct,
-  money,
-} from "../../../quant/analytics";
+  createRequestGuard,
+  getMarketHistory,
+  type MarketHistoryResponse,
+} from "../api/portfolio";
 import {
   AssetMark,
   PageHeading,
@@ -25,6 +24,7 @@ import {
   Modal,
 } from "../components/UI";
 import { LineChart } from "../components/LineChart";
+
 export default function Research({
   weights,
   onAsk,
@@ -42,18 +42,65 @@ export default function Research({
   const [compare, setCompare] = useState("");
   const [tab, setTab] = useState<"overview" | "sources">("overview");
   const [noteId, setNoteId] = useState<string | null>(query.get("note"));
-  const note = researchNotes.find((n) => n.id === noteId);
-  const [period, setPeriod] = useState(252);
+  const [history, setHistory] = useState<MarketHistoryResponse | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const requestId = useRef(createRequestGuard());
+  const note = researchNotes.find((item) => item.id === noteId);
   const results = assets.filter(
-    (a, i) =>
-      (filter === "all" || weights[i] > 0) &&
-      `${a.symbol} ${a.name}`.toLowerCase().includes(search.toLowerCase()),
+    (asset, index) =>
+      (filter === "all" || weights[index] > 0) &&
+      `${asset.symbol} ${asset.name}`
+        .toLowerCase()
+        .includes(search.toLowerCase()),
   );
-  const peer = compare ? assetBySymbol(compare) : null;
-  const selectedPath = assetPath(idx, period);
-  const sampleReturn = selectedPath.at(-1)! - 1;
-  const periodLabel =
-    period === 63 ? "3-month" : period === 126 ? "6-month" : "1-year";
+  const peer =
+    compare && compare !== selected.symbol ? assetBySymbol(compare) : null;
+  const symbols = peer ? [selected.symbol, peer.symbol] : [selected.symbol];
+
+  async function loadHistory() {
+    const id = requestId.current.begin();
+    setLoading(true);
+    setError("");
+    setHistory(null);
+    try {
+      const result = await getMarketHistory(symbols, 252);
+      if (requestId.current.isCurrent(id)) setHistory(result);
+    } catch (reason) {
+      if (requestId.current.isCurrent(id)) {
+        setHistory(null);
+        setError(
+          reason instanceof Error
+            ? reason.message
+            : "Market history is unavailable.",
+        );
+      }
+    } finally {
+      if (requestId.current.isCurrent(id)) setLoading(false);
+    }
+  }
+  useEffect(() => {
+    void loadHistory();
+    return () => {
+      requestId.current.invalidate();
+    };
+  }, [selected.symbol, compare]);
+
+  const selectedRaw = history?.asset_index[selected.symbol];
+  const selectedPath = selectedRaw?.every(
+    (value): value is number => value !== null,
+  )
+    ? selectedRaw
+    : null;
+  const peerRaw = peer ? history?.asset_index[peer.symbol] : undefined;
+  const peerPath = peerRaw?.every((value): value is number => value !== null)
+    ? peerRaw
+    : undefined;
+  const sampleReturn = selectedPath?.length
+    ? selectedPath.at(-1)! - selectedPath[0]
+    : null;
+  const peerReturn = peerPath?.length ? peerPath.at(-1)! - peerPath[0] : null;
+
   return (
     <>
       <PageHeading
@@ -69,7 +116,7 @@ export default function Research({
               type="search"
               placeholder="Company or ticker"
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(event) => setSearch(event.target.value)}
             />
           </label>
           <div className="index-filter">
@@ -87,17 +134,19 @@ export default function Research({
             </button>
           </div>
           <div className="asset-index-list">
-            {results.map((a) => (
+            {results.map((asset) => (
               <a
-                className={`asset-index-item ${a.symbol === selected.symbol ? "active" : ""}`}
-                href={`#/research?symbol=${a.symbol}`}
-                key={a.symbol}
-                aria-current={a.symbol === selected.symbol ? "page" : undefined}
+                className={`asset-index-item ${asset.symbol === selected.symbol ? "active" : ""}`}
+                href={`#/research?symbol=${asset.symbol}`}
+                key={asset.symbol}
+                aria-current={
+                  asset.symbol === selected.symbol ? "page" : undefined
+                }
               >
-                <AssetMark asset={a} />
+                <AssetMark asset={asset} />
                 <span>
-                  <strong>{a.symbol}</strong>
-                  <small>{a.short}</small>
+                  <strong>{asset.symbol}</strong>
+                  <small>{asset.short}</small>
                 </span>
                 <ArrowUpRight size={16} />
               </a>
@@ -120,7 +169,9 @@ export default function Research({
           <div className="library-note">
             <span className="eyebrow">A FOCUSED UNIVERSE</span>
             <p>Eight assets. A clearer view of how they fit together.</p>
-            <span>Illustrative prices & returns</span>
+            <span>
+              Price charts use backend history · currently demo fixture data
+            </span>
           </div>
         </aside>
         <section className="company-detail">
@@ -165,13 +216,15 @@ export default function Research({
               <span className="sr-only">Compare against another asset</span>
               <select
                 value={compare === selected.symbol ? "" : compare}
-                onChange={(e) => setCompare(e.target.value)}
+                onChange={(event) => setCompare(event.target.value)}
               >
                 <option value="">Compare with…</option>
                 {assets
-                  .filter((a) => a.symbol !== selected.symbol)
-                  .map((a) => (
-                    <option key={a.symbol}>{a.symbol}</option>
+                  .filter((asset) => asset.symbol !== selected.symbol)
+                  .map((asset) => (
+                    <option key={asset.symbol} value={asset.symbol}>
+                      {asset.symbol}
+                    </option>
                   ))}
               </select>
               <ChevronDown size={14} />
@@ -181,44 +234,69 @@ export default function Research({
             <>
               <div className="company-chart-head">
                 <div>
-                  <span className="eyebrow">ILLUSTRATIVE PRICE</span>
+                  <span className="eyebrow">NORMALIZED PRICE HISTORY</span>
                   <div className="company-price">
-                    {money(selected.price, 2)}
-                    <span
-                      className={sampleReturn >= 0 ? "positive" : "negative"}
-                    >
-                      {signedPct(sampleReturn)}
-                    </span>
+                    {sampleReturn === null
+                      ? "Unavailable"
+                      : signedPct(sampleReturn)}
+                    <span> over available history</span>
                   </div>
                 </div>
-                <div className="segmented" aria-label="Research chart period">
-                  {[
-                    [63, "3M"],
-                    [126, "6M"],
-                    [252, "1Y"],
-                  ].map(([d, l]) => (
-                    <button
-                      key={d}
-                      aria-pressed={period === d}
-                      onClick={() => setPeriod(Number(d))}
-                    >
-                      {l}
-                    </button>
+                <span className="label-chip">
+                  {history?.observation_count ?? 0} return observations
+                </span>
+              </div>
+              {loading && (
+                <p role="status" className="api-state">
+                  Loading dated history…
+                </p>
+              )}
+              {error && (
+                <div className="api-state" role="alert">
+                  <p>{error}</p>
+                  <button
+                    className="button subtle"
+                    onClick={() => void loadHistory()}
+                    disabled={loading}
+                  >
+                    Retry history
+                  </button>
+                </div>
+              )}
+              {!loading && !error && selectedPath && history && (
+                <LineChart
+                  dates={history.dates}
+                  series={selectedPath}
+                  secondary={peerPath}
+                  label={selected.symbol}
+                  secondaryLabel={peer?.symbol}
+                  compact
+                />
+              )}
+              {!loading && !error && !selectedPath && (
+                <p role="status" className="api-state">
+                  Dated price history is unavailable. No local series was
+                  substituted.
+                </p>
+              )}
+              {history && (
+                <div
+                  className="backend-analysis"
+                  aria-label="Price history provenance"
+                >
+                  <strong>
+                    {history.data_mode === "demo" ? "DEMO DATA" : "LIVE DATA"}
+                  </strong>
+                  <span>
+                    {history.data_source} · {history.freshness} ·{" "}
+                    {history.dates[0]} to {history.dates.at(-1)}
+                  </span>
+                  {history.warnings.map((warning) => (
+                    <small key={warning}>{warning}</small>
                   ))}
                 </div>
-              </div>
-              <LineChart
-                series={selectedPath}
-                secondary={
-                  peer && peer.symbol !== selected.symbol
-                    ? assetPath(assets.indexOf(peer), period)
-                    : undefined
-                }
-                label={selected.symbol}
-                secondaryLabel={peer?.symbol}
-                compact
-              />
-              {peer && peer.symbol !== selected.symbol && (
+              )}
+              {peer && (
                 <div className="comparison-table-wrap">
                   <div className="comparison-title">
                     <strong>
@@ -235,7 +313,7 @@ export default function Research({
                   <table className="comparison-table">
                     <thead>
                       <tr>
-                        <th>{periodLabel} return · modeled sample</th>
+                        <th>Available-history return · backend</th>
                         <th>{selected.symbol}</th>
                         <th>{peer.symbol}</th>
                       </tr>
@@ -243,26 +321,15 @@ export default function Research({
                     <tbody>
                       <tr>
                         <th>Return</th>
-                        <td>{signedPct(sampleReturn)}</td>
                         <td>
-                          {signedPct(
-                            assetPath(assets.indexOf(peer), period).at(-1)! - 1,
-                          )}
-                        </td>
-                      </tr>
-                      <tr>
-                        <th>Annualized volatility · one-year sample</th>
-                        <td>
-                          {pct(Math.sqrt(covarianceMatrix[idx][idx] * 252))}
+                          {sampleReturn === null
+                            ? "Unavailable"
+                            : signedPct(sampleReturn)}
                         </td>
                         <td>
-                          {pct(
-                            Math.sqrt(
-                              covarianceMatrix[assets.indexOf(peer)][
-                                assets.indexOf(peer)
-                              ] * 252,
-                            ),
-                          )}
+                          {peerReturn === null
+                            ? "Unavailable"
+                            : signedPct(peerReturn)}
                         </td>
                       </tr>
                       <tr>
@@ -276,12 +343,12 @@ export default function Research({
               )}
               <div className="company-thesis">
                 <div>
-                  <span className="eyebrow">THE INVESTMENT CONTEXT</span>
+                  <span className="eyebrow">EDITORIAL CONTEXT</span>
                   <h3>What to understand</h3>
                   <p>{selected.thesis}</p>
                 </div>
                 <div>
-                  <span className="eyebrow">THE OTHER SIDE</span>
+                  <span className="eyebrow">EDITORIAL CONTEXT</span>
                   <h3>What to watch</h3>
                   <p>{selected.watch}</p>
                 </div>
@@ -338,9 +405,8 @@ export default function Research({
                 <ArrowUpRight size={20} />
               </a>
               <p className="small-text muted">
-                PandaSet prices and charts are illustrative fixtures. The links
-                above take you to external sources; their live content is not
-                ingested into this demo.
+                These links open external sources. Their content is not ingested
+                into the backend demo.
               </p>
             </div>
           )}
@@ -348,21 +414,23 @@ export default function Research({
       </div>
       <section className="research-reading">
         <SectionTitle
-          eyebrow="THE WIDER PICTURE"
+          eyebrow="EDITORIAL RESEARCH"
           title="Connections worth exploring"
         />
         <div className="reading-grid">
-          {researchNotes.map((n, i) => (
+          {researchNotes.map((item, index) => (
             <button
               className="reading-note"
-              onClick={() => setNoteId(n.id)}
-              key={n.id}
+              onClick={() => setNoteId(item.id)}
+              key={item.id}
             >
-              <span className="reading-number">0{i + 1}</span>
-              <span className="eyebrow">{n.category}</span>
-              <h3>{n.title}</h3>
+              <span className="reading-number">0{index + 1}</span>
+              <span className="eyebrow">
+                EDITORIAL PRIMER · {item.category}
+              </span>
+              <h3>{item.title}</h3>
               <span className="reading-bottom">
-                {n.read}
+                {item.read}
                 <ArrowRight size={17} />
               </span>
             </button>
@@ -371,24 +439,26 @@ export default function Research({
       </section>
       {note && (
         <Modal title={note.title} onClose={() => setNoteId(null)}>
-          <span className="eyebrow">{note.category} · RESEARCH PRIMER</span>
+          <span className="eyebrow">
+            {note.category} · EDITORIAL RESEARCH PRIMER
+          </span>
           <p className="note-body">{note.body}</p>
           <div className="note-tickers">
-            {note.symbols.map((s) => (
+            {note.symbols.map((ticker) => (
               <a
-                href={`#/research?symbol=${s}`}
+                href={`#/research?symbol=${ticker}`}
                 onClick={() => setNoteId(null)}
                 className="tag-link"
-                key={s}
+                key={ticker}
               >
-                {s}
+                {ticker}
                 <ArrowUpRight size={14} />
               </a>
             ))}
           </div>
           <p className="muted small-text">
-            This is a general research connection, not a report of a current
-            market event.
+            This is editorial research context, not a report of a current market
+            event.
           </p>
           <a
             className="button dark"

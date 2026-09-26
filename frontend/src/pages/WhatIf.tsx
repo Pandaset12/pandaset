@@ -1,152 +1,145 @@
-import { useState, useRef, useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ArrowRight,
-  ArrowPath as RotateCcw,
-  Plus,
-  Minus,
+  ArrowPath,
   Check,
   Scale,
-  ArrowPath,
   InformationCircle as Info,
-  XMark as X,
 } from "../components/icons";
 import { assets } from "../../../quant/data";
-import { analyze, validateWeights, pct, pp } from "../../../quant/analytics";
+import { pct, pp } from "../../../quant/analytics";
 import {
-  AssetMark,
-  PageHeading,
-  SectionTitle,
-  Modal,
-  Empty,
-} from "../components/UI";
+  comparePortfolio,
+  createRequestGuard,
+  type AnalysisResponse,
+  type WhatIfResponse,
+} from "../api/portfolio";
+import { AssetMark, PageHeading, SectionTitle, Modal } from "../components/UI";
 import { LineChart } from "../components/LineChart";
+
 export default function WhatIf({
+  analysis,
   weights,
   onApply,
   onAsk,
   query,
 }: {
+  analysis: AnalysisResponse;
   weights: number[];
-  onApply: (w: number[]) => void;
+  onApply: (weights: number[]) => Promise<boolean>;
   onAsk: (q?: string) => void;
   query: URLSearchParams;
 }) {
-  const initial = () => {
-    const copy = [...weights];
-    const reduce = assets.findIndex((a) => a.symbol === query.get("reduce"));
-    if (reduce >= 0) {
-      const amount = Math.min(10, copy[reduce]);
-      copy[reduce] -= amount;
-      copy[reduce === 5 ? 4 : 5] += amount;
-    }
-    return copy;
-  };
-  const [draft, setDraft] = useState(initial);
-  const [result, setResult] = useState<number[] | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [confirm, setConfirm] = useState(false);
-  const [addAsset, setAddAsset] = useState("");
-  const [visible, setVisible] = useState(() =>
-    assets.map(
-      (a, i) => weights[i] > 0 || a.symbol === query.get("asset") || i === 5,
-    ),
-  );
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(
-    () => () => {
-      if (timer.current) clearTimeout(timer.current);
-    },
-    [],
-  );
-  const total = draft.reduce((s, v) => s + v, 0);
-  const valid = validateWeights(draft);
-  const current = analyze(weights);
-  const proposed = result ? analyze(result) : null;
-  const stale = !!result && draft.some((v, i) => v !== result[i]);
-  const changed = draft.some((v, i) => v !== weights[i]);
-  const singleStocks = assets
-    .map((asset, i) => ({ asset, i }))
-    .filter(
-      ({ asset, i }) =>
-        weights[i] > 0 && ["Technology", "Financials"].includes(asset.sector),
+  const [draft, setDraft] = useState(() => {
+    const next = [...weights];
+    const reduced = assets.findIndex(
+      (asset) => asset.symbol === query.get("reduce"),
     );
-  const largestOverall = (allocation: number[]) => {
-    const index = allocation.indexOf(Math.max(...allocation));
-    return {
-      label: `${assets[index].symbol} · ${pct(allocation[index] / 100)}`,
-      weightPoints: allocation[index],
-    };
-  };
-  const largestSingleStock = (allocation: number[]) => {
-    const largest = assets
-      .map((asset, i) => ({ asset, weight: allocation[i] }))
-      .filter(
-        ({ asset, weight }) =>
-          weight > 0 && ["Technology", "Financials"].includes(asset.sector),
-      )
-      .sort((a, b) => b.weight - a.weight)[0];
-    return largest
-      ? {
-          label: `${largest.asset.symbol} · ${pct(largest.weight / 100)}`,
-          weightPoints: largest.weight,
-        }
-      : { label: "None · 0.0%", weightPoints: 0 };
-  };
-  const concentrationRows = result
-    ? [
-        {
-          label: "Largest individual stock",
-          before: largestSingleStock(weights),
-          after: largestSingleStock(result),
-        },
-        {
-          label: "Largest overall holding",
-          before: largestOverall(weights),
-          after: largestOverall(result),
-        },
-      ]
-    : [];
-  function preset(kind: string) {
+    if (reduced >= 0) {
+      const amount = Math.min(10, next[reduced]);
+      next[reduced] -= amount;
+      next[reduced === 5 ? 4 : 5] += amount;
+    }
+    return next;
+  });
+  const [comparison, setComparison] = useState<{
+    weights: number[];
+    response: WhatIfResponse;
+  } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [confirm, setConfirm] = useState(false);
+  const [applying, setApplying] = useState(false);
+  const requestId = useRef(createRequestGuard());
+  useEffect(() => () => requestId.current.invalidate(), []);
+  const total = draft.reduce((sum, value) => sum + value, 0);
+  const valid =
+    draft.length === assets.length &&
+    draft.every(
+      (value) => Number.isFinite(value) && value >= 0 && value <= 100,
+    ) &&
+    Math.abs(total - 100) < 0.001;
+  const changed = draft.some((value, index) => value !== weights[index]);
+  const stale =
+    !!comparison &&
+    draft.some((value, index) => value !== comparison.weights[index]);
+  const available = comparison && !stale ? comparison.response : null;
+  const metric = (value: number | null | undefined) =>
+    value === null || value === undefined ? "Unavailable" : pct(value);
+
+  function preset(kind: "reduce" | "bonds" | "balanced") {
     const next = [...weights];
     if (kind === "reduce") {
-      if (!singleStocks.length) return;
-      const from = singleStocks.reduce((best, entry) =>
-        current.risk[entry.i] > current.risk[best.i] ? entry : best,
-      ).i;
-      const amount = Math.min(10, next[from]);
-      next[from] -= amount;
+      const largestRisk = Object.entries(analysis.risk_contribution)
+        .filter(([, value]) => value !== null)
+        .sort((a, b) => (b[1] ?? 0) - (a[1] ?? 0))[0];
+      const index = assets.findIndex(
+        (asset) => asset.symbol === largestRisk?.[0],
+      );
+      if (index < 0) return;
+      const amount = Math.min(10, next[index]);
+      next[index] -= amount;
       next[4] += amount;
     } else if (kind === "bonds") {
-      const from = next.reduce(
-        (best, weight, i) => (i !== 5 && weight > next[best] ? i : best),
+      const index = next.reduce(
+        (best, value, i) => (i !== 5 && value > next[best] ? i : best),
         0,
       );
-      const amount = Math.min(15, next[from]);
-      next[from] -= amount;
+      const amount = Math.min(15, next[index]);
+      next[index] -= amount;
       next[5] += amount;
-    } else {
-      assets.forEach((_, i) => {
-        next[i] = i < 5 ? 16 : i === 5 ? 20 : 0;
+    } else
+      assets.forEach((_, index) => {
+        next[index] = index < 5 ? 16 : index === 5 ? 20 : 0;
       });
-    }
     setDraft(next);
-    setVisible(next.map((v) => v > 0));
-    setResult(null);
   }
-  function calculate() {
-    if (!valid || !changed) return;
+
+  async function calculate() {
+    if (!valid || !changed || busy) return;
+    const id = requestId.current.begin();
     setBusy(true);
-    timer.current = setTimeout(() => {
-      setResult([...draft]);
-      setBusy(false);
-    }, 300);
+    setError("");
+    try {
+      const response = await comparePortfolio(analysis.portfolio_id, draft);
+      if (requestId.current.isCurrent(id))
+        setComparison({ weights: [...draft], response });
+    } catch (reason) {
+      if (requestId.current.isCurrent(id))
+        setError(
+          reason instanceof Error
+            ? reason.message
+            : "The comparison service is unavailable.",
+        );
+    } finally {
+      if (requestId.current.isCurrent(id)) setBusy(false);
+    }
   }
-  const added = assets.map((a, i) => ({ a, i })).filter(({ i }) => !visible[i]);
+
+  const current = available?.current_analysis;
+  const proposed = available?.proposed_analysis;
+  const currentPath = current?.series?.portfolio_index;
+  const proposedPath = proposed?.series?.portfolio_index;
+  const comparedWeights = comparison?.weights ?? draft;
+  const chartReady =
+    !!currentPath &&
+    !!proposedPath &&
+    currentPath.length === proposedPath.length &&
+    currentPath.every((value): value is number => value !== null) &&
+    proposedPath.every((value): value is number => value !== null);
+
+  async function applyScenario() {
+    if (!comparison || stale) return;
+    setApplying(true);
+    if (await onApply(comparison.weights)) setConfirm(false);
+    setApplying(false);
+  }
+
   return (
     <>
       <PageHeading
         title="Scenario comparison"
-        description="Try a different allocation. See how the trade-offs compare."
+        description="Try a different allocation. Compare the backend’s historical estimates side by side."
       >
         <span className="scenario-badge">
           <span />
@@ -156,7 +149,12 @@ export default function WhatIf({
       <div className="scenario-presets">
         <span>START WITH A QUESTION</span>
         <button
-          disabled={busy || !singleStocks.length}
+          disabled={
+            busy ||
+            !Object.values(analysis.risk_contribution).some(
+              (value) => value !== null,
+            )
+          }
           onClick={() => preset("reduce")}
         >
           Less single-stock risk
@@ -169,7 +167,7 @@ export default function WhatIf({
           More Treasury exposure
           <ArrowRight size={14} />
         </button>
-        <button disabled={busy} onClick={() => preset("equal")}>
+        <button disabled={busy} onClick={() => preset("balanced")}>
           A more balanced mix
           <ArrowRight size={14} />
         </button>
@@ -178,16 +176,13 @@ export default function WhatIf({
         <section className="scenario-editor">
           <SectionTitle eyebrow="01 / ADJUST" title="Build your scenario">
             <button
-              className="icon-button"
+              className="text-button"
               aria-label="Reset scenario"
               disabled={busy}
-              onClick={() => {
-                setDraft([...weights]);
-                setVisible(weights.map((v) => v > 0));
-                setResult(null);
-              }}
+              onClick={() => setDraft([...weights])}
             >
-              <RotateCcw size={17} />
+              <ArrowPath size={16} />
+              Reset
             </button>
           </SectionTitle>
           <div className="editor-table-head">
@@ -196,140 +191,60 @@ export default function WhatIf({
             <span>Proposed</span>
           </div>
           <div className="allocation-editor">
-            {assets.map(
-              (a, i) =>
-                visible[i] && (
-                  <div className="editor-row" key={a.symbol}>
-                    <div className="editor-asset">
-                      <AssetMark asset={a} small />
-                      <strong>{a.symbol}</strong>
-                    </div>
-                    <span className="current-weight">{weights[i]}%</span>
-                    <div className="weight-input">
-                      <button
-                        aria-label={`Decrease ${a.symbol} allocation`}
-                        disabled={draft[i] <= 0 || busy}
-                        onClick={() =>
-                          setDraft(
-                            draft.map((v, j) =>
-                              j === i ? Math.max(0, v - 1) : v,
-                            ),
-                          )
-                        }
-                      >
-                        <Minus size={12} />
-                      </button>
-                      <input
-                        type="number"
-                        min="0"
-                        max="100"
-                        step="1"
-                        inputMode="decimal"
-                        aria-label={`${a.symbol} proposed allocation`}
-                        aria-invalid={draft[i] < 0 || draft[i] > 100}
-                        value={draft[i]}
-                        disabled={busy}
-                        onChange={(e) =>
-                          setDraft(
-                            draft.map((v, j) =>
-                              j === i ? Number(e.target.value) : v,
-                            ),
-                          )
-                        }
-                      />
-                      <span>%</span>
-                      <button
-                        aria-label={`Increase ${a.symbol} allocation`}
-                        disabled={draft[i] >= 100 || busy}
-                        onClick={() =>
-                          setDraft(
-                            draft.map((v, j) =>
-                              j === i ? Math.min(100, v + 1) : v,
-                            ),
-                          )
-                        }
-                      >
-                        <Plus size={12} />
-                      </button>
-                    </div>
-                    <button
-                      className="remove-asset"
-                      aria-label={`Remove ${a.symbol} from scenario`}
-                      disabled={busy}
-                      onClick={() => {
-                        setDraft(draft.map((v, j) => (j === i ? 0 : v)));
-                        setVisible(
-                          visible.map((v, j) => (j === i ? false : v)),
-                        );
-                      }}
-                    >
-                      <X size={13} />
-                    </button>
-                  </div>
-                ),
-            )}
+            {assets.map((asset, index) => (
+              <div className="editor-row" key={asset.symbol}>
+                <div className="editor-asset">
+                  <AssetMark asset={asset} small />
+                  <strong>{asset.symbol}</strong>
+                </div>
+                <span className="current-weight">{weights[index]}%</span>
+                <div className="weight-input">
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="1"
+                    inputMode="decimal"
+                    aria-label={`${asset.symbol} proposed allocation`}
+                    aria-invalid={draft[index] < 0 || draft[index] > 100}
+                    value={draft[index]}
+                    disabled={busy}
+                    onChange={(event) =>
+                      setDraft(
+                        draft.map((value, i) =>
+                          i === index ? Number(event.target.value) : value,
+                        ),
+                      )
+                    }
+                  />
+                  <span>%</span>
+                </div>
+              </div>
+            ))}
           </div>
-          {visible.every((v) => !v) && (
-            <Empty title="Start with an asset">
-              Add a holding below to build your scenario.
-            </Empty>
-          )}
-          {added.length > 0 && (
-            <div className="add-asset">
-              <select
-                value={addAsset}
-                aria-label="Asset to add"
-                disabled={busy}
-                onChange={(e) => setAddAsset(e.target.value)}
-              >
-                <option value="">Add an asset…</option>
-                {added.map(({ a }) => (
-                  <option key={a.symbol} value={a.symbol}>
-                    {a.symbol} · {a.short}
-                  </option>
-                ))}
-              </select>
-              <button
-                className="icon-button bordered"
-                aria-label="Add selected asset"
-                disabled={!addAsset || busy}
-                onClick={() => {
-                  setVisible(
-                    visible.map((v, i) => v || assets[i].symbol === addAsset),
-                  );
-                  setAddAsset("");
-                }}
-              >
-                <Plus size={17} />
-              </button>
-            </div>
-          )}
           <div
             className={`allocation-total ${valid ? "valid" : "invalid"}`}
             aria-live="polite"
           >
             <span>Total allocation</span>
-            <strong>
-              {Number(total.toFixed(2))}%{" "}
-              {valid ? <Check size={16} /> : <Info size={16} />}
-            </strong>
+            <strong>{Number(total.toFixed(2))}%</strong>
           </div>
           {!valid && (
             <p className="field-error" role="alert">
-              {draft.some((v) => v < 0 || v > 100)
+              {draft.some((value) => value < 0 || value > 100)
                 ? "Each allocation must be between 0% and 100%."
                 : `${total < 100 ? "Allocate" : "Remove"} ${Math.abs(100 - total).toFixed(1)}% to reach 100%.`}
             </p>
           )}
           <button
             className="button dark full"
-            onClick={calculate}
+            onClick={() => void calculate()}
             disabled={!valid || !changed || busy}
           >
             {busy ? (
               <>
                 <ArrowPath size={16} className="spin" />
-                Calculating…
+                Comparing…
               </>
             ) : (
               <>
@@ -338,98 +253,110 @@ export default function WhatIf({
               </>
             )}
           </button>
+          {error && (
+            <div className="api-state" role="alert">
+              <p>{error}</p>
+              <button
+                className="button subtle"
+                onClick={() => void calculate()}
+                disabled={busy || !valid}
+              >
+                Retry comparison
+              </button>
+            </div>
+          )}
           <p className="editor-note">
             {!changed
-              ? "Change an allocation or choose a starting question."
-              : "Your current portfolio stays unchanged until you choose to use this scenario."}
+              ? "Change an allocation to request a backend comparison."
+              : "The active portfolio stays unchanged until you apply a successful comparison."}
           </p>
         </section>
         <section className="scenario-results" aria-busy={busy}>
           <SectionTitle
             eyebrow="02 / COMPARE"
-            title={proposed ? "The trade-offs, in view." : "What could change?"}
+            title={
+              available ? "The trade-offs, in view." : "What could change?"
+            }
           >
-            {proposed && (
+            {comparison && (
               <span className={`results-status ${stale ? "stale" : ""}`}>
-                {stale ? "Changes not calculated" : "Scenario calculated"}
+                {stale ? "Comparison is stale" : "Backend comparison"}
               </span>
             )}
           </SectionTitle>
-          {proposed ? (
+          {available && current && proposed ? (
             <>
               <div className="comparison-summary">
-                <span className="eyebrow">ESTIMATED ANNUALIZED VOLATILITY</span>
+                <span className="eyebrow">ANNUALIZED VOLATILITY · BACKEND</span>
                 <div className="volatility-change">
-                  <span>{pct(current.volatility)}</span>
+                  <span>{pct(current.portfolio_volatility)}</span>
                   <ArrowRight size={26} />
-                  <strong>{pct(proposed.volatility)}</strong>
+                  <strong>{pct(proposed.portfolio_volatility)}</strong>
                   <span className="delta-pill">
-                    {pp(proposed.volatility - current.volatility)}
+                    {pp(available.delta.portfolio_volatility)}
                   </span>
                 </div>
                 <p>
-                  {proposed.volatility < current.volatility
-                    ? "This mix had lower estimated volatility in the sample."
-                    : "This mix had higher estimated volatility in the sample."}{" "}
-                  {proposed.return < current.return
-                    ? "Its modeled return was also lower."
-                    : "Its modeled return was also higher."}
+                  Difference convention: {available.difference_convention}. Both
+                  portfolios use the same available sample.
                 </p>
               </div>
               <table className="scenario-comparison">
                 <thead>
                   <tr>
-                    <th>Metric · past year</th>
+                    <th>Metric · available history</th>
                     <th>Current</th>
                     <th>Proposed</th>
                     <th>Change</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {[
-                    ["Modeled return", current.return, proposed.return],
-                    [
-                      "Largest fall from a previous peak",
-                      current.maxDrawdown,
-                      proposed.maxDrawdown,
-                    ],
-                  ].map(([label, before, after]) => (
-                    <tr key={String(label)}>
-                      <th>{label}</th>
-                      <td>{pct(Number(before))}</td>
-                      <td>{pct(Number(after))}</td>
-                      <td>{pp(Number(after) - Number(before))}</td>
-                    </tr>
-                  ))}
-                  {concentrationRows.map(({ label, before, after }) => (
-                    <tr key={label}>
-                      <th>{label}</th>
-                      <td>{before.label}</td>
-                      <td>{after.label}</td>
-                      <td>
-                        {pp((after.weightPoints - before.weightPoints) / 100)}
-                      </td>
-                    </tr>
-                  ))}
+                  <tr>
+                    <th>Sample return</th>
+                    <td>{metric(current.portfolio_return)}</td>
+                    <td>{metric(proposed.portfolio_return)}</td>
+                    <td>{metric(available.delta.portfolio_return)}</td>
+                  </tr>
+                  <tr>
+                    <th>Annualized return</th>
+                    <td>{metric(current.annualized_return)}</td>
+                    <td>{metric(proposed.annualized_return)}</td>
+                    <td>{metric(available.delta.annualized_return)}</td>
+                  </tr>
+                  <tr>
+                    <th>Largest drawdown</th>
+                    <td>{metric(current.max_drawdown)}</td>
+                    <td>{metric(proposed.max_drawdown)}</td>
+                    <td>{metric(available.delta.max_drawdown)}</td>
+                  </tr>
+                  <tr>
+                    <th>Largest holding</th>
+                    <td>{largest(weights)}</td>
+                    <td>{largest(comparedWeights)}</td>
+                    <td>
+                      {pp(
+                        largestWeight(comparedWeights) - largestWeight(weights),
+                      )}
+                    </td>
+                  </tr>
                 </tbody>
               </table>
-              <p className="scenario-concentration-note">
-                Individual stocks are listed separately. The overall holding row
-                also includes funds, such as VTI and TLT.
-              </p>
-              <LineChart
-                series={proposed.path}
-                secondary={current.path}
-                label="Proposed"
-                secondaryLabel="Current"
-                compact
-              />
+              {chartReady && proposed.series && (
+                <LineChart
+                  dates={proposed.series.dates}
+                  series={proposedPath as number[]}
+                  secondary={currentPath as number[]}
+                  label="Proposed"
+                  secondaryLabel="Current"
+                  compact
+                />
+              )}
               <div className="scenario-result-actions">
                 <button
                   className="text-button"
                   onClick={() =>
                     onAsk(
-                      `Explain this scenario: volatility changes from ${pct(current.volatility)} to ${pct(proposed.volatility)}, and sample return changes from ${pct(current.return)} to ${pct(proposed.return)}.`,
+                      `Explain this scenario comparison for saved analysis ${analysis.analysis_id}.`,
                     )
                   }
                 >
@@ -438,7 +365,7 @@ export default function WhatIf({
                 </button>
                 <button
                   className="button dark"
-                  disabled={stale || busy}
+                  disabled={busy || stale || !comparison}
                   onClick={() => setConfirm(true)}
                 >
                   Use this allocation
@@ -446,6 +373,22 @@ export default function WhatIf({
                 </button>
               </div>
             </>
+          ) : stale ? (
+            <div className="scenario-empty">
+              <h3>Draft changed after the comparison.</h3>
+              <p>
+                Run the comparison again to see results for the current
+                allocation.
+              </p>
+              <button
+                className="button dark"
+                disabled={!valid || busy}
+                onClick={() => void calculate()}
+              >
+                Compare updated allocation
+                <ArrowRight size={16} />
+              </button>
+            </div>
           ) : (
             <div className="scenario-empty">
               <div className="scenario-illustration" aria-hidden="true">
@@ -467,12 +410,13 @@ export default function WhatIf({
                 <br />A different risk profile.
               </h3>
               <p>
-                Adjust the weights on the left to compare volatility,
-                concentration, and modeled performance.
+                Adjust the weights and request a backend comparison using the
+                same available dates.
               </p>
               <div className="comparison-preview">
                 <span>
-                  Current volatility<strong>{pct(current.volatility)}</strong>
+                  Current volatility
+                  <strong>{pct(analysis.portfolio_volatility)}</strong>
                 </span>
                 <ArrowRight size={22} />
                 <span>
@@ -484,33 +428,38 @@ export default function WhatIf({
           <div className="scenario-disclaimer">
             <Info size={15} />
             <p>
-              Calculations use the same illustrative 252-day return sample for
-              both portfolios, with constant weights. This is a comparison of a
-              sample period, not a forecast. Trading costs and taxes are
-              excluded.
+              Results use {analysis.lookback_days} available fictional daily
+              return observations. The demo fixture contains short history; no
+              longer period is inferred or extrapolated. No forecast, trading
+              costs, or taxes are included.
             </p>
           </div>
         </section>
       </div>
-      {confirm && result && (
-        <Modal title="Use this allocation?" onClose={() => setConfirm(false)}>
+      {confirm && comparison && (
+        <Modal
+          title="Use this allocation?"
+          onClose={applying ? () => undefined : () => setConfirm(false)}
+        >
           <p className="note-body">
-            This applies the scenario throughout PandaSet for this browser
-            session. Reloading restores the example portfolio. It does not place
-            trades or connect to a brokerage.
+            PandaSet will create and analyze the new sample allocation, then
+            replace the active portfolio after the backend confirms it. This
+            does not place trades or connect to a brokerage.
           </p>
           <div className="modal-actions">
-            <button className="button subtle" onClick={() => setConfirm(false)}>
+            <button
+              className="button subtle"
+              disabled={applying}
+              onClick={() => setConfirm(false)}
+            >
               Keep exploring
             </button>
             <button
               className="button dark"
-              onClick={() => {
-                onApply(result);
-                setConfirm(false);
-              }}
+              disabled={applying}
+              onClick={() => void applyScenario()}
             >
-              Use sample allocation
+              {applying ? "Saving…" : "Use sample allocation"}
               <Check size={16} />
             </button>
           </div>
@@ -518,4 +467,12 @@ export default function WhatIf({
       )}
     </>
   );
+}
+
+function largest(allocation: number[]) {
+  const index = allocation.indexOf(Math.max(...allocation));
+  return `${assets[index].symbol} · ${allocation[index]}%`;
+}
+function largestWeight(allocation: number[]) {
+  return Math.max(...allocation) / 100;
 }

@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import ValidationError
 from starlette.concurrency import run_in_threadpool
 
@@ -10,7 +10,7 @@ from .gemini_service import GeminiNotConfigured, GeminiUnavailable, generate_ans
 from .providers import IntegrationPending, ProviderUnavailable, QuantProvider, get_provider
 from .schemas import (
     AllocationInput, AnalysisResponse, AnalystRequest, AnalystResponse,
-    AnalyticsSnapshot, AskRequest, Portfolio, PortfolioInput, WhatIfRequest,
+    AnalyticsSnapshot, AskRequest, MarketHistoryResponse, Portfolio, PortfolioInput, WhatIfRequest,
 )
 from .storage import PortfolioStore, SnapshotNotFound
 
@@ -39,6 +39,8 @@ def analysis_response(metrics: AnalyticsSnapshot, analysis_id: str, created_at: 
         analysis_id=analysis_id, portfolio_id=metrics.portfolio_id, created_at=created_at,
         as_of=metrics.data_as_of, lookback_days=metrics.lookback_trading_days,
         portfolio_return=metrics.portfolio_return,
+        annualized_return=metrics.annualized_return,
+        max_drawdown=metrics.max_drawdown,
         portfolio_volatility=metrics.portfolio_volatility,
         asset_volatility=metrics.asset_volatility, correlation_matrix=metrics.correlation_matrix,
         risk_contribution=metrics.risk_contribution,
@@ -47,6 +49,7 @@ def analysis_response(metrics: AnalyticsSnapshot, analysis_id: str, created_at: 
         weights=metrics.weights, data_mode=metrics.data_mode,
         observation_count=metrics.observation_count, return_frequency=metrics.return_frequency,
         volatility_unit=metrics.volatility_unit, assumptions=metrics.assumptions,
+        return_contribution=metrics.return_contribution, series=metrics.series,
     )
 
 
@@ -92,6 +95,22 @@ def get_analysis(portfolio_id: str, analysis_id: str, store: PortfolioStore = De
     except SnapshotNotFound as exc:
         raise api_error(404, "ANALYSIS_NOT_FOUND", "Analysis not found for this portfolio.") from exc
     return analysis_response(metrics, analysis_id, created_at)
+
+
+@router.get("/market-history", response_model=MarketHistoryResponse)
+def market_history(
+    symbols: list[str] = Query(min_length=1, max_length=8),
+    lookback_days: int = Query(default=252, ge=1, le=1000),
+    provider: QuantProvider = Depends(get_provider),
+):
+    normalized = [symbol.strip().upper() for symbol in symbols]
+    if any(not symbol or len(symbol) > 20 for symbol in normalized) or len(set(normalized)) != len(normalized):
+        raise api_error(422, "INVALID_MARKET_HISTORY_REQUEST", "Provide one to eight unique supported symbols.")
+    try:
+        return provider.market_history(normalized, lookback_days)
+    except ProviderUnavailable as exc:
+        log_failure("MARKET_HISTORY_UNAVAILABLE", exc)
+        raise api_error(404, "MARKET_HISTORY_UNAVAILABLE", "History is unavailable for one or more requested symbols.") from exc
 
 
 @router.post("/portfolios/{portfolio_id}/ask", response_model=AnalystResponse)

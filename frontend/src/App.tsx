@@ -7,10 +7,10 @@ import {
   InformationCircle as Info,
   XMark as X,
 } from "./components/icons";
-import { initialWeights, asOf } from "../../quant/data";
-import { validateWeights } from "../../quant/analytics";
+import { assets, initialWeights } from "../../quant/data";
 import {
   analyzePortfolio,
+  createRequestGuard,
   type AnalysisResponse,
   type Portfolio,
 } from "./api/portfolio";
@@ -23,6 +23,15 @@ import Overview from "./pages/Overview";
 import Risk from "./pages/Risk";
 import Research from "./pages/Research";
 import WhatIf from "./pages/WhatIf";
+
+type ActiveAnalysis = { portfolio: Portfolio; analysis: AnalysisResponse };
+
+function weightsFromAnalysis(analysis: AnalysisResponse) {
+  return assets.map((asset) =>
+    Math.round((analysis.weights[asset.symbol] ?? 0) * 100),
+  );
+}
+
 function Application() {
   const [hash, setHash] = useState(location.hash || "#/");
   const [weights, setWeights] = useState([...initialWeights]);
@@ -30,13 +39,11 @@ function Application() {
   const [method, setMethod] = useState(false);
   const [analyst, setAnalyst] = useState<string | null>(null);
   const [toast, setToast] = useState("");
-  const [backendResult, setBackendResult] = useState<{
-    portfolio: Portfolio;
-    analysis: AnalysisResponse;
-  } | null>(null);
-  const [analysisLoading, setAnalysisLoading] = useState(false);
+  const [active, setActive] = useState<ActiveAnalysis | null>(null);
+  const [analysisLoading, setAnalysisLoading] = useState(true);
   const [analysisError, setAnalysisError] = useState("");
-  const analysisRequest = useRef(0);
+  const analysisRequest = useRef(createRequestGuard());
+
   useEffect(() => {
     const fn = () => {
       setHash(location.hash || "#/");
@@ -50,6 +57,52 @@ function Application() {
     const id = setTimeout(() => setToast(""), 4500);
     return () => clearTimeout(id);
   }, [toast]);
+
+  async function loadAnalysis(nextWeights: number[]) {
+    const request = analysisRequest.current.begin();
+    setAnalysisLoading(true);
+    setAnalysisError("");
+    try {
+      const result = await analyzePortfolio(nextWeights);
+      if (!analysisRequest.current.isCurrent(request)) return false;
+      setActive(result);
+      setWeights(weightsFromAnalysis(result.analysis));
+      return true;
+    } catch (error) {
+      if (analysisRequest.current.isCurrent(request)) {
+        setAnalysisError(
+          error instanceof Error
+            ? error.message
+            : "The analysis service is unavailable.",
+        );
+      }
+      return false;
+    } finally {
+      if (analysisRequest.current.isCurrent(request)) setAnalysisLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void loadAnalysis(initialWeights);
+    return () => {
+      analysisRequest.current.invalidate();
+    };
+  }, []);
+
+  async function apply(
+    nextWeights: number[],
+    source: "edit" | "scenario" = "edit",
+  ) {
+    if (!(await loadAnalysis(nextWeights))) return false;
+    setEdit(false);
+    setToast(
+      source === "scenario"
+        ? "Scenario saved as the active sample portfolio."
+        : "Sample portfolio updated.",
+    );
+    return true;
+  }
+
   const [path, search = ""] = hash.replace(/^#/, "").split("?");
   const route = ["/", "/risk", "/research", "/what-if"].includes(path)
     ? path
@@ -58,44 +111,22 @@ function Application() {
   useEffect(() => {
     document.title = `${route === "/" ? "Overview" : route === "/risk" ? "Risk & exposure" : route === "/research" ? "Research" : "Scenario lab"} — PandaSet`;
   }, [route]);
-  function apply(w: number[], source: "edit" | "scenario" = "edit") {
-    if (!validateWeights(w)) return;
-    analysisRequest.current += 1;
-    setAnalysisLoading(false);
-    setWeights([...w]);
-    setBackendResult(null);
-    setAnalysisError("");
-    setEdit(false);
-    setToast(
-      source === "scenario"
-        ? "Scenario applied for this browser session. Reloading restores the example portfolio."
-        : "Sample portfolio updated for this browser session. Reloading restores the example portfolio.",
-    );
-  }
-  async function runBackendAnalysis() {
-    const request = ++analysisRequest.current;
-    setAnalysisLoading(true);
-    setAnalysisError("");
-    try {
-      const result = await analyzePortfolio(weights);
-      if (request === analysisRequest.current) setBackendResult(result);
-    } catch (error) {
-      if (request === analysisRequest.current) {
-        setBackendResult(null);
-        setAnalysisError(
-          error instanceof Error ? error.message : "Demo API is unavailable.",
-        );
-      }
-    } finally {
-      if (request === analysisRequest.current) setAnalysisLoading(false);
-    }
-  }
+
   const nav = [
     ["/", "Overview"],
     ["/risk", "Risk & exposure"],
     ["/research", "Research"],
     ["/what-if", "What-if lab"],
   ];
+  const asOf = active?.analysis.as_of
+    ? new Date(active.analysis.as_of).toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+        timeZone: "UTC",
+      })
+    : "Unavailable";
+
   return (
     <>
       <a
@@ -123,7 +154,11 @@ function Application() {
               </a>
             ))}
           </nav>
-          <button className="analyst-button" onClick={() => setAnalyst("")}>
+          <button
+            className="analyst-button"
+            onClick={() => setAnalyst("")}
+            disabled={!active}
+          >
             <ChatBubbleLeftRight size={17} />
             <span>Ask Panda</span>
             <span className="key-hint">↗</span>
@@ -132,12 +167,19 @@ function Application() {
       </header>
       <div className="workspace-bar">
         <div>
-          <button className="portfolio-selector" onClick={() => setEdit(true)}>
-            <span className="portfolio-initial">L</span>Long-term portfolio
+          <button
+            className="portfolio-selector"
+            onClick={() => setEdit(true)}
+            disabled={!active || analysisLoading}
+          >
+            <span className="portfolio-initial">L</span>
+            {active?.portfolio.name ?? "Long-term portfolio"}
             <ChevronDown size={14} />
           </button>
           <button className="demo-badge" onClick={() => setMethod(true)}>
-            SAMPLE DATA
+            {active?.analysis.data_mode === "live"
+              ? "LIVE DATA"
+              : "SAMPLE DATA"}
             <Info size={12} />
           </button>
         </div>
@@ -147,44 +189,75 @@ function Application() {
         </span>
       </div>
       <main id="main-content" className="main-content" tabIndex={-1}>
-        <ErrorBoundary>
-          {route === "/" ? (
-            <Overview
-              weights={weights}
-              backendResult={backendResult}
-              analysisLoading={analysisLoading}
-              analysisError={analysisError}
-              onAnalyze={runBackendAnalysis}
-              onEdit={() => setEdit(true)}
-              onAsk={(q) => setAnalyst(q || "")}
-              onMethod={() => setMethod(true)}
-            />
-          ) : route === "/risk" ? (
-            <Risk
-              weights={weights}
-              onAsk={(q) => setAnalyst(q || "")}
-              onMethod={() => setMethod(true)}
-            />
-          ) : route === "/research" ? (
-            <Research
-              key={hash}
-              weights={weights}
-              onAsk={(q) => setAnalyst(q || "")}
-              query={query}
-            />
-          ) : (
-            <WhatIf
-              key={hash}
-              weights={weights}
-              onApply={(w) => {
-                apply(w, "scenario");
-                location.hash = "#/";
-              }}
-              onAsk={(q) => setAnalyst(q || "")}
-              query={query}
-            />
-          )}
-        </ErrorBoundary>
+        {analysisLoading && !active ? (
+          <section className="api-state" role="status">
+            <strong>Loading portfolio analysis…</strong>
+            <p>
+              Connecting to the backend and calculating the sample portfolio.
+            </p>
+          </section>
+        ) : analysisError && !active ? (
+          <section className="api-state" role="alert">
+            <strong>Portfolio analysis is unavailable.</strong>
+            <p>{analysisError}</p>
+            <button
+              className="button dark"
+              onClick={() => void loadAnalysis(initialWeights)}
+              disabled={analysisLoading}
+            >
+              Retry analysis
+            </button>
+          </section>
+        ) : active ? (
+          <ErrorBoundary>
+            {route === "/" ? (
+              <Overview
+                analysis={active.analysis}
+                onEdit={() => setEdit(true)}
+                onAsk={(q) => setAnalyst(q || "")}
+                onMethod={() => setMethod(true)}
+              />
+            ) : route === "/risk" ? (
+              <Risk
+                analysis={active.analysis}
+                onAsk={(q) => setAnalyst(q || "")}
+                onMethod={() => setMethod(true)}
+              />
+            ) : route === "/research" ? (
+              <Research
+                key={hash}
+                weights={weights}
+                onAsk={(q) => setAnalyst(q || "")}
+                query={query}
+              />
+            ) : (
+              <WhatIf
+                key={hash}
+                analysis={active.analysis}
+                weights={weights}
+                onApply={(w) => apply(w, "scenario")}
+                onAsk={(q) => setAnalyst(q || "")}
+                query={query}
+              />
+            )}
+            {analysisLoading && (
+              <p className="analysis-saving" role="status">
+                Saving the new allocation and calculating its analysis…
+              </p>
+            )}
+            {analysisError && (
+              <p className="analysis-saving error" role="alert">
+                The active analysis is unchanged. {analysisError}{" "}
+                <button
+                  className="text-button"
+                  onClick={() => void loadAnalysis(weights)}
+                >
+                  Retry
+                </button>
+              </p>
+            )}
+          </ErrorBoundary>
+        ) : null}
       </main>
       <footer className="site-footer">
         <span>
@@ -196,18 +269,20 @@ function Application() {
           <ArrowUpRight size={13} />
         </button>
       </footer>
-      {edit && (
+      {edit && active && (
         <EditPortfolio
           weights={weights}
+          busy={analysisLoading}
+          error={analysisError}
           onClose={() => setEdit(false)}
-          onSave={apply}
+          onSave={(w) => apply(w)}
         />
       )}
       {method && <MethodologyModal onClose={() => setMethod(false)} />}
-      {analyst !== null && (
+      {analyst !== null && active && (
         <Analyst
-          key={analyst}
-          weights={weights}
+          portfolioId={active.portfolio.portfolio_id}
+          analysis={active.analysis}
           question={analyst}
           onClose={() => setAnalyst(null)}
         />
@@ -228,6 +303,7 @@ function Application() {
     </>
   );
 }
+
 export default function App() {
   return (
     <ErrorBoundary>

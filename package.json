@@ -7,7 +7,7 @@
     "dev": "vite frontend --host 127.0.0.1",
     "build": "tsc -p frontend/tsconfig.json && vite build frontend",
     "preview": "vite preview frontend --host 127.0.0.1",
-    "test": "tsx --test quant/tests/*.test.ts"
+    "test": "tsx --test quant/tests/*.test.ts frontend/tests/*.test.ts"
   },
   "dependencies": {
     "@heroicons/react": "^2.2.0",
