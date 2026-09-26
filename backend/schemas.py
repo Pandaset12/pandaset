@@ -85,7 +85,7 @@ class QuestionInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     question: str = Field(min_length=1, max_length=4000)
-    web_search: bool = True
+    web_search: bool = False
     source_urls: list[AnyHttpUrl] = Field(default_factory=list, max_length=5)
 
     @field_validator("question")
@@ -128,7 +128,7 @@ class MetricCitation(BaseModel):
 
 class GroundedAnswer(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
-    answer: str = Field(min_length=1, max_length=16000)
+    explanation: str = Field(min_length=1, max_length=16000)
     cited_fields: list[str] = Field(max_length=200)
 
 

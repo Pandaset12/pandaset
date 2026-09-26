@@ -5,6 +5,7 @@ from pydantic import ValidationError
 from starlette.concurrency import run_in_threadpool
 
 from .config import Settings, get_settings
+from .observability import log_failure
 from .gemini_service import GeminiNotConfigured, GeminiUnavailable, generate_answer, metric_summary
 from .providers import IntegrationPending, ProviderUnavailable, QuantProvider, get_provider
 from .schemas import (
@@ -74,8 +75,10 @@ def analyze(
     except IntegrationPending as exc:
         raise api_error(501, "QUANT_INTEGRATION_PENDING", str(exc)) from exc
     except (ValidationError, ValueError) as exc:
+        log_failure("INVALID_PROVIDER_DATA", exc)
         raise api_error(502, "INVALID_PROVIDER_DATA", "Provider returned inconsistent analysis data.") from exc
     except Exception as exc:
+        log_failure("PROVIDER_UNAVAILABLE", exc)
         raise api_error(502, "PROVIDER_UNAVAILABLE", "Analysis provider is currently unavailable.") from exc
     analysis_id, created_at = store.save_analysis(metrics)
     return analysis_response(metrics, analysis_id, created_at)
@@ -121,6 +124,7 @@ async def ask(
     try:
         output = await generate_answer(question, metrics, settings)
     except (GeminiNotConfigured, GeminiUnavailable) as exc:
+        log_failure("GEMINI_NOT_CONFIGURED" if isinstance(exc, GeminiNotConfigured) else "GEMINI_UNAVAILABLE", exc)
         warnings.append(str(exc))
         return AnalystResponse(
             **common, status="unavailable", citations=citations,
@@ -143,6 +147,8 @@ def what_if(
     except IntegrationPending as exc:
         raise api_error(501, "QUANT_INTEGRATION_PENDING", str(exc)) from exc
     except ProviderUnavailable as exc:
+        log_failure("PROVIDER_UNAVAILABLE", exc)
         raise api_error(502, "PROVIDER_UNAVAILABLE", "What-if provider is unavailable.") from exc
     except Exception as exc:
+        log_failure("PROVIDER_UNAVAILABLE", exc)
         raise api_error(502, "PROVIDER_UNAVAILABLE", "What-if provider is unavailable.") from exc

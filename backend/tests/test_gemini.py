@@ -36,7 +36,7 @@ def settings(**overrides):
 
 
 def test_structured_answer_uses_backend_values_and_selected_tools():
-    raw = json.dumps({"answer": "Demo NVDA contributes 41% of volatility.",
+    raw = json.dumps({"explanation": "Demo NVDA is the largest risk contributor.",
                       "cited_fields": ["risk_contribution.NVDA", "risk_contribution.NVDA"]})
     client = FakeClient(response_with_text(raw))
     constructor_options = {}
@@ -53,6 +53,7 @@ def test_structured_answer_uses_backend_values_and_selected_tools():
     assert len(result["citations"]) == 1
     assert result["grounding_text"] == raw
     assert result["sources"] == []
+    assert "41.0%" in result["answer"]
     call = client.models.generate_content.call_args.kwargs
     assert len(call["config"].tools) == 1
     assert call["config"].tools[0].url_context is not None
@@ -65,9 +66,9 @@ def test_structured_answer_uses_backend_values_and_selected_tools():
 
 @pytest.mark.parametrize("raw", [
     "not JSON",
-    '{"answer":"  ","cited_fields":[]}',
-    '{"answer":"Invented metric","cited_fields":["unknown"]}',
-    '{"answer":"Missing return","cited_fields":["portfolio_return"]}',
+    '{"explanation":"  ","cited_fields":[]}',
+    '{"explanation":"Invented metric","cited_fields":["unknown"]}',
+    '{"explanation":"Missing return","cited_fields":["portfolio_return"]}',
 ])
 def test_invalid_model_output_is_rejected(raw):
     client = FakeClient(response_with_text(raw))
@@ -109,3 +110,31 @@ def test_out_of_range_source_indices_are_not_forwarded():
     evidence = extract_evidence(response)
     assert len(evidence["sources"]) == 1
     assert evidence["grounding_supports"] == []
+
+
+@pytest.mark.parametrize("explanation", [
+    "NVDA contributes 99% of risk.",
+    "NVDA contributes ninety-nine percent of risk.",
+    "NVDA contributes \u4e5d\u5341\u4e5d% of risk.",
+    "NVDA contributes \u00bd of risk.",
+])
+def test_numerical_prose_rejected_even_with_valid_metric_reference(explanation):
+    raw = json.dumps({"explanation": explanation, "cited_fields": ["risk_contribution.NVDA"]})
+    client = FakeClient(response_with_text(raw))
+    with pytest.raises(GeminiUnavailable, match="numerical prose"):
+        asyncio.run(generate_answer(
+            AnalystRequest(question="Explain risk"), demo_metrics(), settings(),
+            client_factory=lambda **_: client,
+        ))
+
+
+def test_web_tools_are_only_enabled_by_explicit_request():
+    raw = json.dumps({"explanation": "News provides context, not proof of causation.", "cited_fields": []})
+    client = FakeClient(response_with_text(raw))
+    asyncio.run(generate_answer(
+        AnalystRequest(question="Show external context", web_search=True),
+        demo_metrics(), settings(), client_factory=lambda **_: client,
+    ))
+    tools = client.models.generate_content.call_args.kwargs["config"].tools
+    assert any(tool.google_search is not None for tool in tools)
+    assert any(tool.url_context is not None for tool in tools)

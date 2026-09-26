@@ -1,5 +1,6 @@
 from contextlib import asynccontextmanager
 import sqlite3
+from uuid import uuid4
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.exception_handlers import http_exception_handler
@@ -12,6 +13,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from .config import Settings, get_settings
 from .gemini_service import GeminiNotConfigured, GeminiUnavailable, generate_answer, metric_summary
 from .api_v1 import router as v1_router
+from .observability import log_failure, request_id_context
 from .storage import PortfolioStore
 from .providers import (
     IntegrationPending,
@@ -46,12 +48,35 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     application.dependency_overrides[get_settings] = lambda: settings
     application.include_router(v1_router)
+
+    @application.middleware("http")
+    async def correlate_request(request: Request, call_next):
+        request_id = uuid4().hex
+        request.state.request_id = request_id
+        token = request_id_context.set(request_id)
+        try:
+            try:
+                response = await call_next(request)
+            except Exception as exc:
+                log_failure("INTERNAL_ERROR", exc)
+                error = {"code": "INTERNAL_ERROR", "message": "An internal error occurred.",
+                         "request_id": request_id}
+                response = JSONResponse(
+                    {"error" if request.url.path.startswith("/api/v1/") else "detail": error},
+                    status_code=500,
+                )
+            response.headers["X-Request-ID"] = request_id
+            return response
+        finally:
+            request_id_context.reset(token)
+
     application.add_middleware(
         CORSMiddleware,
         allow_origins=[item.strip() for item in settings.cors_origins.split(",") if item.strip()],
         allow_credentials=False,
         allow_methods=["GET", "POST"],
         allow_headers=["Content-Type"],
+        expose_headers=["X-Request-ID"],
     )
 
     @application.exception_handler(StarletteHTTPException)
@@ -60,6 +85,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             error = exc.detail if isinstance(exc.detail, dict) else {
                 "code": f"HTTP_{exc.status_code}", "message": str(exc.detail)
             }
+            error = {**error, "request_id": request.state.request_id}
             return JSONResponse({"error": error}, status_code=exc.status_code, headers=exc.headers)
         return await http_exception_handler(request, exc)
 
@@ -71,14 +97,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if request.url.path.startswith("/api/v1/"):
             return JSONResponse(
                 {"error": {"code": "INVALID_INPUT", "message": "Request validation failed.",
-                           "details": details}},
+                           "details": details, "request_id": request.state.request_id}},
                 status_code=422,
             )
         return JSONResponse({"detail": details}, status_code=422)
 
     @application.exception_handler(sqlite3.Error)
     async def storage_error(request: Request, exc: sqlite3.Error):
-        error = {"code": "STORAGE_UNAVAILABLE", "message": "Local portfolio storage is unavailable."}
+        log_failure("STORAGE_UNAVAILABLE", exc)
+        error = {"code": "STORAGE_UNAVAILABLE", "message": "Local portfolio storage is unavailable.",
+                 "request_id": request.state.request_id}
         return JSONResponse(
             {"error" if request.url.path.startswith("/api/v1/") else "detail": error}, status_code=503
         )
@@ -90,6 +118,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "analyst_mode": settings.analyst_mode,
             "gemini_configured": settings.has_gemini_key,
             "quant_integration": "demo_fixture",
+            "data_mode": "demo",
+            "storage_backend": "sqlite",
+            "authentication_enabled": False,
         }
 
     def read_metrics(portfolio_id: str, provider: QuantProvider) -> AnalyticsSnapshot:
@@ -126,11 +157,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         try:
             output = await generate_answer(request, metrics, settings)
         except GeminiNotConfigured as exc:
+            log_failure("GEMINI_NOT_CONFIGURED", exc)
             raise HTTPException(
                 status_code=503,
                 detail={"code": "gemini_not_configured", "message": str(exc)},
             )
         except GeminiUnavailable as exc:
+            log_failure("GEMINI_UNAVAILABLE", exc)
             raise HTTPException(
                 status_code=502,
                 detail={"code": "gemini_unavailable", "message": str(exc)},

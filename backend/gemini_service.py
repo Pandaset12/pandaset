@@ -1,5 +1,6 @@
 import asyncio
 import json
+import re
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -41,6 +42,39 @@ def resolve_citations(fields: list[str], metrics: AnalyticsSnapshot) -> list[Met
     if any(field not in catalog for field in fields):
         raise GeminiUnavailable("Gemini cited a metric that is not present in this analysis.")
     return [MetricCitation(field=field, value=catalog[field]) for field in dict.fromkeys(fields)]
+
+
+# Qualitative prose is separate from the server-rendered numerical facts.
+# This catches numeric literals and common English number words, not every
+# possible misleading quantitative claim in natural language.
+NUMBER_WORDS = re.compile(
+    r"\b(?:zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|"
+    r"thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|"
+    r"forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand|million|billion|"
+    r"trillion|half|quarter|twice|double|triple)\b", re.IGNORECASE
+)
+
+
+def render_grounded_answer(
+    draft: GroundedAnswer, metrics: AnalyticsSnapshot,
+) -> tuple[str, list[MetricCitation]]:
+    explanation = draft.explanation
+    if any(char.isnumeric() for char in explanation) or NUMBER_WORDS.search(explanation):
+        raise GeminiUnavailable("Gemini returned numerical prose instead of metric references.")
+    citations = resolve_citations(draft.cited_fields, metrics)
+    labels = {
+        "portfolio_volatility": "Annualized portfolio volatility",
+        "portfolio_return": "Portfolio return over the analysis window",
+    }
+    for symbol in metrics.weights:
+        labels[f"weights.{symbol}"] = f"{symbol} capital weight"
+        labels[f"risk_contribution.{symbol}"] = f"{symbol} share of portfolio volatility"
+        labels[f"asset_volatility.{symbol}"] = f"{symbol} annualized volatility"
+    facts = [f"- {labels[item.field]}: {item.value:.1%}" for item in citations]
+    answer = explanation + ("\n\nSnapshot metrics:\n" + "\n".join(facts) if facts else "")
+    if metrics.data_mode == "demo":
+        answer = "FICTIONAL DEMO DATA. " + answer
+    return answer, citations
 
 
 def metric_summary(metrics: AnalyticsSnapshot) -> tuple[str, list[MetricCitation]]:
@@ -137,7 +171,7 @@ async def generate_answer(
                 )
         raw_text = response.text or ""
         draft = GroundedAnswer.model_validate_json(raw_text)
-        citations = resolve_citations(draft.cited_fields, metrics)
+        answer, citations = render_grounded_answer(draft, metrics)
         evidence = extract_evidence(response)
     except TimeoutError as exc:
         raise GeminiUnavailable("Gemini exceeded the request time limit.") from exc
@@ -149,7 +183,7 @@ async def generate_answer(
             "Gemini request failed. Check the model, API key, quota, and connectivity."
         ) from exc
     return {
-        "answer": draft.answer,
+        "answer": answer,
         "citations": citations,
         "grounding_text": raw_text,
         **evidence,
