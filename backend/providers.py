@@ -10,10 +10,6 @@ from quant_engine import analyze_portfolio, compare_portfolios
 from .schemas import AnalysisSeries, AnalyticsSnapshot, MarketHistoryResponse, Portfolio, WhatIfRequest
 
 
-class PortfolioNotFound(Exception):
-    pass
-
-
 class IntegrationPending(Exception):
     pass
 
@@ -35,22 +31,15 @@ def demo_metrics() -> AnalyticsSnapshot:
 class QuantProvider(Protocol):
     """Synchronous analytics boundary, called in FastAPI's thread pool."""
 
-    def get_analytics(self, portfolio_id: str) -> AnalyticsSnapshot: ...
-
     def analyze(self, portfolio: Portfolio) -> AnalyticsSnapshot: ...
 
-    def simulate(self, request: WhatIfRequest) -> dict: ...
+    def simulate(self, request: WhatIfRequest, portfolio: Portfolio) -> dict: ...
 
     def market_history(self, symbols: list[str], lookback_days: int) -> MarketHistoryResponse: ...
 
 
 class DemoQuantProvider:
     """Precomputed fictional fixture; this does not calculate financial risk."""
-
-    def get_analytics(self, portfolio_id: str) -> AnalyticsSnapshot:
-        if portfolio_id != "demo":
-            raise PortfolioNotFound(portfolio_id)
-        return demo_metrics()
 
     def analyze(self, portfolio: Portfolio) -> AnalyticsSnapshot:
         metrics = demo_metrics()
@@ -62,7 +51,7 @@ class DemoQuantProvider:
         metrics.portfolio_id = portfolio.portfolio_id
         return metrics
 
-    def simulate(self, request: WhatIfRequest) -> dict:
+    def simulate(self, request: WhatIfRequest, portfolio: Portfolio) -> dict:
         raise IntegrationPending(
             "The real quant engine is not connected yet. "
             "Proposed weights were validated, but no risk comparison was calculated."
@@ -159,21 +148,12 @@ class EngineQuantProvider:
         self.store = store
         self.prices = prices if prices is not None else SamplePriceProvider()
 
-    def _portfolio(self, portfolio_id):
-        portfolio = self.store.get(portfolio_id)
-        if portfolio is None:
-            raise PortfolioNotFound(portfolio_id)
-        return portfolio
-
-    def get_analytics(self, portfolio_id: str) -> AnalyticsSnapshot:
-        return self.analyze(self._portfolio(portfolio_id))
-
     def analyze(self, portfolio: Portfolio) -> AnalyticsSnapshot:
         prices = self.prices.prices(sorted(portfolio.weights))
         return map_quant_report(analyze_portfolio(prices, portfolio.weights), portfolio.portfolio_id)
 
-    def simulate(self, request: WhatIfRequest) -> dict:
-        baseline = self._portfolio(request.portfolio_id).weights
+    def simulate(self, request: WhatIfRequest, portfolio: Portfolio) -> dict:
+        baseline = portfolio.weights
         symbols = sorted(set(baseline) | set(request.proposed_weights))
         prices = self.prices.prices(symbols)
         result = compare_portfolios(

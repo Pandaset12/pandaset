@@ -226,3 +226,6 @@ ephemeral filesystem survives rebuilds or is shared across replicas. Confirm a
 single-instance persistent volume or complete the team's MongoDB adapter before
 claiming durable shared persistence. See the rollout gates in
 [INTEGRATION.md](INTEGRATION.md).
+# Investor ownership
+
+Set `SUPABASE_URL` and `SUPABASE_ANON_KEY` in `backend/.env` to the same project used by frontend authentication. The backend validates Bearer tokens through Supabase Auth. New portfolios are owned by the authenticated user; legacy SQLite rows are retained with no owner and are not returned to investors. `/api/v1/portfolios` lists only the caller's portfolios. No Supabase service role secret is needed.

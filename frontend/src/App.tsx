@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import type { Session } from "@supabase/supabase-js";
 import {
   ArrowUpRight,
   ChatBubbleLeftRight,
@@ -9,8 +10,11 @@ import {
 } from "./components/icons";
 import { assets, initialWeights } from "../../quant/data";
 import {
-  analyzePortfolio,
+  analyzeExistingPortfolio,
+  createPortfolio,
   createRequestGuard,
+  listPortfolios,
+  setApiAccessToken,
   type AnalysisResponse,
   type Portfolio,
 } from "./api/portfolio";
@@ -21,6 +25,7 @@ import { MethodologyModal } from "./components/MethodologyModal";
 import { Analyst } from "./components/Analyst";
 import { AuthScreen } from "./components/AuthScreen";
 import { AuthBoundary } from "./components/AuthBoundary";
+import { PortfolioOnboarding } from "./components/onboarding/PortfolioOnboarding";
 import {
   AIWorkflowModal,
   type AIWorkflowAction,
@@ -47,8 +52,16 @@ function Application({ onSignOut }: { onSignOut: () => Promise<void> }) {
   const [aiWorkflow, setAiWorkflow] = useState<AIWorkflowAction | null>(null);
   const [toast, setToast] = useState("");
   const [active, setActive] = useState<ActiveAnalysis | null>(null);
-  const [analysisLoading, setAnalysisLoading] = useState(true);
+  const [analysisLoading, setAnalysisLoading] = useState(false);
   const [analysisError, setAnalysisError] = useState("");
+  const [portfolioState, setPortfolioState] = useState<
+    "loading" | "empty" | "error" | "ready"
+  >("loading");
+  const [selectedPortfolio, setSelectedPortfolio] = useState<Portfolio | null>(
+    null,
+  );
+  const [portfolios, setPortfolios] = useState<Portfolio[]>([]);
+  const [portfolioMenuOpen, setPortfolioMenuOpen] = useState(false);
   const analysisRequest = useRef(createRequestGuard());
 
   useEffect(() => {
@@ -65,12 +78,12 @@ function Application({ onSignOut }: { onSignOut: () => Promise<void> }) {
     return () => clearTimeout(id);
   }, [toast]);
 
-  async function loadAnalysis(nextWeights: number[]) {
+  async function loadAnalysis(portfolio: Portfolio) {
     const request = analysisRequest.current.begin();
     setAnalysisLoading(true);
     setAnalysisError("");
     try {
-      const result = await analyzePortfolio(nextWeights);
+      const result = await analyzeExistingPortfolio(portfolio);
       if (!analysisRequest.current.isCurrent(request)) return false;
       setActive(result);
       setWeights(weightsFromAnalysis(result.analysis));
@@ -89,8 +102,36 @@ function Application({ onSignOut }: { onSignOut: () => Promise<void> }) {
     }
   }
 
+  async function loadPortfolios() {
+    setPortfolioState("loading");
+    try {
+      const portfolios = await listPortfolios();
+      setPortfolios(portfolios);
+      if (!portfolios.length) setPortfolioState("empty");
+      else {
+        setSelectedPortfolio(portfolios[0]);
+        setPortfolioState("ready");
+        void loadAnalysis(portfolios[0]);
+      }
+    } catch {
+      setPortfolioState("error");
+    }
+  }
+
+  function selectPortfolio(portfolio: Portfolio) {
+    setPortfolioMenuOpen(false);
+    if (portfolio.portfolio_id === selectedPortfolio?.portfolio_id) return;
+    setSelectedPortfolio(portfolio);
+    setActive(null);
+    setAnalysisError("");
+    setEdit(false);
+    setAnalyst(null);
+    setAiWorkflow(null);
+    void loadAnalysis(portfolio);
+  }
+
   useEffect(() => {
-    void loadAnalysis(initialWeights);
+    void loadPortfolios();
     return () => {
       analysisRequest.current.invalidate();
     };
@@ -100,12 +141,29 @@ function Application({ onSignOut }: { onSignOut: () => Promise<void> }) {
     nextWeights: number[],
     source: "edit" | "scenario" = "edit",
   ) {
-    if (!(await loadAnalysis(nextWeights))) return false;
+    try {
+      const created = await createPortfolio({
+        name: `${active?.portfolio.name ?? "Portfolio"} ${source === "scenario" ? "scenario" : "copy"}`,
+        holdings: assets.flatMap((asset, index) =>
+          nextWeights[index]
+            ? [{ symbol: asset.symbol, weight: nextWeights[index] / 100 }]
+            : [],
+        ),
+      });
+      setPortfolios((current) => [created, ...current]);
+      if (!(await loadAnalysis(created))) return false;
+      setSelectedPortfolio(created);
+    } catch (error) {
+      setAnalysisError(
+        error instanceof Error ? error.message : "Could not save portfolio.",
+      );
+      return false;
+    }
     setEdit(false);
     setToast(
       source === "scenario"
         ? "Scenario saved as the active sample portfolio."
-        : "Sample portfolio updated.",
+        : "Allocation saved as a new sample portfolio.",
     );
     return true;
   }
@@ -134,6 +192,37 @@ function Application({ onSignOut }: { onSignOut: () => Promise<void> }) {
       })
     : "Unavailable";
 
+  if (portfolioState !== "ready")
+    return (
+      <>
+        <button
+          className="text-button sign-out-button"
+          onClick={() => void onSignOut()}
+        >
+          Sign out
+        </button>
+        <PortfolioOnboarding
+          loadState={portfolioState}
+          onRetryLoad={() => void loadPortfolios()}
+          searchTickers={async (query) =>
+            assets
+              .filter((asset) =>
+                asset.symbol.toLowerCase().includes(query.toLowerCase()),
+              )
+              .map((asset) => ({ symbol: asset.symbol, name: asset.name }))
+          }
+          createPortfolio={(input, options) =>
+            createPortfolio(input, options.signal)
+          }
+          onOpenPortfolio={(portfolio) => {
+            setSelectedPortfolio(portfolio);
+            setPortfolios([portfolio]);
+            setPortfolioState("ready");
+            void loadAnalysis(portfolio);
+          }}
+        />
+      </>
+    );
   return (
     <>
       <a
@@ -180,15 +269,47 @@ function Application({ onSignOut }: { onSignOut: () => Promise<void> }) {
       </header>
       <div className="workspace-bar">
         <div>
-          <button
-            className="portfolio-selector"
-            onClick={() => setEdit(true)}
-            disabled={!active || analysisLoading}
+          <div
+            className="portfolio-picker"
+            onKeyDown={(event) => {
+              if (event.key === "Escape") setPortfolioMenuOpen(false);
+            }}
           >
-            <span className="portfolio-initial">L</span>
-            {active?.portfolio.name ?? "Long-term portfolio"}
-            <ChevronDown size={14} />
-          </button>
+            <button
+              className="portfolio-selector"
+              aria-expanded={portfolioMenuOpen}
+              aria-controls="saved-portfolios"
+              onClick={() => setPortfolioMenuOpen((open) => !open)}
+            >
+              <span className="portfolio-initial">
+                {selectedPortfolio?.name.slice(0, 1).toUpperCase() ?? "P"}
+              </span>
+              {selectedPortfolio?.name ?? "Choose portfolio"}
+              <ChevronDown size={14} />
+            </button>
+            {portfolioMenuOpen && (
+              <div
+                id="saved-portfolios"
+                className="portfolio-menu"
+                aria-label="Saved portfolios"
+              >
+                {portfolios.map((portfolio) => (
+                  <button
+                    key={portfolio.portfolio_id}
+                    type="button"
+                    aria-current={
+                      portfolio.portfolio_id === selectedPortfolio?.portfolio_id
+                        ? "true"
+                        : undefined
+                    }
+                    onClick={() => selectPortfolio(portfolio)}
+                  >
+                    {portfolio.name}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           <button className="demo-badge" onClick={() => setMethod(true)}>
             {active?.analysis.data_mode === "live"
               ? "LIVE DATA"
@@ -215,7 +336,9 @@ function Application({ onSignOut }: { onSignOut: () => Promise<void> }) {
             <p>{analysisError}</p>
             <button
               className="button dark"
-              onClick={() => void loadAnalysis(initialWeights)}
+              onClick={() =>
+                selectedPortfolio && void loadAnalysis(selectedPortfolio)
+              }
               disabled={analysisLoading}
             >
               Retry analysis
@@ -278,7 +401,9 @@ function Application({ onSignOut }: { onSignOut: () => Promise<void> }) {
                 The active analysis is unchanged. {analysisError}{" "}
                 <button
                   className="text-button"
-                  onClick={() => void loadAnalysis(weights)}
+                  onClick={() =>
+                    selectedPortfolio && void loadAnalysis(selectedPortfolio)
+                  }
                 >
                   Retry
                 </button>
@@ -344,9 +469,28 @@ export default function App() {
   return (
     <ErrorBoundary>
       <AuthBoundary
-        renderDashboard={(signOut) => <Application onSignOut={signOut} />}
-        renderSignedOut={(client) => <AuthScreen client={client} />}
+        renderDashboard={(currentSession, signOut) => (
+          <AuthenticatedApplication
+            session={currentSession}
+            onSignOut={signOut}
+          />
+        )}
+        renderSignedOut={(client) => {
+          setApiAccessToken(null);
+          return <AuthScreen client={client} />;
+        }}
       />
     </ErrorBoundary>
   );
+}
+
+function AuthenticatedApplication({
+  session,
+  onSignOut,
+}: {
+  session: Session;
+  onSignOut: () => Promise<void>;
+}) {
+  setApiAccessToken(session.access_token);
+  return <Application key={session.user.id} onSignOut={onSignOut} />;
 }

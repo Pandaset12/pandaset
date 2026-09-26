@@ -92,7 +92,7 @@ export default function Overview({
       <PageHeading title="Portfolio overview">
         <button className="button subtle" onClick={onEdit}>
           <SlidersHorizontal size={16} />
-          Edit portfolio
+          Save allocation copy
         </button>
         <a className="button dark" href="#/what-if">
           Explore a what-if

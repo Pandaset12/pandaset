@@ -148,13 +148,24 @@ function allocation(weights: number[]) {
 }
 
 const requestsInFlight = new Map<string, Promise<unknown>>();
+let accessToken: string | null = null;
+let tokenVersion = 0;
+
+export function setApiAccessToken(token: string | null) {
+  if (token !== accessToken) tokenVersion += 1;
+  accessToken = token;
+}
 
 function request<T>(url: string, init: RequestInit = {}): Promise<T> {
-  const key = `${init.method ?? "GET"} ${url} ${typeof init.body === "string" ? init.body : ""}`;
+  const token = accessToken;
+  const protectedRoute = url.startsWith("/api/v1/portfolios");
+  const headers = new Headers(init.headers);
+  if (protectedRoute && token) headers.set("Authorization", `Bearer ${token}`);
+  const key = `${protectedRoute ? tokenVersion : "public"} ${init.method ?? "GET"} ${url} ${typeof init.body === "string" ? init.body : ""}`;
   const existing = requestsInFlight.get(key);
   if (existing) return existing as Promise<T>;
   const pending = (async () => {
-    const response = await fetch(url, init);
+    const response = await fetch(url, { ...init, headers });
     const payload = await response.json().catch(() => null);
     if (!response.ok) {
       const error = payload?.error;
@@ -186,6 +197,25 @@ const post = <T>(url: string, body?: object) =>
     headers: body ? { "Content-Type": "application/json" } : undefined,
     body: body ? JSON.stringify(body) : undefined,
   });
+
+export function listPortfolios() {
+  return request<Portfolio[]>("/api/v1/portfolios");
+}
+
+export function createPortfolio(input: PortfolioInput, signal?: AbortSignal) {
+  return request<Portfolio>("/api/v1/portfolios", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+    signal,
+  });
+}
+
+export function analyzeExistingPortfolio(portfolio: Portfolio) {
+  return post<AnalysisResponse>(
+    `/api/v1/portfolios/${encodeURIComponent(portfolio.portfolio_id)}/analysis`,
+  ).then((analysis) => ({ portfolio, analysis }));
+}
 
 export async function analyzePortfolio(weights: number[]) {
   const portfolio = await post<Portfolio>(

@@ -22,11 +22,13 @@ export function EditPortfolio({
   const valid = validateWeights(draft);
   return (
     <Modal
-      title="Edit your sample portfolio"
+      title="Save a new sample portfolio"
       onClose={busy ? () => undefined : onClose}
     >
       <p className="modal-description">
-        Set the allocation for each asset. Your weights should add up to 100%.
+        Set the allocation for each sample asset. Saving creates a new
+        portfolio; your current portfolio stays available in the selector.
+        Weights should add up to 100%.
       </p>
       <div className="edit-weights">
         {assets.map((a, i) => (
@@ -79,7 +81,7 @@ export function EditPortfolio({
           disabled={!valid || busy}
           onClick={() => void onSave(draft)}
         >
-          {busy ? "Saving…" : "Update portfolio"}
+          {busy ? "Saving…" : "Save as new portfolio"}
           <Check size={16} />
         </button>
       </div>
@@ -89,7 +91,7 @@ export function EditPortfolio({
         </p>
       )}
       <p className="small-text muted">
-        Changes stay in this session. Reloading restores the example portfolio.
+        The new portfolio is saved to your account.
       </p>
     </Modal>
   );

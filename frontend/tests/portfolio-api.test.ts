@@ -9,11 +9,28 @@ import {
   createRequestGuard,
   getMarketHistory,
   portfolioInput,
+  listPortfolios,
+  setApiAccessToken,
 } from "../src/api/portfolio";
 
 const originalFetch = globalThis.fetch;
 after(() => {
   globalThis.fetch = originalFetch;
+  setApiAccessToken(null);
+});
+
+test("portfolio requests use the current access token", async () => {
+  const seen: string[] = [];
+  stubFetch((_url, init) => {
+    seen.push(new Headers(init?.headers).get("Authorization") ?? "");
+    return [];
+  });
+  setApiAccessToken("first-token");
+  await listPortfolios();
+  setApiAccessToken("refreshed-token");
+  await listPortfolios();
+  setApiAccessToken(null);
+  assert.deepEqual(seen, ["Bearer first-token", "Bearer refreshed-token"]);
 });
 
 function stubFetch(handler: (url: string, init?: RequestInit) => unknown) {

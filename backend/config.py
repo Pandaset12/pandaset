@@ -20,6 +20,12 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:3000,http://localhost:5173"
     storage_path: Path = Path(__file__).parent / "data" / "portfoliolens.sqlite3"
     gemini_timeout_seconds: float = Field(default=45, gt=0, le=120)
+    supabase_url: str | None = None
+    supabase_anon_key: SecretStr | None = None
+
+    @property
+    def authentication_enabled(self) -> bool:
+        return bool(self.supabase_url and self.supabase_anon_key and self.supabase_anon_key.get_secret_value())
 
     @property
     def has_gemini_key(self) -> bool:
