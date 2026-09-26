@@ -2,9 +2,6 @@
 
 **A clearer view of what you own.** PandaSet is an interactive portfolio research demo built with React, TypeScript, and Vite. Explore performance, risk, company research, and allocation scenarios through one shared sample portfolio.
 
-> [!IMPORTANT]
-> PandaSet uses illustrative prices, returns, and portfolio values. It does not connect to live markets, brokerage accounts, news feeds, or an AI service.
-
 ## Explore the app
 
 | Workspace           | What you can do                                                                                      |
