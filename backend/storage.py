@@ -84,6 +84,7 @@ class PortfolioStore:
 
     def update(self, portfolio_id: str, owner_id: str, request: PortfolioInput) -> Portfolio | None:
         with self.connection() as connection:
+            connection.execute("BEGIN IMMEDIATE")
             row = connection.execute(
                 "SELECT payload FROM portfolios WHERE portfolio_id = ? AND owner_id = ?",
                 (portfolio_id, owner_id),
@@ -114,6 +115,7 @@ class PortfolioStore:
         analysis_id = "analysis_" + uuid4().hex
         created_at = datetime.now(timezone.utc)
         with self.connection() as connection:
+            connection.execute("BEGIN IMMEDIATE")
             row = connection.execute(
                 "SELECT payload FROM portfolios WHERE portfolio_id = ? AND owner_id = ?",
                 (metrics.portfolio_id, owner_id),

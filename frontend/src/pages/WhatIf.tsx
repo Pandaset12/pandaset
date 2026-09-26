@@ -24,6 +24,8 @@ import {
   normalizeSymbol,
 } from "../components/onboarding/portfolioDraft";
 
+const MAX_COMBINED_SYMBOLS = 8;
+
 export default function WhatIf({
   analysis,
   holdings,
@@ -72,6 +74,11 @@ export default function WhatIf({
     0,
   );
   const symbols = scenarioAssets.map(({ symbol }) => symbol);
+  const combinedSymbols = new Set([
+    ...holdings.map(({ symbol }) => symbol),
+    ...symbols,
+  ]);
+  const unionLimitReached = combinedSymbols.size >= MAX_COMBINED_SYMBOLS;
   const valid = parsePercentageDraft(draftText) !== null;
   const changed = draft.some((value, index) => value !== (weights[index] ?? 0));
   const stale =
@@ -262,7 +269,12 @@ export default function WhatIf({
             onSubmit={(event) => {
               event.preventDefault();
               const symbol = normalizeSymbol(newSymbol);
-              if (!isValidSymbol(symbol) || symbols.includes(symbol)) return;
+              if (
+                !isValidSymbol(symbol) ||
+                symbols.includes(symbol) ||
+                (unionLimitReached && !combinedSymbols.has(symbol))
+              )
+                return;
               setScenarioAssets((current) => [
                 ...current,
                 workspaceAsset(symbol),
@@ -281,10 +293,20 @@ export default function WhatIf({
               onChange={(event) => setNewSymbol(event.target.value)}
               aria-label="Ticker to add"
             />
-            <button type="submit" className="text-button">
+            <button
+              type="submit"
+              className="text-button"
+              disabled={unionLimitReached}
+            >
               Add holding
             </button>
           </form>
+          {unionLimitReached && (
+            <p className="small-text muted" role="status">
+              What-if supports at most eight distinct symbols across the saved
+              portfolio and proposed allocation.
+            </p>
+          )}
           <div
             className={`allocation-total ${valid ? "valid" : "invalid"}`}
             aria-live="polite"

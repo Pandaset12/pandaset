@@ -32,7 +32,17 @@ export function workspaceAssets(portfolio: Portfolio): Asset[] {
 }
 
 export function portfolioPercentages(portfolio: Portfolio): number[] {
-  return portfolio.holdings.map(({ weight }) => weight * 100);
+  const exact = portfolio.holdings.map(
+    ({ weight }) => weight * FULL_ALLOCATION,
+  );
+  const units = exact.map(Math.floor);
+  let remaining =
+    FULL_ALLOCATION - units.reduce((sum, value) => sum + value, 0);
+  const order = exact
+    .map((_, index) => index)
+    .sort((a, b) => exact[b] - units[b] - (exact[a] - units[a]) || a - b);
+  for (let index = 0; index < remaining; index += 1) units[order[index]] += 1;
+  return units.map((value) => value / PERCENT_SCALE);
 }
 
 export function parsePercentageDraft(values: string[]): number[] | null {

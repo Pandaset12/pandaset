@@ -16,6 +16,7 @@ from .api_v1 import get_store, require_portfolio, router as v1_router
 from .auth import current_user_id
 from .observability import log_failure, request_id_context
 from .storage import PortfolioStore
+from .price_cache import RecentPriceCache
 from .providers import (
     IntegrationPending,
     ProviderUnavailable,
@@ -40,6 +41,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         store = await run_in_threadpool(PortfolioStore, settings.storage_path)
         await run_in_threadpool(store.seed_demo, demo_metrics())
         app.state.store = store
+        app.state.price_cache = RecentPriceCache()
         yield
 
     application = FastAPI(

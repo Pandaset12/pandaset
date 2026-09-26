@@ -8,6 +8,7 @@ import pandas as pd
 from quant_engine import analyze_portfolio, compare_portfolios
 
 from .schemas import AnalysisSeries, AnalyticsSnapshot, MarketHistoryResponse, Portfolio, WhatIfRequest
+from .price_cache import CachedPriceProvider, RecentPriceCache
 
 
 class IntegrationPending(Exception):
@@ -64,7 +65,7 @@ class DemoQuantProvider:
 class SamplePriceProvider:
     """Existing fictional daily-price fixture; never live market data."""
 
-    def prices(self, symbols: list[str]) -> pd.DataFrame:
+    def prices(self, symbols: list[str], lookback_days: int = 252) -> pd.DataFrame:
         path = Path(__file__).parent / "drafts" / "data_pipeline" / "sample_prices.json"
         fixture = json.loads(path.read_text("utf-8"))
         missing = set(symbols) - fixture["prices"].keys()
@@ -77,7 +78,7 @@ class SamplePriceProvider:
 
 
 def build_market_history(prices_provider, symbols: list[str], lookback_days: int) -> MarketHistoryResponse:
-    frame = prices_provider.prices(symbols).tail(lookback_days + 1)
+    frame = prices_provider.prices(symbols, lookback_days=lookback_days).tail(lookback_days + 1)
     if len(frame) < 2:
         raise ProviderUnavailable("At least two dated prices are required for market history.")
     series = {
@@ -176,4 +177,7 @@ class EngineQuantProvider:
 
 
 def get_provider(request: Request) -> QuantProvider:
-    return EngineQuantProvider(request.app.state.store)
+    return EngineQuantProvider(
+        request.app.state.store,
+        prices=CachedPriceProvider(SamplePriceProvider(), request.app.state.price_cache),
+    )

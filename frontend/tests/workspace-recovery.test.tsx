@@ -223,6 +223,52 @@ test("a single-holding SPY scenario can add a second ticker", () => {
   cleanup();
 });
 
+test("What-if limits the saved and proposed symbol union to eight", () => {
+  const symbols = ["SPY", "TLT", "AAPL", "JPM", "NVDA", "VTI", "GLD", "MSFT"];
+  const saved = {
+    portfolio_id: "eight",
+    name: "Eight",
+    created_at: "2026-09-26T00:00:00Z",
+    holdings: symbols.map((symbol) => ({ symbol, weight: 0.125 })),
+  };
+  render(
+    createElement(WhatIf, {
+      holdings: workspaceAssets(saved),
+      weights: portfolioPercentages(saved),
+      analysis: {
+        portfolio_id: saved.portfolio_id,
+        risk_contribution: {},
+        portfolio_volatility: 0.1,
+      } as never,
+      onApply: async () => true,
+      onExplainScenario: () => {},
+      query: new URLSearchParams(),
+    }),
+  );
+  const add = screen.getByRole("button", {
+    name: "Add holding",
+  }) as HTMLButtonElement;
+  assert.equal(add.disabled, true);
+  assert.match(
+    screen.getByRole("status").textContent ?? "",
+    /eight distinct symbols across the saved portfolio and proposed allocation/,
+  );
+  fireEvent.change(
+    screen.getByRole("textbox", { name: "SPY proposed allocation" }),
+    { target: { value: "0" } },
+  );
+  assert.equal(add.disabled, true);
+  fireEvent.change(screen.getByRole("textbox", { name: "Ticker to add" }), {
+    target: { value: "TSLA" },
+  });
+  fireEvent.submit(add.closest("form")!);
+  assert.equal(
+    screen.queryByRole("textbox", { name: "TSLA proposed allocation" }),
+    null,
+  );
+  cleanup();
+});
+
 test("Edit adds unique holdings, keeps intermediate percentage text, validates 100%, and removes holdings", async () => {
   const saved = {
     portfolio_id: "spy",

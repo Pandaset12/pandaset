@@ -1,4 +1,6 @@
 import sqlite3
+from contextlib import contextmanager
+from threading import Event, Thread, current_thread
 from uuid import uuid4
 
 import pytest
@@ -6,7 +8,8 @@ from fastapi.testclient import TestClient
 
 from backend.config import Settings
 from backend.main import create_app
-from backend.storage import PortfolioStore, StalePortfolio
+from backend.storage import PortfolioStore, SnapshotNotFound, StalePortfolio
+from backend.schemas import PortfolioInput
 
 
 @pytest.fixture
@@ -117,3 +120,84 @@ def test_update_preserves_identity_and_owner_and_invalidates_old_analyses(client
     refreshed = api.post(path + "/analysis", headers=owner)
     assert refreshed.status_code == 200, refreshed.text
     assert refreshed.json()["weights"] == {"TLT": 1.0}
+
+
+def test_preflight_history_is_reused_by_following_analysis(client, monkeypatch):
+    from backend.providers import SamplePriceProvider
+
+    api, _ = client
+    calls = []
+    original = SamplePriceProvider.prices
+
+    def counted(self, symbols, lookback_days=252):
+        calls.append((tuple(symbols), lookback_days))
+        return original(self, symbols, lookback_days)
+
+    monkeypatch.setattr(SamplePriceProvider, "prices", counted)
+    headers = {"Authorization": "Bearer owner"}
+    for symbol in ("SPY", "TLT"):
+        assert api.get("/api/v1/market-history", params={"symbols": [symbol], "lookback_days": 2}).status_code == 200
+    created = api.post("/api/v1/portfolios", json={"name": "Cached", "holdings": [
+        {"symbol": "SPY", "weight": 0.5}, {"symbol": "TLT", "weight": 0.5},
+    ]}, headers=headers)
+    assert created.status_code == 201
+    analysis = api.post(f"/api/v1/portfolios/{created.json()['portfolio_id']}/analysis", headers=headers)
+    assert analysis.status_code == 200, analysis.text
+    assert calls == [(("SPY",), 252), (("TLT",), 252)]
+
+
+def test_concurrent_update_cannot_leave_an_old_analysis_after_commit(client, monkeypatch):
+    api, users = client
+    headers = {"Authorization": "Bearer owner"}
+    created = api.post("/api/v1/portfolios", json={"name": "Before", "holdings": [
+        {"symbol": "SPY", "weight": 1.0},
+    ]}, headers=headers).json()
+    portfolio_id = created["portfolio_id"]
+    response = api.post(f"/api/v1/portfolios/{portfolio_id}/analysis", headers=headers)
+    assert response.status_code == 200
+    metrics, _ = api.app.state.store.get_analysis(portfolio_id, response.json()["analysis_id"])
+    store = api.app.state.store
+    original_connection = store.connection
+    selected = Event()
+    resume = Event()
+    update_started = Event()
+    outcome = {}
+
+    @contextmanager
+    def paused_connection():
+        with original_connection() as connection:
+            class ConnectionProxy:
+                def execute(self, sql, parameters=()):
+                    result = connection.execute(sql, parameters)
+                    if current_thread().name == "save-old-analysis" and sql.startswith("SELECT payload FROM portfolios"):
+                        selected.set()
+                        assert resume.wait(5)
+                    return result
+
+            yield ConnectionProxy()
+
+    monkeypatch.setattr(store, "connection", paused_connection)
+
+    def save_old():
+        outcome["analysis"] = store.save_analysis(metrics, users["owner"])[0]
+
+    def update():
+        update_started.set()
+        outcome["updated"] = store.update(portfolio_id, users["owner"], PortfolioInput(
+            name="After", holdings=[{"symbol": "TLT", "weight": 1.0}],
+        ))
+
+    saver = Thread(target=save_old, name="save-old-analysis")
+    updater = Thread(target=update, name="update-portfolio")
+    saver.start()
+    assert selected.wait(5)
+    updater.start()
+    assert update_started.wait(5)
+    assert updater.is_alive()
+    resume.set()
+    saver.join(5)
+    updater.join(5)
+    assert not saver.is_alive() and not updater.is_alive()
+    assert outcome["updated"].weights == {"TLT": 1.0}
+    with pytest.raises(SnapshotNotFound):
+        store.get_analysis(portfolio_id, outcome["analysis"])

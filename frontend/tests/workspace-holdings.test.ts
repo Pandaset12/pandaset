@@ -6,6 +6,7 @@ import {
   portfolioPercentages,
   validPercentages,
   workspaceAssets,
+  parsePercentageDraft,
 } from "../src/workspace/holdings";
 
 function portfolio(holdings: Portfolio["holdings"]): Portfolio {
@@ -41,6 +42,29 @@ test("fractional backend weights stay exact and immediately valid", () => {
   assert.deepEqual(
     portfolioFromPercentages("copy", ["SPY", "TLT"], percentages).holdings,
     saved.holdings,
+  );
+});
+
+test("thirds reconcile to editable six-decimal percentages totaling exactly 100", () => {
+  const symbols = ["SPY", "TLT", "AAPL"];
+  const saved = portfolio(symbols.map((symbol) => ({ symbol, weight: 1 / 3 })));
+  const percentages = portfolioPercentages(saved);
+  assert.equal(
+    percentages.reduce((sum, value) => sum + value, 0),
+    100,
+  );
+  assert.ok(percentages.every((value) => /^\d+\.\d{6}$/.test(String(value))));
+  assert.deepEqual(parsePercentageDraft(percentages.map(String)), percentages);
+  const updated = portfolioFromPercentages("thirds", symbols, percentages);
+  assert.ok(
+    Math.abs(
+      updated.holdings.reduce((sum, holding) => sum + holding.weight, 0) - 1,
+    ) < 1e-10,
+  );
+  assert.ok(
+    updated.holdings.every(
+      (holding) => Math.abs(holding.weight - 1 / 3) < 1e-8,
+    ),
   );
 });
 
