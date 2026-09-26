@@ -1,6 +1,8 @@
 import asyncio
 import json
+import logging
 import re
+from collections.abc import Callable
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Literal, Type
@@ -17,6 +19,9 @@ from .schemas import (
     MetricCitation,
     ResearchSummaryDraft,
 )
+
+
+logger = logging.getLogger("portfoliolens")
 
 
 @lru_cache(maxsize=1)
@@ -321,17 +326,16 @@ def extract_evidence(response: Any) -> dict[str, Any]:
     return result
 
 
-async def _generate_structured(
+async def _generate_structured_once(
     *,
     settings: Settings,
+    model: str,
     prompt: str,
     context: dict[str, Any],
     response_schema: Type[BaseModel],
     tools: list[types.Tool] | None = None,
     client_factory=None,
 ) -> tuple[BaseModel, str, dict[str, Any]]:
-    if not settings.has_gemini_key:
-        raise GeminiNotConfigured("Set GEMINI_API_KEY in backend/.env first.")
     config = types.GenerateContentConfig(
         system_instruction=prompt,
         tools=tools or None,
@@ -355,7 +359,7 @@ async def _generate_structured(
                 ),
             ).aio as client:
                 response = await client.models.generate_content(
-                    model=settings.gemini_model,
+                    model=model,
                     contents=json.dumps(context, ensure_ascii=False),
                     config=config,
                 )
@@ -376,6 +380,49 @@ async def _generate_structured(
         ) from exc
 
 
+async def _generate_structured(
+    *,
+    settings: Settings,
+    prompt: str,
+    context: dict[str, Any],
+    response_schema: Type[BaseModel],
+    tools: list[types.Tool] | None = None,
+    client_factory=None,
+    validate_result: Callable[[BaseModel, dict[str, Any]], None] | None = None,
+) -> tuple[BaseModel, str, dict[str, Any]]:
+    if not settings.has_gemini_key:
+        raise GeminiNotConfigured("Set GEMINI_API_KEY in backend/.env first.")
+    models = [settings.gemini_model]
+    fallback = settings.gemini_fallback_model.strip()
+    if fallback and fallback != settings.gemini_model:
+        models.append(fallback)
+    for index, model in enumerate(models):
+        try:
+            draft, raw_text, evidence = await _generate_structured_once(
+                settings=settings,
+                model=model,
+                prompt=prompt,
+                context=context,
+                response_schema=response_schema,
+                tools=tools,
+                client_factory=client_factory,
+            )
+            if validate_result is not None:
+                validate_result(draft, evidence)
+            return draft, raw_text, evidence
+        except GeminiUnavailable as exc:
+            if index == len(models) - 1:
+                raise
+            cause = type(exc.__cause__).__name__ if exc.__cause__ else type(exc).__name__
+            logger.warning(
+                "Gemini model %s failed (%s); trying fallback model %s",
+                model,
+                cause,
+                models[index + 1],
+            )
+    raise AssertionError("Gemini model list cannot be empty.")
+
+
 async def generate_answer(
     request: AnalystRequest,
     metrics: AnalyticsSnapshot,
@@ -394,6 +441,10 @@ async def generate_answer(
         "available_metrics": metric_catalog(metrics),
         "source_urls": [str(url) for url in request.source_urls],
     }
+
+    def validate_result(draft, evidence):
+        render_grounded_answer(draft, metrics)
+
     draft, raw_text, evidence = await _generate_structured(
         settings=settings,
         prompt=analyst_prompt(),
@@ -401,6 +452,7 @@ async def generate_answer(
         response_schema=GroundedAnswer,
         tools=tools,
         client_factory=client_factory,
+        validate_result=validate_result,
     )
     answer, citations = render_grounded_answer(draft, metrics)
     return {
@@ -421,6 +473,18 @@ async def generate_analysis_workflow(
     client_factory=None,
 ) -> dict[str, Any]:
     snapshot, available_metrics = analysis_workflow_evidence(workflow, metrics)
+    labels = metric_labels(metrics)
+    heading = "Briefing metrics" if workflow == "analysis_briefing" else "Risk metrics"
+
+    def validate_result(draft, evidence):
+        _render_grounded_answer(
+            draft,
+            available_metrics,
+            labels,
+            is_demo=metrics.data_mode == "demo",
+            heading=heading,
+        )
+
     draft, raw_text, evidence = await _generate_structured(
         settings=settings,
         prompt=workflow_prompt(workflow),
@@ -432,13 +496,14 @@ async def generate_analysis_workflow(
         },
         response_schema=GroundedAnswer,
         client_factory=client_factory,
+        validate_result=validate_result,
     )
     answer, citations = _render_grounded_answer(
         draft,
         available_metrics,
-        metric_labels(metrics),
+        labels,
         is_demo=metrics.data_mode == "demo",
-        heading="Briefing metrics" if workflow == "analysis_briefing" else "Risk metrics",
+        heading=heading,
     )
     return {"answer": answer, "citations": citations, "grounding_text": raw_text, **evidence}
 
@@ -454,6 +519,10 @@ async def generate_scenario_workflow(
     catalog, _, _ = scenario_metric_catalog(comparison)
     baseline = AnalyticsSnapshot.model_validate(comparison["current_analysis"])
     proposed = AnalyticsSnapshot.model_validate(comparison["proposed_analysis"])
+
+    def validate_result(draft, evidence):
+        render_grounded_scenario(draft, comparison)
+
     draft, raw_text, evidence = await _generate_structured(
         settings=settings,
         prompt=workflow_prompt("scenario_explanation"),
@@ -468,6 +537,7 @@ async def generate_scenario_workflow(
         },
         response_schema=GroundedAnswer,
         client_factory=client_factory,
+        validate_result=validate_result,
     )
     answer, citations = render_grounded_scenario(draft, comparison)
     return {"answer": answer, "citations": citations, "grounding_text": raw_text, **evidence}
@@ -488,6 +558,13 @@ async def generate_research_summary(
     *,
     client_factory=None,
 ) -> dict[str, Any]:
+    def validate_result(draft, evidence):
+        if not _retrieval_succeeded(evidence["url_retrievals"]):
+            raise GeminiUnavailable(
+                "The selected source could not be retrieved with usable evidence.",
+                evidence=evidence,
+            )
+
     draft, raw_text, evidence = await _generate_structured(
         settings=settings,
         prompt=workflow_prompt("research_summary"),
@@ -495,6 +572,7 @@ async def generate_research_summary(
         response_schema=ResearchSummaryDraft,
         tools=[types.Tool(url_context=types.UrlContext())],
         client_factory=client_factory,
+        validate_result=validate_result,
     )
     retrievals = evidence["url_retrievals"]
     if not _retrieval_succeeded(retrievals):
