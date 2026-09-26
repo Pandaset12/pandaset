@@ -1,0 +1,389 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-26T14:40:25.035Z",
+  "title": "Design System: PandaSet",
+  "extensions": {
+    "colorMeta": {
+      "bamboo": {
+        "role": "primary",
+        "displayName": "Bamboo green",
+        "canonical": "#39734f",
+        "tonalRamp": [
+          "#001005",
+          "#002d15",
+          "#0d4c2b",
+          "#316b48",
+          "#528c67",
+          "#73ae87",
+          "#98d5ac",
+          "#c5ffd7"
+        ]
+      },
+      "bamboo-hover": {
+        "role": "primary",
+        "displayName": "Deep bamboo",
+        "canonical": "#2b5c3e",
+        "tonalRamp": [
+          "#001005",
+          "#002d15",
+          "#194b2e",
+          "#396a4b",
+          "#598a6a",
+          "#7aac8a",
+          "#9fd3af",
+          "#c8fed9"
+        ]
+      },
+      "canvas": {
+        "role": "neutral",
+        "displayName": "Warm canvas",
+        "canonical": "#f3f1e8",
+        "tonalRamp": [
+          "#0d0b06",
+          "#26241d",
+          "#414039",
+          "#5f5e56",
+          "#7f7d75",
+          "#a09f96",
+          "#c6c4bc",
+          "#f1efe6"
+        ]
+      },
+      "surface": {
+        "role": "neutral",
+        "displayName": "Warm white",
+        "canonical": "#fcfbf6",
+        "tonalRamp": [
+          "#0c0b08",
+          "#252420",
+          "#41403c",
+          "#5e5e59",
+          "#7e7d79",
+          "#9f9e9a",
+          "#c5c4bf",
+          "#efeeea"
+        ]
+      },
+      "raised": {
+        "role": "neutral",
+        "displayName": "Raised neutral",
+        "canonical": "#e8e7de",
+        "tonalRamp": [
+          "#0c0b06",
+          "#25241e",
+          "#414039",
+          "#5f5e56",
+          "#7e7e76",
+          "#a09f96",
+          "#c5c4bc",
+          "#f0efe6"
+        ]
+      },
+      "panel-deep": {
+        "role": "neutral",
+        "displayName": "Pale bamboo tint",
+        "canonical": "#dde9de",
+        "tonalRamp": [
+          "#060d07",
+          "#1e271f",
+          "#39433a",
+          "#576157",
+          "#768177",
+          "#97a298",
+          "#bcc8bd",
+          "#e6f2e7"
+        ]
+      },
+      "selected": {
+        "role": "neutral",
+        "displayName": "Selected pale green",
+        "canonical": "#e2ebe0",
+        "tonalRamp": [
+          "#070d06",
+          "#20261e",
+          "#3b4239",
+          "#596057",
+          "#788076",
+          "#99a197",
+          "#bec7bc",
+          "#e9f2e7"
+        ]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Panda ink",
+        "canonical": "#171b18",
+        "tonalRamp": [
+          "#090c09",
+          "#212522",
+          "#3d413e",
+          "#5a5f5b",
+          "#7a7f7b",
+          "#9ba09c",
+          "#c0c6c1",
+          "#eaf0ec"
+        ]
+      },
+      "muted": {
+        "role": "neutral",
+        "displayName": "Muted green-gray",
+        "canonical": "#5c645d",
+        "tonalRamp": [
+          "#070d08",
+          "#1f2620",
+          "#3b423c",
+          "#586059",
+          "#778079",
+          "#98a199",
+          "#bec7bf",
+          "#e8f1e9"
+        ]
+      },
+      "border": {
+        "role": "neutral",
+        "displayName": "Soft divider",
+        "canonical": "#cdd2ca",
+        "tonalRamp": [
+          "#090c07",
+          "#22251f",
+          "#3d413b",
+          "#5b5f58",
+          "#7a7f78",
+          "#9ba099",
+          "#c1c6be",
+          "#ebf0e8"
+        ]
+      },
+      "control-border": {
+        "role": "neutral",
+        "displayName": "Control outline",
+        "canonical": "#788379",
+        "tonalRamp": [
+          "#060d07",
+          "#1e271f",
+          "#39433a",
+          "#566157",
+          "#768177",
+          "#97a298",
+          "#bcc8bd",
+          "#e6f2e7"
+        ]
+      },
+      "comparison": {
+        "role": "neutral",
+        "displayName": "Comparison gray",
+        "canonical": "#737e75",
+        "tonalRamp": [
+          "#060d07",
+          "#1e271f",
+          "#39433b",
+          "#566158",
+          "#768178",
+          "#96a298",
+          "#bcc8be",
+          "#e6f2e8"
+        ]
+      },
+      "ink-on-accent": {
+        "role": "neutral",
+        "displayName": "White on accent",
+        "canonical": "#ffffff",
+        "tonalRamp": [
+          "#0b0b0b",
+          "#242424",
+          "#404040",
+          "#5d5d5d",
+          "#7d7d7d",
+          "#9e9e9e",
+          "#c4c4c4",
+          "#eeeeee"
+        ]
+      },
+      "positive": {
+        "role": "secondary",
+        "displayName": "Positive green",
+        "canonical": "#286b47",
+        "tonalRamp": [
+          "#000f05",
+          "#002d17",
+          "#004d2c",
+          "#2a6d48",
+          "#4c8d67",
+          "#6daf88",
+          "#93d6ad",
+          "#c4ffda"
+        ]
+      },
+      "negative": {
+        "role": "tertiary",
+        "displayName": "Negative red",
+        "canonical": "#a7473f",
+        "tonalRamp": [
+          "#1f0001",
+          "#4b0003",
+          "#751715",
+          "#993a33",
+          "#be5b52",
+          "#e37d72",
+          "#ffaba1",
+          "#ffe9e5"
+        ]
+      },
+      "negative-surface": {
+        "role": "tertiary",
+        "displayName": "Pale negative",
+        "canonical": "#f3e4e0",
+        "tonalRamp": [
+          "#120907",
+          "#2c211e",
+          "#483d3a",
+          "#675a57",
+          "#877a76",
+          "#a99b97",
+          "#cfc0bd",
+          "#faebe7"
+        ]
+      },
+      "warning": {
+        "role": "tertiary",
+        "displayName": "Warning amber",
+        "canonical": "#86580f",
+        "tonalRamp": [
+          "#130900",
+          "#341f00",
+          "#593800",
+          "#805304",
+          "#a27231",
+          "#c59454",
+          "#edba79",
+          "#ffebd3"
+        ]
+      },
+      "overlay": {
+        "role": "neutral",
+        "displayName": "Dark scrim",
+        "canonical": "#171b18e6",
+        "tonalRamp": [
+          "#090c09",
+          "#212522",
+          "#3d413e",
+          "#5a5f5b",
+          "#7a7f7b",
+          "#9ba09c",
+          "#c0c6c1",
+          "#eaf0ece6"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Instrument Serif",
+        "purpose": "Page headings and selected editorial figures."
+      },
+      "body": {
+        "displayName": "DM Sans",
+        "purpose": "Interface, controls, labels, and data copy."
+      }
+    },
+    "shadows": [
+      {
+        "name": "dialog",
+        "value": "0 18px 70px #171b1820",
+        "purpose": "Separate modal overlays from the app canvas."
+      },
+      {
+        "name": "small-state",
+        "value": "0 1px 3px #00000033 / 0 3px 9px #00000033",
+        "purpose": "Selected control and hover feedback where already used."
+      }
+    ],
+    "motion": [
+      {
+        "name": "standard-state",
+        "value": "0.16s",
+        "purpose": "Background, color, border, and shadow transitions on common controls."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "wide",
+        "value": "1440px"
+      },
+      {
+        "name": "large",
+        "value": "1200px"
+      },
+      {
+        "name": "medium",
+        "value": "950px"
+      },
+      {
+        "name": "small",
+        "value": "720px"
+      },
+      {
+        "name": "compact",
+        "value": "380px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Main action, with a clear green fill and compact hit area.",
+      "html": "<button class=\"ds-btn-primary\">Save changes</button>",
+      "css": ".ds-btn-primary { background: var(--bamboo); color: var(--ink-on-accent); padding: 11px 17px; min-height: 42px; border: 1px solid transparent; border-radius: 5px; font: 500 0.875rem/1.3 \"DM Sans\", Arial, sans-serif; transition: background 0.16s, color 0.16s, border-color 0.16s, box-shadow 0.16s; } .ds-btn-primary:hover { background: var(--bamboo-hover); box-shadow: 0 3px 9px #00000033; } .ds-btn-primary:focus-visible { outline: 2px solid var(--bamboo); outline-offset: 4px; }"
+    },
+    {
+      "name": "Subtle Button",
+      "kind": "button",
+      "refersTo": "button-subtle",
+      "description": "Secondary action on a transparent surface.",
+      "html": "<button class=\"ds-btn-subtle\">Cancel</button>",
+      "css": ".ds-btn-subtle { background: transparent; color: var(--ink); padding: 11px 17px; min-height: 42px; border: 1px solid var(--control-border); border-radius: 5px; font: 500 0.875rem/1.3 \"DM Sans\", Arial, sans-serif; transition: background 0.16s, color 0.16s, border-color 0.16s, box-shadow 0.16s; } .ds-btn-subtle:hover { background: var(--raised); border-color: var(--bamboo-hover); } .ds-btn-subtle:focus-visible { outline: 2px solid var(--bamboo); outline-offset: 4px; }"
+    },
+    {
+      "name": "Research Search Field",
+      "kind": "input",
+      "description": "Compact search field within the research index.",
+      "html": "<label class=\"ds-search\"><span class=\"ds-search-label\">Search holdings</span><input type=\"search\" placeholder=\"Search\"></label>",
+      "css": ".ds-search { display: block; background: var(--surface); padding: 8px 10px; border: 1px solid var(--control-border); border-radius: 4px; } .ds-search-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; } .ds-search input { width: 100%; padding: 0; border: 0; background: transparent; color: var(--ink); font: 400 0.75rem \"DM Sans\", Arial, sans-serif; } .ds-search:focus-within { outline: 2px solid var(--bamboo); outline-offset: 4px; } .ds-search input::placeholder { color: var(--muted); }"
+    },
+    {
+      "name": "Active Navigation Link",
+      "kind": "nav",
+      "description": "Route link with understated text and bamboo active indicator.",
+      "html": "<a class=\"ds-nav-link ds-nav-link-active\" href=\"#\">Risk</a>",
+      "css": ".ds-nav-link { display: flex; align-items: center; color: var(--muted); border-bottom: 2px solid transparent; padding-top: 2px; font: 400 0.875rem \"DM Sans\", Arial, sans-serif; } .ds-nav-link:hover { color: var(--ink); } .ds-nav-link-active { border-bottom-color: var(--bamboo); color: var(--ink); font-weight: 600; } .ds-nav-link:focus-visible { outline: 2px solid var(--bamboo); outline-offset: 4px; }"
+    },
+    {
+      "name": "Analysis Card",
+      "kind": "card",
+      "description": "Surface for portfolio performance and risk content.",
+      "html": "<section class=\"ds-analysis-card\"><h2>Portfolio performance</h2><p>Illustrative modeled results</p></section>",
+      "css": ".ds-analysis-card { background: var(--surface); border: 1px solid var(--border); border-radius: 7px; padding: 24px 27px 0; color: var(--ink); font-family: \"DM Sans\", Arial, sans-serif; } .ds-analysis-card h2 { margin: 0; color: var(--ink); font: 500 1.3125rem/1.3 \"DM Sans\", Arial, sans-serif; } .ds-analysis-card p { margin: 0; color: var(--muted); font-size: 0.875rem; line-height: 1.6; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "Portfolio clarity in warm light.",
+    "overview": "PandaSet is a browser-based portfolio workspace for individual investors. Its warm-neutral foundation supports dense analysis; panda ink sets hierarchy, while bamboo green marks primary actions and active states. Preserve the distinction between illustrative sample data, modeled results, and hypothetical scenarios.",
+    "keyCharacteristics": [
+      "Warm, low-glare neutrals with strong ink contrast.",
+      "Bamboo green is the single primary accent.",
+      "Semantic gains, losses, warnings, and comparisons remain distinct."
+    ],
+    "rules": [],
+    "dos": [
+      "Do use bamboo green for primary actions, focus, active states, and the lead performance series.",
+      "Do keep negative, positive, warning, and comparison cues distinct from one another.",
+      "Do preserve visible sample-data and modeled-result labels."
+    ],
+    "donts": [
+      "Don't return page backgrounds or card surfaces to the former dark theme.",
+      "Don't use the accent as a substitute for semantic gain or loss colors.",
+      "Don't imply sample portfolio values are live market or brokerage data."
+    ]
+  }
+}

@@ -14,7 +14,7 @@
   width: min(760px, calc(100vw - 32px));
 }
 .modal::backdrop {
-  background: #080c0aeb;
+  background: #171b1866;
   backdrop-filter: blur(3px);
 }
 .modal[open] {
@@ -78,7 +78,7 @@
   color: var(--muted);
 }
 .edit-weight-input {
-  border: 1px solid var(--border);
+  border: 1px solid var(--control-border);
   border-radius: 4px;
   display: flex;
   gap: 2px;
@@ -171,7 +171,7 @@
   align-items: center;
   justify-content: space-between;
   width: 100%;
-  border: 1px solid var(--border);
+  border: 1px solid var(--control-border);
   border-radius: 5px;
   padding: 12px;
   font-size: 0.8125rem;
@@ -225,14 +225,14 @@
 .analyst-input {
   display: flex;
   gap: 8px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--control-border);
   background: var(--surface);
   border-radius: 5px;
   padding: 7px;
   margin-top: 18px;
 }
 .analyst-input:focus-within {
-  outline: 2px solid var(--brass);
+  outline: 2px solid var(--bamboo);
 }
 .analyst-input input {
   border: 0;
@@ -250,7 +250,7 @@
   height: 31px;
   border-radius: 4px;
   background: var(--panel-deep);
-  color: var(--brass);
+  color: var(--bamboo);
 }
 .analyst-footnote {
   font-size: 0.75rem;

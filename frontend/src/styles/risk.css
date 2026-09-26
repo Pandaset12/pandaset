@@ -27,7 +27,7 @@
 }
 .risk-intro h2 em {
   font-style: normal;
-  background: var(--brass);
+  background: var(--bamboo);
   color: var(--ink-on-accent);
   padding: 0 6px;
 }
@@ -48,7 +48,7 @@
 .legend-square {
   width: 9px;
   height: 9px;
-  background: var(--brass);
+  background: var(--bamboo);
   display: inline-block;
   border-radius: 1px;
 }
@@ -97,7 +97,7 @@
   background: var(--bar-secondary);
 }
 .risk-bar {
-  background: var(--brass);
+  background: var(--bamboo);
 }
 .risk-bar-row > svg {
   color: var(--muted);
@@ -165,7 +165,7 @@
   transform: scale(1.06);
 }
 .correlation-table td button.selected {
-  border: 2px solid var(--brass-dark);
+  border: 2px solid var(--bamboo-hover);
   box-shadow: 0 0 0 2px var(--ink);
 }
 .matrix-key {
@@ -184,7 +184,7 @@
     to right,
     var(--negative),
     var(--raised),
-    var(--brass)
+    var(--bamboo)
   );
 }
 .matrix-hint {

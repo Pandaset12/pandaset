@@ -95,8 +95,8 @@
   color: var(--muted);
 }
 .allocation-mosaic span {
-  background: #0d1210e6;
-  color: var(--ink);
+  background: var(--overlay);
+  color: var(--overlay-ink);
   padding: 3px 4px;
   border-radius: 2px;
 }
@@ -107,8 +107,8 @@
   background: linear-gradient(
     to right,
     var(--negative),
-    var(--raised),
-    var(--brass)
+    var(--surface),
+    var(--bamboo)
   );
 }
 .table-scroll,

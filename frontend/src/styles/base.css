@@ -40,28 +40,33 @@
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
-  color-scheme: dark;
-  --canvas: #0d1210;
-  --surface: #151d19;
-  --raised: #222c25;
-  --panel-deep: #1b241e;
-  --selected: #303b2f;
-  --ink: #eeece4;
-  --muted: #a4aea5;
-  --border: #3c4940;
-  --brass: #c2a36b;
-  --brass-dark: #907447;
-  --comparison: #9ba496;
+  color-scheme: light;
+  accent-color: var(--bamboo);
+  --canvas: #f3f1e8;
+  --surface: #fcfbf6;
+  --raised: #e8e7de;
+  --panel-deep: #dde9de;
+  --selected: #e2ebe0;
+  --ink: #171b18;
+  --muted: #5c645d;
+  --border: #cdd2ca;
+  --control-border: #788379;
+  --bamboo: #39734f;
+  --bamboo-hover: #2b5c3e;
+  --comparison: #737e75;
   --bar-secondary: var(--comparison);
-  --action: var(--brass);
-  --action-hover: #d1b77f;
-  --ink-on-accent: #17150f;
-  --positive: #7fa487;
-  --negative: #d07d72;
-  --negative-surface: #382824;
+  --action: var(--bamboo);
+  --action-hover: var(--bamboo-hover);
+  --ink-on-accent: #ffffff;
+  --positive: #286b47;
+  --negative: #a7473f;
+  --negative-surface: #f3e4e0;
+  --warning: #86580f;
+  --overlay: #171b18e6;
+  --overlay-ink: var(--surface);
   --radius: 7px;
   --space: 24px;
-  --shadow: 0 18px 70px #00000055;
+  --shadow: 0 18px 70px #171b1820;
   --serif: "Instrument Serif", Georgia, serif;
 }
 * {
@@ -113,7 +118,7 @@ button:focus-visible,
 a:focus-visible,
 input:focus-visible,
 select:focus-visible {
-  outline: 2px solid var(--brass);
+  outline: 2px solid var(--bamboo);
 }
 button,
 a {
@@ -157,7 +162,7 @@ svg {
   flex-shrink: 0;
 }
 ::selection {
-  background: var(--brass);
+  background: var(--bamboo);
   color: var(--ink-on-accent);
 }
 .sr-only {
@@ -236,11 +241,11 @@ svg {
 }
 .button.subtle {
   background: transparent;
-  border-color: var(--border);
+  border-color: var(--control-border);
 }
 .button.subtle:hover {
   background: var(--raised);
-  border-color: var(--brass-dark);
+  border-color: var(--bamboo-hover);
 }
 .button.full {
   width: 100%;
@@ -278,7 +283,7 @@ svg {
   background: var(--raised);
 }
 .icon-button.bordered {
-  border: 1px solid var(--border);
+  border: 1px solid var(--control-border);
 }
 .inline-icon {
   display: inline-flex;
@@ -289,7 +294,7 @@ svg {
   vertical-align: middle;
 }
 .inline-icon:hover {
-  color: var(--brass);
+  color: var(--bamboo);
 }
 .site-header {
   height: 83px;
@@ -322,17 +327,17 @@ svg {
   flex: none;
 }
 .panda-face {
-  fill: var(--ink);
+  fill: var(--surface);
 }
 .panda-dark {
-  fill: var(--panel-deep);
+  fill: var(--ink);
 }
 .panda-eye {
-  fill: var(--brass);
+  fill: var(--bamboo);
 }
 .panda-mouth {
   fill: none;
-  stroke: var(--panel-deep);
+  stroke: var(--ink);
   stroke-width: 1.1;
   stroke-linecap: round;
 }
@@ -364,7 +369,7 @@ svg {
   color: var(--ink);
 }
 .header-inner nav a.active {
-  border-color: var(--brass);
+  border-color: var(--bamboo);
   color: var(--ink);
   font-weight: 600;
 }
@@ -432,7 +437,7 @@ svg {
   align-items: center;
   background: var(--raised);
   color: var(--muted);
-  border: 1px solid var(--border);
+  border: 1px solid var(--control-border);
   border-radius: 3px;
 }
 .demo-badge:hover {
@@ -503,7 +508,7 @@ svg {
   display: flex;
   gap: 2px;
   background: var(--raised);
-  border: 1px solid var(--border);
+  border: 1px solid var(--control-border);
   border-radius: 5px;
   padding: 3px;
   width: max-content;

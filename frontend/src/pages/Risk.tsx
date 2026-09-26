@@ -174,16 +174,14 @@ export default function Risk({
                     <th scope="row">{a.symbol}</th>
                     {active.map(({ a: b, i: j }, columnIndex) => {
                       const value = correlationMatrix[i][j];
+                      const intensity = Math.round(Math.abs(value) * 68);
                       const background =
                         i === j
-                          ? "#222c25"
+                          ? "var(--panel-deep)"
                           : value < 0
-                            ? `rgba(208,125,114,${Math.abs(value) * 0.6 + 0.06})`
-                            : value > 0.55
-                              ? `rgba(194,163,107,${0.83 + value * 0.15})`
-                              : `rgba(194,163,107,${value * 0.5 + 0.06})`;
-                      const color =
-                        value > 0.55 && i !== j ? "#17150f" : "#eeece4";
+                            ? `color-mix(in srgb, var(--negative) ${intensity}%, var(--surface))`
+                            : `color-mix(in srgb, var(--bamboo) ${intensity}%, var(--surface))`;
+                      const color = "var(--ink)";
                       const isDiagonal = rowIndex === columnIndex;
                       const isSelectable = rowIndex < columnIndex;
 

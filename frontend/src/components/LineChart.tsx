@@ -87,8 +87,8 @@ export function LineChart({
             x2="0"
             y2="1"
           >
-            <stop offset="0%" stopColor="var(--brass)" stopOpacity=".13" />
-            <stop offset="100%" stopColor="var(--brass)" stopOpacity=".015" />
+            <stop offset="0%" stopColor="var(--bamboo)" stopOpacity=".13" />
+            <stop offset="100%" stopColor="var(--bamboo)" stopOpacity=".015" />
           </linearGradient>
         </defs>
         {[0, 1, 2, 3].map((i) => {
@@ -131,7 +131,7 @@ export function LineChart({
         <path
           d={path(series)}
           fill="none"
-          stroke="var(--brass)"
+          stroke="var(--bamboo)"
           strokeWidth="2.6"
           strokeLinejoin="round"
         />
@@ -169,7 +169,7 @@ export function LineChart({
               cx={x(index)}
               cy={y(series[index])}
               r="5"
-              fill="var(--brass)"
+              fill="var(--bamboo)"
               stroke="var(--ink)"
               strokeWidth="2"
             />
