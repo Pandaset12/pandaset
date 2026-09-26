@@ -1,0 +1,115 @@
+.po-preview {
+  min-height: 100vh;
+}
+.po-preview-header {
+  height: 83px;
+  padding: 0 max(32px, calc((100vw - 1300px) / 2));
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.po-preview-header > span {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+.po-preview-banner {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 13px;
+  flex-wrap: wrap;
+  padding: 11px 24px;
+  background: var(--selected);
+  color: var(--bamboo);
+  font-size: 0.6rem;
+  letter-spacing: 0.12em;
+  font-weight: 700;
+  text-align: center;
+}
+.po-preview-banner > span {
+  font-size: 0.7rem;
+  font-weight: 400;
+  letter-spacing: 0;
+  color: var(--muted);
+}
+.po-preview-controls {
+  width: min(1180px, calc(100% - 80px));
+  margin: 0 auto 40px;
+  border-top: 1px solid var(--border);
+  padding-top: 17px;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+.po-preview-controls summary {
+  cursor: pointer;
+  padding: 8px 0;
+}
+.po-preview-controls summary:focus-visible {
+  outline: 2px solid var(--bamboo);
+  outline-offset: 4px;
+}
+.po-preview-control-row {
+  display: flex;
+  gap: 20px;
+  align-items: end;
+  flex-wrap: wrap;
+  padding: 16px 0;
+}
+.po-preview-control-row label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.po-preview-control-row select {
+  min-height: 40px;
+  border: 1px solid var(--control-border);
+  background: var(--surface);
+  border-radius: 4px;
+  padding: 8px;
+  font-size: 0.75rem;
+}
+.po-preview-control-row .po-preview-checkbox {
+  flex-direction: row;
+  align-items: center;
+  align-self: center;
+}
+.po-preview-controls pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  padding: 20px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--ink);
+}
+.po-preview-selection {
+  width: min(1180px, calc(100% - 80px));
+  margin: 0 auto 28px;
+  font-size: 0.8rem;
+  color: var(--bamboo);
+  padding: 15px;
+  background: var(--selected);
+}
+.po-preview-footer {
+  border-top: 1px solid var(--border);
+  text-align: center;
+  padding: 24px;
+  color: var(--muted);
+  font-size: 0.7rem;
+}
+@media (max-width: 720px) {
+  .po-preview-header {
+    height: 70px;
+    padding: 0 20px;
+  }
+  .po-preview-controls,
+  .po-preview-selection {
+    width: calc(100% - 32px);
+  }
+  .po-preview-banner {
+    gap: 3px;
+    flex-direction: column;
+  }
+}
