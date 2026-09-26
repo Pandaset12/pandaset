@@ -39,6 +39,9 @@ class Settings(BaseSettings):
     twelve_data_display_rights_confirmed: bool = False
     twelve_data_cache_rights_confirmed: bool = False
     fred_api_key: SecretStr | None = None
+    tavily_api_key: SecretStr | None = None
+    deepseek_api_key: SecretStr | None = None
+    deepseek_model: str = "deepseek-flash"
     approved_news_domains: str = ""
     event_max_active_jobs_per_user: int = Field(default=3, ge=1, le=20)
     event_max_messages_per_run: int = Field(default=100, ge=1, le=1000)
@@ -63,11 +66,21 @@ class Settings(BaseSettings):
             and self.twelve_data_cache_rights_confirmed
             and self.approved_news_domains.strip()
             and self.fred_api_key
+            and self.has_tavily_key
+            and self.has_deepseek_key
         )
 
     @property
     def has_gemini_key(self) -> bool:
         return bool(self.gemini_api_key and self.gemini_api_key.get_secret_value())
+
+    @property
+    def has_tavily_key(self) -> bool:
+        return bool(self.tavily_api_key and self.tavily_api_key.get_secret_value())
+
+    @property
+    def has_deepseek_key(self) -> bool:
+        return bool(self.deepseek_api_key and self.deepseek_api_key.get_secret_value())
 
 
 @lru_cache

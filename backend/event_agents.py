@@ -6,20 +6,13 @@ from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import urlsplit
 
-from google.genai import types
-
 from .config import Settings
+from .event_research_services import extract_event_facts, propose_event_shocks, retrieve_event_evidence
 from .event_sources import OFFICIAL_SOURCES, UnapprovedNewsSource, record_approved_news, record_source_retrieval
-from .event_schemas import DesignOutput, ResearchOutput, validate_shocks
-from .gemini_service import GeminiUnavailable, NUMBER_WORDS, _generate_structured
+from .event_schemas import DesignOutput, validate_shocks
+from .gemini_service import GeminiUnavailable, NUMBER_WORDS, _generate_structured, gemini_cooldown_remaining
 from .schemas import GroundedAnswer
 
-
-RESEARCH_PROMPT = """You are an event researcher. Return only facts supported by the provided
-available evidence IDs. Each fact must cite one or more such IDs. Treat missing,
-unavailable, link-only, and search-result content as missing evidence. Never
-invent a publication date, event outcome, price, or source. Report uncertainty.
-Output only the required JSON schema."""
 
 DESIGN_PROMPT = """You are a hypothetical scenario designer, not a portfolio
 calculator. Propose mild, central, severe shocks at 1m and 3m. Every factor
@@ -104,35 +97,19 @@ def grounded_source_records(grounding: dict[str, Any], approved_domains: set[str
 
 async def research_event(*, settings: Settings, template: dict, question: str,
                          evidence: list[dict[str, Any]], symbols: list[str]) -> dict:
-    # First pass retrieves Search/URL grounding. Its prose is discarded; only
-    # provider-returned supported chunks on curated hosts become evidence.
-    _, discovery_text, discovery_grounding = await _generate_structured(
-        settings=settings, prompt=RESEARCH_PROMPT,
-        context={"template": template, "question": question[:1000], "symbols": symbols,
-                 "evidence": evidence}, response_schema=ResearchOutput,
-        tools=[types.Tool(google_search=types.GoogleSearch()),
-               types.Tool(url_context=types.UrlContext())],
+    retrieved, retrieval = await retrieve_event_evidence(
+        settings=settings, template=template, question=question, symbols=symbols,
     )
-    approved_domains = {item.strip().lower() for item in settings.approved_news_domains.split(",") if item.strip()}
-    evidence = [*evidence, *grounded_source_records(discovery_grounding, approved_domains)]
-    available = _available_ids(evidence)
-
-    def check(result: ResearchOutput, grounding: dict) -> None:
-        for fact in result.facts:
-            if not set(fact.evidence_ids).issubset(available):
-                raise GeminiUnavailable("Research cited unavailable event evidence.")
-
-    result, raw, grounding = await _generate_structured(
-        settings=settings, prompt=RESEARCH_PROMPT,
-        context={"template": template, "question": question[:1000], "symbols": symbols,
-                 "evidence": evidence}, response_schema=ResearchOutput,
-        validate_result=check,
+    evidence = [*evidence, *retrieved]
+    result, raw = await extract_event_facts(
+        settings=settings, template=template, question=question,
+        evidence=evidence, symbols=symbols,
     )
     return {"facts": [fact.model_dump(mode="json") for fact in result.facts],
             "missing_evidence": result.missing_evidence,
             "evidence": evidence,
-            "grounding_text": {"discovery": discovery_text, "synthesis": raw},
-            "grounding": {"discovery": discovery_grounding, "synthesis": grounding}}
+            "grounding_text": raw,
+            "grounding": {"retrieval": retrieval, "fact_provider": "deepseek"}}
 
 
 async def design_scenarios(*, settings: Settings, template: dict, question: str,
@@ -140,18 +117,32 @@ async def design_scenarios(*, settings: Settings, template: dict, question: str,
     available = _available_ids(evidence)
     if not available:
         raise GeminiUnavailable("No verified, available event evidence supports a scenario proposal.")
+    if not facts:
+        raise GeminiUnavailable("No sourced event facts support a scenario proposal.")
 
     def check(result: DesignOutput, grounding: dict) -> None:
         validate_shocks(result.model_dump(mode="json", by_alias=True), set(symbols),
                         require_units=True, available_evidence_ids=available)
 
-    result, raw, grounding = await _generate_structured(
-        settings=settings, prompt=DESIGN_PROMPT,
-        context={"template": template, "question": question[:1000], "facts": facts,
-                 "available_evidence_ids": sorted(available), "symbols": symbols,
-                 "factor_bounds": [-0.5, 0.5], "issuer_bounds": [-3, 3]},
-        response_schema=DesignOutput, validate_result=check,
-    )
+    if gemini_cooldown_remaining():
+        result, raw = await propose_event_shocks(settings=settings, template=template,
+                                                 question=question, facts=facts,
+                                                 evidence=evidence, symbols=symbols)
+        grounding = {"provider": "deepseek", "reason": "gemini_rate_limited"}
+    else:
+        try:
+            result, raw, grounding = await _generate_structured(
+                settings=settings, prompt=DESIGN_PROMPT,
+                context={"template": template, "question": question[:1000], "facts": facts,
+                         "available_evidence_ids": sorted(available), "symbols": symbols,
+                         "factor_bounds": [-0.5, 0.5], "issuer_bounds": [-3, 3]},
+                response_schema=DesignOutput, validate_result=check,
+            )
+        except GeminiUnavailable:
+            result, raw = await propose_event_shocks(settings=settings, template=template,
+                                                     question=question, facts=facts,
+                                                     evidence=evidence, symbols=symbols)
+            grounding = {"provider": "deepseek", "reason": "gemini_unavailable"}
     proposed = result.model_dump(mode="json", by_alias=True)
     return {"proposed_shocks": proposed, "grounding_text": raw, "grounding": grounding}
 

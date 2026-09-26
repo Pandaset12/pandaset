@@ -7,15 +7,17 @@ See [the shared HLD](../PortfolioLens-HLD.md) and [integration design](INTEGRATI
 
 The default v1 provider connects the quant engine to fictional sample prices for
 an offline demo. The gated v2 event lab uses adjusted Twelve Data history.
-Gemini is optional for v1 and required for event research in v2.
+Gemini is optional for v1 and designs v2 scenario assumptions. V2 event research
+uses Tavily retrieval and DeepSeek fact extraction.
 
 ## Authenticated event lab (`/api/v2`)
 
 The event lab is disabled by default. Copy `backend/.env.example` to the ignored
 `backend/.env`, then set `EVENT_LAB_ENABLED=true`, the Supabase project origin and
-publishable key, `SUPABASE_SIGNING_MODE`, Mongo URI, Twelve Data key, and Gemini
-key. All v2 routes verify a bearer access token and derive the Mongo owner from
-its verified subject. The v1 sample API remains separate. V2 analyses request
+publishable key, `SUPABASE_SIGNING_MODE`, Mongo URI, Twelve Data key, Gemini key,
+`TAVILY_API_KEY`, and `DEEPSEEK_API_KEY`. All v2 routes verify a bearer access
+token and derive the Mongo owner from its verified subject. The v1 sample API
+remains separate. V2 analyses request
 adjusted daily history from Twelve Data and never substitute demo prices.
 
 For an internal release, keep `EVENT_LAB_PUBLIC_ENABLED=false` and populate
@@ -32,7 +34,16 @@ a template, create a draft, review cited facts and proposed shocks, confirm the
 shocks, then poll the run. Mongo stores queued jobs, leases, attempts, pinned
 snapshots, and run chat so work can resume after a process restart. The `rates`
 factor means **TLT adjusted return**, not a yield change. FRED yield observations
-are contextual evidence. V2 error responses use
+are contextual evidence. Tavily searches only curated official hosts and news
+hosts listed in `APPROVED_NEWS_DOMAINS`; search snippets are not evidence. A
+page is cited only after Tavily Extract returns its content. DeepSeek converts
+that content into bounded facts with checked evidence IDs. Failed extraction
+stops draft preparation. Current-event searches filter out pages without a
+recent detected date; an explicitly historical question can retrieve older pages.
+Search and extraction use basic depth, at most five search results and three
+extracted pages per draft. Gemini proposes shocks for user review, with DeepSeek
+as a bounded fallback when Gemini fails or is rate limited. The quant engine
+calculates the final numbers. V2 error responses use
 `{"error":{"code":"...","message":"...","request_id":"..."}}`.
 
 ## Run locally
