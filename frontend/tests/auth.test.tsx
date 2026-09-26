@@ -24,9 +24,18 @@ after(() => dom.window.close());
 function mockClient(initial: Session | null = null) {
   let listener: ((_event: string, session: Session | null) => void) | undefined;
   let resolveSession:
-    | ((value: { data: { session: Session | null }; error: null }) => void)
+    | ((value: {
+        data: { session: Session | null };
+        error: Error | null;
+      }) => void)
     | undefined;
-  const calls = { signin: 0, signup: 0, signout: 0, unsubscribed: 0 };
+  const calls = {
+    signin: 0,
+    signup: 0,
+    signupOptions: undefined as unknown,
+    signout: 0,
+    unsubscribed: 0,
+  };
   const auth = {
     getSession: () =>
       new Promise((resolve: typeof resolveSession) => {
@@ -48,8 +57,9 @@ function mockClient(initial: Session | null = null) {
       calls.signin++;
       return { error: null };
     },
-    signUp: async () => {
+    signUp: async (options: unknown) => {
       calls.signup++;
+      calls.signupOptions = options;
       return { data: { session: null }, error: null };
     },
     signOut: async () => {
@@ -63,6 +73,11 @@ function mockClient(initial: Session | null = null) {
     calls,
     restore: () =>
       resolveSession?.({ data: { session: initial }, error: null }),
+    failRestore: () =>
+      resolveSession?.({
+        data: { session: null },
+        error: new Error("Session restore failed"),
+      }),
     emit: (session: Session | null) => listener?.("SIGNED_IN", session),
     failSignIn: () => {
       auth.signInWithPassword = async () => {
@@ -178,5 +193,46 @@ test("sign-up shows email confirmation when Supabase returns no session", async 
   fireEvent.click(screen.getByRole("button", { name: "Create account" }));
   await waitFor(() => assert.ok(screen.getByText("Check your email")));
   assert.equal(mock.calls.signup, 1);
+  assert.deepEqual(mock.calls.signupOptions, {
+    email: "investor@example.com",
+    password: "password123",
+    options: { emailRedirectTo: window.location.origin },
+  });
+  cleanup();
+});
+
+test("missing Supabase configuration shows setup instructions without a reload loop", () => {
+  const view = render(
+    createElement(AuthBoundary, {
+      renderDashboard: () => createElement("span", {}, "Dashboard"),
+      renderSignedOut: () => createElement("span", {}, "Sign in required"),
+    }),
+  );
+  const message = screen.getByRole("alert").textContent ?? "";
+  assert.match(message, /authentication is not configured/i);
+  assert.match(message, /VITE_SUPABASE_URL/);
+  assert.match(message, /VITE_SUPABASE_PUBLISHABLE_KEY/);
+  assert.match(message, /restart the frontend/i);
+  assert.equal(screen.queryByText("Dashboard"), null);
+  assert.equal(screen.queryByText("Sign in required"), null);
+  assert.equal(screen.queryByRole("button", { name: /reload/i }), null);
+  view.unmount();
+  cleanup();
+});
+
+test("successful auth event clears an earlier session restoration error", async () => {
+  const mock = mockClient();
+  const view = mountBoundary(mock.client);
+  mock.failRestore();
+  await waitFor(() =>
+    assert.match(
+      screen.getByRole("alert").textContent ?? "",
+      /Session restore failed/,
+    ),
+  );
+  mock.emit(session);
+  await waitFor(() => assert.ok(screen.getByText("Dashboard")));
+  assert.equal(screen.queryByRole("alert"), null);
+  view.unmount();
   cleanup();
 });

@@ -1,13 +1,43 @@
 import { useEffect, useState, type ReactNode } from "react";
 import type { Session, SupabaseClient } from "@supabase/supabase-js";
-import { getSupabase } from "../lib/supabase";
+import { getSupabase, SupabaseConfigurationError } from "../lib/supabase";
 
 export function AuthBoundary({
-  client = getSupabase(),
+  client,
   renderDashboard,
   renderSignedOut,
 }: {
   client?: SupabaseClient;
+  renderDashboard: (signOut: () => Promise<void>) => ReactNode;
+  renderSignedOut: (client: SupabaseClient) => ReactNode;
+}) {
+  let authClient: SupabaseClient;
+  try {
+    authClient = client ?? getSupabase();
+  } catch (cause) {
+    if (!(cause instanceof SupabaseConfigurationError)) throw cause;
+    return (
+      <main className="auth-loading" role="alert">
+        <h1>PandaSet authentication is not configured.</h1>
+        <p>{cause.message}</p>
+      </main>
+    );
+  }
+  return (
+    <AuthSessionBoundary
+      client={authClient}
+      renderDashboard={renderDashboard}
+      renderSignedOut={renderSignedOut}
+    />
+  );
+}
+
+function AuthSessionBoundary({
+  client,
+  renderDashboard,
+  renderSignedOut,
+}: {
+  client: SupabaseClient;
   renderDashboard: (signOut: () => Promise<void>) => ReactNode;
   renderSignedOut: (client: SupabaseClient) => ReactNode;
 }) {
@@ -23,6 +53,7 @@ export function AuthBoundary({
     } = client.auth.onAuthStateChange((_event, nextSession) => {
       if (!mounted) return;
       authEventReceived = true;
+      if (nextSession) setError("");
       setSession(nextSession);
       setLoading(false);
     });
