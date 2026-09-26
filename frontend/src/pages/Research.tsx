@@ -28,10 +28,12 @@ import { LineChart } from "../components/LineChart";
 export default function Research({
   weights,
   onAsk,
+  onSummarizeSource,
   query,
 }: {
   weights: number[];
   onAsk: (q?: string) => void;
+  onSummarizeSource: (symbol: string) => void;
   query: URLSearchParams;
 }) {
   const symbol = query.get("symbol");
@@ -392,6 +394,13 @@ export default function Research({
                 </div>
                 <ArrowUpRight size={20} />
               </a>
+              <button
+                className="button dark source-summary-button"
+                onClick={() => onSummarizeSource(selected.symbol)}
+              >
+                Summarize this issuer source
+                <ArrowUpRight size={15} />
+              </button>
               <a
                 href={`https://www.sec.gov/edgar/search/#/q=${encodeURIComponent(selected.name)}`}
                 target="_blank"
@@ -405,8 +414,9 @@ export default function Research({
                 <ArrowUpRight size={20} />
               </a>
               <p className="small-text muted">
-                These links open external sources. Their content is not ingested
-                into the backend demo.
+                AI summaries are available for the selected official issuer
+                source when Gemini is configured. The SEC search link opens
+                separately and is not included in the summary.
               </p>
             </div>
           )}

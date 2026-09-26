@@ -531,6 +531,15 @@
   border-radius: 8px;
 }
 
+.backend-analysis > * {
+  min-width: 0;
+  max-width: 100%;
+}
+.backend-analysis p,
+.backend-analysis strong,
+.backend-analysis span {
+  overflow-wrap: anywhere;
+}
 .backend-analysis p {
   margin: 0.35rem 0 0;
 }

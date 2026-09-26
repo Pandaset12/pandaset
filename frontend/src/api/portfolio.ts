@@ -69,6 +69,27 @@ export type AskResponse = {
   analysis_id: string | null;
   error_code: string | null;
 };
+export type AIWorkflow =
+  | "analysis_briefing"
+  | "risk_explanation"
+  | "scenario_explanation"
+  | "research_summary";
+export type AIWorkflowResponse = {
+  workflow: AIWorkflow;
+  analyst_mode: "demo" | "gemini";
+  status: "complete" | "demo" | "unavailable";
+  answer: string;
+  analysis_id: string | null;
+  symbol: string | null;
+  source_url: string | null;
+  citations: { field: string; value: number }[];
+  sources: Record<string, unknown>[];
+  grounding_supports: Record<string, unknown>[];
+  url_retrievals: Record<string, unknown>[];
+  warnings: string[];
+  disclaimer: string;
+  error_code: string | null;
+};
 export type WhatIfResponse = {
   current_analysis: MetricSnapshot;
   proposed_analysis: MetricSnapshot;
@@ -216,5 +237,51 @@ export function askPortfolio(
   return post<AskResponse>(
     `/api/v1/portfolios/${encodeURIComponent(portfolioId)}/ask`,
     { analysis_id: analysisId, question },
+  );
+}
+
+export function requestAnalysisBriefing(
+  portfolioId: string,
+  analysisId: string,
+) {
+  return post<AIWorkflowResponse>(
+    `/api/v1/portfolios/${encodeURIComponent(portfolioId)}/briefing`,
+    { analysis_id: analysisId },
+  );
+}
+
+export function requestRiskExplanation(
+  portfolioId: string,
+  analysisId: string,
+  question: string,
+) {
+  return post<AIWorkflowResponse>(
+    `/api/v1/portfolios/${encodeURIComponent(portfolioId)}/risk/explanation`,
+    { analysis_id: analysisId, question },
+  );
+}
+
+export function requestScenarioExplanation(
+  portfolioId: string,
+  analysisId: string,
+  weights: number[],
+) {
+  return post<AIWorkflowResponse>(
+    `/api/v1/portfolios/${encodeURIComponent(portfolioId)}/what-if/explanation`,
+    {
+      analysis_id: analysisId,
+      proposed_weights: Object.fromEntries(
+        allocation(weights).map(({ symbol, weight }) => [symbol, weight]),
+      ),
+      question:
+        "Explain the trade-offs across the current, proposed, and change metrics.",
+    },
+  );
+}
+
+export function requestResearchSummary(symbol: string) {
+  return post<AIWorkflowResponse>(
+    `/api/v1/research/${encodeURIComponent(symbol.toUpperCase())}/summary`,
+    { source_id: "issuer" },
   );
 }

@@ -1,4 +1,5 @@
 from datetime import datetime
+import math
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import ValidationError
@@ -6,11 +7,32 @@ from starlette.concurrency import run_in_threadpool
 
 from .config import Settings, get_settings
 from .observability import log_failure
-from .gemini_service import GeminiNotConfigured, GeminiUnavailable, generate_answer, metric_summary
+from .gemini_service import (
+    GeminiNotConfigured,
+    GeminiUnavailable,
+    generate_analysis_workflow,
+    generate_answer,
+    generate_research_summary,
+    generate_scenario_workflow,
+    metric_summary,
+)
 from .providers import IntegrationPending, ProviderUnavailable, QuantProvider, get_provider
+from .research_sources import curated_research_source
 from .schemas import (
-    AllocationInput, AnalysisResponse, AnalystRequest, AnalystResponse,
-    AnalyticsSnapshot, AskRequest, MarketHistoryResponse, Portfolio, PortfolioInput, WhatIfRequest,
+    AIWorkflowResponse,
+    AllocationInput,
+    AnalysisResponse,
+    AnalystRequest,
+    AnalystResponse,
+    AnalyticsSnapshot,
+    AnalysisWorkflowRequest,
+    AskRequest,
+    MarketHistoryResponse,
+    Portfolio,
+    PortfolioInput,
+    ResearchSummaryRequest,
+    ScenarioExplanationRequest,
+    WhatIfRequest,
 )
 from .storage import PortfolioStore, SnapshotNotFound
 
@@ -31,6 +53,96 @@ def require_portfolio(store: PortfolioStore, portfolio_id: str) -> Portfolio:
     if portfolio is None:
         raise api_error(404, "PORTFOLIO_NOT_FOUND", "Portfolio not found.")
     return portfolio
+
+
+def scenario_matches_snapshot(
+    metrics: AnalyticsSnapshot,
+    comparison: dict,
+    proposed_weights: dict[str, float],
+) -> bool:
+    """Reject scenario narratives whose recomputed baseline differs from the selected snapshot."""
+    def same_number(expected, actual) -> bool:
+        if expected is None or actual is None:
+            return expected is actual
+        return math.isclose(float(expected), float(actual), rel_tol=0, abs_tol=1e-9)
+
+    def same_numeric_map(expected, actual) -> bool:
+        if expected is None or actual is None:
+            return expected is actual
+        return all(
+            symbol in actual and same_number(value, actual[symbol])
+            for symbol, value in expected.items()
+        )
+
+    def same_correlation_matrix(expected, actual) -> bool:
+        if expected is None or actual is None:
+            return expected is actual
+        return all(
+            symbol in actual
+            and all(
+                other in actual[symbol] and same_number(value, actual[symbol][other])
+                for other, value in row.items()
+            )
+            for symbol, row in expected.items()
+        )
+
+    def same_series(expected, actual) -> bool:
+        if expected is None or actual is None:
+            return expected is actual
+        if (
+            expected.dates != actual.dates
+            or not same_numeric_map(
+                {str(index): value for index, value in enumerate(expected.portfolio_index)},
+                {str(index): value for index, value in enumerate(actual.portfolio_index)},
+            )
+        ):
+            return False
+        return all(
+            symbol in actual.asset_index
+            and len(values) == len(actual.asset_index[symbol])
+            and all(same_number(value, actual.asset_index[symbol][index]) for index, value in enumerate(values))
+            for symbol, values in expected.asset_index.items()
+        ) and same_numeric_map(expected.return_contribution, actual.return_contribution)
+
+    try:
+        baseline = AnalyticsSnapshot.model_validate(comparison["current_analysis"])
+        proposed = AnalyticsSnapshot.model_validate(comparison["proposed_analysis"])
+        positive_weights = {
+            symbol: weight for symbol, weight in baseline.weights.items() if weight > 0
+        }
+        if baseline.portfolio_id != metrics.portfolio_id or positive_weights != metrics.weights:
+            return False
+        if (
+            baseline.data_mode != metrics.data_mode
+            or baseline.data_as_of != metrics.data_as_of
+            or baseline.lookback_trading_days != metrics.lookback_trading_days
+            or baseline.observation_count != metrics.observation_count
+            or baseline.return_frequency != metrics.return_frequency
+            or baseline.volatility_unit != metrics.volatility_unit
+            or baseline.data_source != metrics.data_source
+            or baseline.freshness != metrics.freshness
+            or baseline.notes != metrics.notes
+            or baseline.assumptions != metrics.assumptions
+            or {symbol: weight for symbol, weight in proposed.weights.items() if weight > 0}
+            != {symbol: weight for symbol, weight in proposed_weights.items() if weight > 0}
+        ):
+            return False
+        for field in ("portfolio_return", "annualized_return", "max_drawdown", "portfolio_volatility"):
+            expected = getattr(metrics, field)
+            actual = getattr(baseline, field)
+            if not same_number(expected, actual):
+                return False
+        if (
+            not same_numeric_map(metrics.risk_contribution, baseline.risk_contribution)
+            or not same_numeric_map(metrics.asset_volatility, baseline.asset_volatility)
+            or not same_numeric_map(metrics.return_contribution, baseline.return_contribution)
+            or not same_correlation_matrix(metrics.correlation_matrix, baseline.correlation_matrix)
+            or not same_series(metrics.series, baseline.series)
+        ):
+            return False
+        return True
+    except (KeyError, TypeError, ValidationError, ValueError):
+        return False
 
 
 def analysis_response(metrics: AnalyticsSnapshot, analysis_id: str, created_at: datetime) -> AnalysisResponse:
@@ -151,6 +263,244 @@ async def ask(
             answer="AI explanation is unavailable. The saved metrics remain accessible. " + summary,
         )
     return AnalystResponse(**common, status="complete", **output)
+
+
+async def analysis_workflow_response(
+    workflow: str,
+    portfolio_id: str,
+    request: AnalysisWorkflowRequest,
+    store: PortfolioStore,
+    settings: Settings,
+) -> AIWorkflowResponse:
+    try:
+        metrics, _ = await run_in_threadpool(
+            store.get_analysis, portfolio_id, request.analysis_id
+        )
+    except SnapshotNotFound as exc:
+        raise api_error(404, "ANALYSIS_NOT_FOUND", "Analysis not found for this portfolio.") from exc
+    warnings = list(metrics.notes)
+    if metrics.freshness == "stale":
+        warnings.append("This saved snapshot contains stale market data.")
+    if settings.analyst_mode == "demo":
+        warnings.append("Offline demo response; Gemini was not called.")
+        return AIWorkflowResponse(
+            workflow=workflow,
+            analyst_mode="demo",
+            status="demo",
+            analysis_id=request.analysis_id,
+            answer="AI explanations are disabled in demo mode. The saved analysis and its calculated metrics remain available.",
+            warnings=warnings,
+        )
+    try:
+        output = await generate_analysis_workflow(
+            workflow, request.question, metrics, request.analysis_id, settings
+        )
+    except (GeminiNotConfigured, GeminiUnavailable) as exc:
+        error_code = (
+            "GEMINI_NOT_CONFIGURED"
+            if isinstance(exc, GeminiNotConfigured)
+            else "GEMINI_UNAVAILABLE"
+        )
+        log_failure(error_code, exc)
+        warnings.append(str(exc))
+        return AIWorkflowResponse(
+            workflow=workflow,
+            analyst_mode="gemini",
+            status="unavailable",
+            analysis_id=request.analysis_id,
+            answer="AI explanation is unavailable. The saved analysis and its calculated metrics remain available.",
+            warnings=warnings,
+            error_code=error_code,
+        )
+    return AIWorkflowResponse(
+        workflow=workflow,
+        analyst_mode="gemini",
+        status="complete",
+        analysis_id=request.analysis_id,
+        warnings=warnings,
+        **output,
+    )
+
+
+@router.post(
+    "/portfolios/{portfolio_id}/briefing",
+    response_model=AIWorkflowResponse,
+)
+async def analysis_briefing(
+    portfolio_id: str,
+    request: AnalysisWorkflowRequest,
+    store: PortfolioStore = Depends(get_store),
+    settings: Settings = Depends(get_settings),
+):
+    await run_in_threadpool(require_portfolio, store, portfolio_id)
+    return await analysis_workflow_response(
+        "analysis_briefing", portfolio_id, request, store, settings
+    )
+
+
+@router.post(
+    "/portfolios/{portfolio_id}/risk/explanation",
+    response_model=AIWorkflowResponse,
+)
+async def risk_explanation(
+    portfolio_id: str,
+    request: AnalysisWorkflowRequest,
+    store: PortfolioStore = Depends(get_store),
+    settings: Settings = Depends(get_settings),
+):
+    await run_in_threadpool(require_portfolio, store, portfolio_id)
+    return await analysis_workflow_response(
+        "risk_explanation", portfolio_id, request, store, settings
+    )
+
+
+@router.post(
+    "/portfolios/{portfolio_id}/what-if/explanation",
+    response_model=AIWorkflowResponse,
+)
+async def scenario_explanation(
+    portfolio_id: str,
+    request: ScenarioExplanationRequest,
+    store: PortfolioStore = Depends(get_store),
+    settings: Settings = Depends(get_settings),
+    provider: QuantProvider = Depends(get_provider),
+):
+    portfolio = await run_in_threadpool(require_portfolio, store, portfolio_id)
+    try:
+        metrics, _ = await run_in_threadpool(
+            store.get_analysis, portfolio_id, request.analysis_id
+        )
+    except SnapshotNotFound as exc:
+        raise api_error(404, "ANALYSIS_NOT_FOUND", "Analysis not found for this portfolio.") from exc
+    if metrics.weights != portfolio.weights:
+        raise api_error(
+            409,
+            "ANALYSIS_ALLOCATION_MISMATCH",
+            "The selected analysis no longer matches the saved portfolio allocation.",
+        )
+    try:
+        comparison = await run_in_threadpool(
+            provider.simulate,
+            WhatIfRequest(
+                portfolio_id=portfolio_id,
+                proposed_weights=request.proposed_weights,
+            ),
+        )
+    except IntegrationPending as exc:
+        raise api_error(501, "QUANT_INTEGRATION_PENDING", str(exc)) from exc
+    except (ValidationError, ValueError) as exc:
+        log_failure("INVALID_SCENARIO_COMPARISON", exc)
+        raise api_error(502, "INVALID_SCENARIO_COMPARISON", "The quant provider returned an invalid comparison.") from exc
+    except Exception as exc:
+        log_failure("PROVIDER_UNAVAILABLE", exc)
+        raise api_error(502, "PROVIDER_UNAVAILABLE", "What-if provider is currently unavailable.") from exc
+    if not scenario_matches_snapshot(metrics, comparison, request.proposed_weights):
+        raise api_error(
+            409,
+            "ANALYSIS_STALE",
+            "The comparison baseline differs from the selected analysis. Recalculate the active analysis before explaining this scenario.",
+        )
+    warnings = list(metrics.notes)
+    if metrics.freshness == "stale":
+        warnings.append("This saved snapshot contains stale market data.")
+    if settings.analyst_mode == "demo":
+        warnings.append("Offline demo response; Gemini was not called.")
+        return AIWorkflowResponse(
+            workflow="scenario_explanation",
+            analyst_mode="demo",
+            status="demo",
+            analysis_id=request.analysis_id,
+            answer="AI explanations are disabled in demo mode. The server-calculated comparison remains available in the What-if workspace.",
+            warnings=warnings,
+        )
+    try:
+        output = await generate_scenario_workflow(
+            request.question,
+            comparison,
+            settings,
+            analysis_id=request.analysis_id,
+        )
+    except (GeminiNotConfigured, GeminiUnavailable) as exc:
+        error_code = (
+            "GEMINI_NOT_CONFIGURED"
+            if isinstance(exc, GeminiNotConfigured)
+            else "GEMINI_UNAVAILABLE"
+        )
+        log_failure(error_code, exc)
+        warnings.append(str(exc))
+        return AIWorkflowResponse(
+            workflow="scenario_explanation",
+            analyst_mode="gemini",
+            status="unavailable",
+            analysis_id=request.analysis_id,
+            answer="AI explanation is unavailable. The server-calculated comparison remains available in the What-if workspace.",
+            warnings=warnings,
+            error_code=error_code,
+        )
+    return AIWorkflowResponse(
+        workflow="scenario_explanation",
+        analyst_mode="gemini",
+        status="complete",
+        analysis_id=request.analysis_id,
+        warnings=warnings,
+        **output,
+    )
+
+
+@router.post(
+    "/research/{symbol}/summary",
+    response_model=AIWorkflowResponse,
+)
+async def research_summary(
+    symbol: str,
+    request: ResearchSummaryRequest,
+    settings: Settings = Depends(get_settings),
+):
+    normalized_symbol = symbol.strip().upper()
+    source = curated_research_source(normalized_symbol, request.source_id)
+    if source is None:
+        raise api_error(404, "RESEARCH_SOURCE_NOT_FOUND", "No curated source is available for this asset.")
+    if settings.analyst_mode == "demo":
+        return AIWorkflowResponse(
+            workflow="research_summary",
+            analyst_mode="demo",
+            status="demo",
+            symbol=normalized_symbol,
+            source_url=source["url"],
+            answer="AI source summaries are disabled in demo mode. Open the selected official source to review its content.",
+            warnings=["Gemini and URL Context were not called."],
+        )
+    try:
+        output = await generate_research_summary(
+            normalized_symbol, source["url"], settings
+        )
+    except (GeminiNotConfigured, GeminiUnavailable) as exc:
+        error_code = (
+            "GEMINI_NOT_CONFIGURED"
+            if isinstance(exc, GeminiNotConfigured)
+            else "GEMINI_UNAVAILABLE"
+        )
+        log_failure(error_code, exc)
+        evidence = exc.evidence if isinstance(exc, GeminiUnavailable) else {}
+        return AIWorkflowResponse(
+            workflow="research_summary",
+            analyst_mode="gemini",
+            status="unavailable",
+            symbol=normalized_symbol,
+            source_url=source["url"],
+            answer="The selected source could not be summarized. Open the source to review its content.",
+            warnings=[str(exc)],
+            error_code=error_code,
+            **evidence,
+        )
+    return AIWorkflowResponse(
+        workflow="research_summary",
+        analyst_mode="gemini",
+        status="complete",
+        symbol=normalized_symbol,
+        source_url=source["url"],
+        **output,
+    )
 
 
 @router.post("/portfolios/{portfolio_id}/what-if")

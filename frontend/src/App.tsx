@@ -19,6 +19,10 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 import { EditPortfolio } from "./components/EditPortfolio";
 import { MethodologyModal } from "./components/MethodologyModal";
 import { Analyst } from "./components/Analyst";
+import {
+  AIWorkflowModal,
+  type AIWorkflowAction,
+} from "./components/AIWorkflowModal";
 import Overview from "./pages/Overview";
 import Risk from "./pages/Risk";
 import Research from "./pages/Research";
@@ -38,6 +42,7 @@ function Application() {
   const [edit, setEdit] = useState(false);
   const [method, setMethod] = useState(false);
   const [analyst, setAnalyst] = useState<string | null>(null);
+  const [aiWorkflow, setAiWorkflow] = useState<AIWorkflowAction | null>(null);
   const [toast, setToast] = useState("");
   const [active, setActive] = useState<ActiveAnalysis | null>(null);
   const [analysisLoading, setAnalysisLoading] = useState(true);
@@ -215,12 +220,19 @@ function Application() {
                 analysis={active.analysis}
                 onEdit={() => setEdit(true)}
                 onAsk={(q) => setAnalyst(q || "")}
+                onBrief={() => setAiWorkflow({ workflow: "analysis_briefing" })}
                 onMethod={() => setMethod(true)}
               />
             ) : route === "/risk" ? (
               <Risk
                 analysis={active.analysis}
-                onAsk={(q) => setAnalyst(q || "")}
+                onExplain={() =>
+                  setAiWorkflow({
+                    workflow: "risk_explanation",
+                    question:
+                      "Explain the main risk contributions and concentrations in this saved analysis.",
+                  })
+                }
                 onMethod={() => setMethod(true)}
               />
             ) : route === "/research" ? (
@@ -228,6 +240,9 @@ function Application() {
                 key={hash}
                 weights={weights}
                 onAsk={(q) => setAnalyst(q || "")}
+                onSummarizeSource={(symbol) =>
+                  setAiWorkflow({ workflow: "research_summary", symbol })
+                }
                 query={query}
               />
             ) : (
@@ -236,7 +251,12 @@ function Application() {
                 analysis={active.analysis}
                 weights={weights}
                 onApply={(w) => apply(w, "scenario")}
-                onAsk={(q) => setAnalyst(q || "")}
+                onExplainScenario={(proposedWeights) =>
+                  setAiWorkflow({
+                    workflow: "scenario_explanation",
+                    proposedWeights,
+                  })
+                }
                 query={query}
               />
             )}
@@ -285,6 +305,14 @@ function Application() {
           analysis={active.analysis}
           question={analyst}
           onClose={() => setAnalyst(null)}
+        />
+      )}
+      {aiWorkflow && active && (
+        <AIWorkflowModal
+          action={aiWorkflow}
+          portfolioId={active.portfolio.portfolio_id}
+          analysisId={active.analysis.analysis_id}
+          onClose={() => setAiWorkflow(null)}
         />
       )}
       {toast && (

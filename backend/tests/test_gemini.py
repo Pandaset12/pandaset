@@ -7,9 +7,18 @@ import pytest
 from google.genai import types
 
 from backend.config import Settings
-from backend.gemini_service import GeminiUnavailable, extract_evidence, generate_answer, resolve_citations
+from backend.gemini_service import (
+    GeminiUnavailable,
+    extract_evidence,
+    generate_analysis_workflow,
+    generate_answer,
+    generate_research_summary,
+    generate_scenario_workflow,
+    render_grounded_scenario,
+    resolve_citations,
+)
 from backend.providers import demo_metrics
-from backend.schemas import AnalystRequest
+from backend.schemas import AnalystRequest, GroundedAnswer
 
 
 class FakeClient:
@@ -138,3 +147,115 @@ def test_web_tools_are_only_enabled_by_explicit_request():
     tools = client.models.generate_content.call_args.kwargs["config"].tools
     assert any(tool.google_search is not None for tool in tools)
     assert any(tool.url_context is not None for tool in tools)
+
+
+def test_analysis_workflow_uses_its_prompt_and_no_web_tools():
+    raw = json.dumps({
+        "explanation": "The saved analysis shows a concentrated risk profile.",
+        "cited_fields": ["risk_contribution.NVDA"],
+    })
+    client = FakeClient(response_with_text(raw))
+    result = asyncio.run(generate_analysis_workflow(
+        "risk_explanation", "Explain the largest risk driver.", demo_metrics(),
+        "analysis-42", settings(), client_factory=lambda **_: client,
+    ))
+    call = client.models.generate_content.call_args.kwargs
+    context = json.loads(call["contents"])
+    assert "risk explanation writer" in call["config"].system_instruction.lower()
+    assert call["config"].tools is None
+    assert context["analysis_id"] == "analysis-42"
+    assert context["available_metrics"]["risk_contribution.NVDA"] == 0.41
+    assert "series" not in context["portfolio_snapshot"]
+    assert result["citations"][0].value == 0.41
+    assert "FICTIONAL DEMO DATA" in result["answer"]
+
+
+def test_scenario_citations_are_resolved_from_the_quant_comparison():
+    metrics = demo_metrics().model_dump(mode="json")
+    comparison = {
+        "current_analysis": metrics,
+        "proposed_analysis": metrics,
+        "delta": {"portfolio_volatility": 0.012},
+        "difference_convention": "proposed minus current",
+    }
+    raw = json.dumps({
+        "explanation": "The proposed mix changes estimated portfolio risk.",
+        "cited_fields": ["baseline.portfolio_volatility", "delta.portfolio_volatility"],
+    })
+    client = FakeClient(response_with_text(raw))
+    generated = asyncio.run(generate_scenario_workflow(
+        "Explain the trade-offs.", comparison, settings(), analysis_id="analysis-42",
+        client_factory=lambda **_: client,
+    ))
+    context = json.loads(client.models.generate_content.call_args.kwargs["contents"])
+    assert context["analysis_id"] == "analysis-42"
+    assert context["available_metrics"]["delta.portfolio_volatility"] == 0.012
+    assert "series" not in context["baseline"]
+    assert "series" not in context["proposed"]
+    assert [citation.value for citation in generated["citations"]] == [0.184, 0.012]
+
+    answer, citations = render_grounded_scenario(
+        GroundedAnswer(
+            explanation="The scenario changes the estimated portfolio risk.",
+            cited_fields=["baseline.portfolio_volatility", "delta.portfolio_volatility"],
+        ),
+        comparison,
+    )
+    assert [citation.value for citation in citations] == [0.184, 0.012]
+    assert "18.4%" in answer
+    assert "1.2%" in answer
+    with pytest.raises(GeminiUnavailable, match="not present"):
+        render_grounded_scenario(
+            GroundedAnswer(explanation="The result is informative.", cited_fields=["delta.unknown"]),
+            comparison,
+        )
+
+
+def test_research_summary_uses_only_url_context_and_preserves_retrieval_metadata():
+    raw = json.dumps({
+        "summary": "The issuer page describes its latest reporting and investor materials.",
+        "key_points": ["The page links to company disclosures."],
+    })
+    retrieval = SimpleNamespace(model_dump=lambda **_: {
+        "retrieved_url": "https://investor.nvidia.com/financial-info/financial-reports-and-sec-filings/default.aspx",
+        "url_retrieval_status": "URL_RETRIEVAL_STATUS_SUCCESS",
+    })
+    response = SimpleNamespace(
+        text=raw,
+        candidates=[SimpleNamespace(
+            grounding_metadata=None,
+            url_context_metadata=SimpleNamespace(url_metadata=[retrieval]),
+        )],
+    )
+    client = FakeClient(response)
+    result = asyncio.run(generate_research_summary(
+        "NVDA", "https://investor.nvidia.com/financial-info/financial-reports-and-sec-filings/default.aspx",
+        settings(), client_factory=lambda **_: client,
+    ))
+    tools = client.models.generate_content.call_args.kwargs["config"].tools
+    assert len(tools) == 1
+    assert tools[0].url_context is not None
+    assert tools[0].google_search is None
+    assert result["url_retrievals"][0]["url_retrieval_status"].endswith("SUCCESS")
+    assert "Key points:" in result["answer"]
+
+
+def test_research_summary_fails_closed_without_successful_retrieval():
+    raw = json.dumps({"summary": "A generic page summary.", "key_points": []})
+    retrieval = SimpleNamespace(model_dump=lambda **_: {
+        "retrieved_url": "https://example.com/",
+        "url_retrieval_status": "URL_RETRIEVAL_STATUS_UNAVAILABLE",
+    })
+    client = FakeClient(SimpleNamespace(
+        text=raw,
+        candidates=[SimpleNamespace(
+            grounding_metadata=None,
+            url_context_metadata=SimpleNamespace(url_metadata=[retrieval]),
+        )],
+    ))
+    with pytest.raises(GeminiUnavailable, match="could not be retrieved") as error:
+        asyncio.run(generate_research_summary(
+            "NVDA", "https://example.com/", settings(),
+            client_factory=lambda **_: client,
+        ))
+    assert error.value.evidence["url_retrievals"][0]["url_retrieval_status"].endswith("UNAVAILABLE")
