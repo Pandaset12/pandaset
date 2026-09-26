@@ -20,8 +20,16 @@ class DraftRequest(BaseModel):
     portfolio_id: str = Field(min_length=1, max_length=80)
     analysis_id: str = Field(min_length=1, max_length=80)
     template_id: str = Field(min_length=1, max_length=80)
+    situation_id: str | None = Field(default=None, min_length=1, max_length=80)
+    target_symbol: str | None = Field(default=None, min_length=1, max_length=12)
+    description: str = Field(default="", max_length=700)
     question: str = Field(default="", max_length=1000)
     proposed_weights: dict[str, float] | None = None
+
+    @field_validator("target_symbol")
+    @classmethod
+    def normalize_target_symbol(cls, symbol: str | None) -> str | None:
+        return symbol.upper() if symbol else None
 
     @field_validator("proposed_weights")
     @classmethod

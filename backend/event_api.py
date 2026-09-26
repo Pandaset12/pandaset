@@ -262,7 +262,13 @@ async def templates(portfolio_id: str | None = None, context=Depends(_store)):
         if portfolio is None:
             raise _not_found()
         instruments_for_portfolio = [resolve_instrument(symbol) for symbol in portfolio.weights]
-    return {"templates": [asdict(item) for item in list_event_templates(instruments_for_portfolio)]}
+    templates = [asdict(item) for item in list_event_templates(instruments_for_portfolio)]
+    for template in templates:
+        template["target_symbols"] = (
+            [instrument.symbol for instrument in (instruments_for_portfolio or [])
+             if instrument.kind == "us_stock"] if template["category"] == "issuer" else []
+        )
+    return {"templates": templates}
 
 
 @router.get("/scenarios/drafts")
@@ -274,11 +280,12 @@ async def drafts(portfolio_id: str, context=Depends(_store)):
 @router.post("/scenarios/drafts", status_code=202)
 async def create_draft(body: DraftRequest, context=Depends(_store),
                        idempotency_key: str | None = Header(default=None, max_length=128)):
-    store, user, _ = context
+    store, user, settings = context
     try:
         template = get_event_template(body.template_id)
     except EventTemplateNotFound as exc:
         raise _error(422, "UNKNOWN_TEMPLATE", "Event template is unsupported.") from exc
+    situation = _situation_snapshot(template, body)
     portfolio = await _call(store.get_portfolio, user.user_id, body.portfolio_id)
     if portfolio is None:
         raise _not_found()
@@ -289,6 +296,9 @@ async def create_draft(body: DraftRequest, context=Depends(_store),
         [resolve_instrument(symbol) for symbol in portfolio.weights])}
     if template.template_id not in eligible:
         raise _error(422, "UNKNOWN_TEMPLATE", "This template does not apply to the saved portfolio.")
+    _validate_target(template, body.target_symbol, portfolio.weights)
+    if template.category == "issuer" and body.target_symbol not in record["metrics"]["weights"]:
+        raise _error(422, "INVALID_TARGET", "The selected stock is not in this saved analysis.")
     if body.proposed_weights is not None and set(body.proposed_weights) != set(record["metrics"]["weights"]):
         raise _error(422, "INVALID_WEIGHTS", "Proposed weights must cover the saved holdings.")
     try:
@@ -297,12 +307,34 @@ async def create_draft(body: DraftRequest, context=Depends(_store),
         raise _error(422, "PRICE_COVERAGE", str(exc)) from exc
     payload = body.model_dump(mode="json", exclude_none=True)
     payload["template_version"] = template.version
+    if situation:
+        payload["situation_snapshot"] = situation
     cooldown = gemini_cooldown_remaining()
-    if cooldown:
+    if cooldown and not settings.has_deepseek_key:
         raise _gemini_rate_limit_error(cooldown)
     draft = await _call(store.create_draft, user.user_id, body.portfolio_id,
                         payload, idempotency_key)
     return {"draft_id": draft["id"], "status": draft["status"]}
+
+
+def _situation_snapshot(template, body: DraftRequest) -> dict | None:
+    situation = next((item for item in template.situations
+                      if item.situation_id == body.situation_id), None)
+    if body.situation_id and situation is None:
+        raise _error(422, "UNKNOWN_SITUATION", "This situation is not available for the selected event.")
+    if template.category == "custom" and not (body.description.strip() or body.question.strip()):
+        raise _error(422, "DESCRIPTION_REQUIRED", "Describe the situation you want to explore.")
+    return asdict(situation) if situation else None
+
+
+def _validate_target(template, target_symbol: str | None, portfolio_weights: dict) -> None:
+    if template.category == "issuer" and (
+        target_symbol not in portfolio_weights
+        or resolve_instrument(target_symbol).kind != "us_stock"
+    ):
+        raise _error(422, "INVALID_TARGET", "Choose a stock in this portfolio for the issuer event.")
+    if template.category != "issuer" and target_symbol:
+        raise _error(422, "INVALID_TARGET", "This event does not use a target stock.")
 
 
 def public_draft(item: dict) -> dict:
@@ -495,18 +527,30 @@ async def post_message(run_id: str, body: ChatRequest, context=Depends(_store),
             template_id = (prior.get("template") or {}).get("template_id")
             if not template_id:
                 raise _error(409, "REVISION_UNAVAILABLE", "The original template is unavailable.")
+            prior_target = prior.get("target_symbol")
+            if template_id == "issuer_earnings" and not prior_target:
+                prior_target = next(
+                    (symbol for symbol in item["result"]["current_weights"]
+                     if resolve_instrument(symbol).kind == "us_stock"), None,
+                )
             revision = body.revision or DraftRequest(
                 portfolio_id=item["portfolio_id"], analysis_id=item["analysis_id"],
                 template_id=template_id, question=body.content,
+                situation_id=prior.get("situation_id"),
+                target_symbol=prior_target,
                 proposed_weights=item.get("proposed_weights"),
             )
             if revision.portfolio_id != item["portfolio_id"] or revision.analysis_id != item["analysis_id"]:
                 raise _error(422, "INVALID_REVISION", "A run revision must use its saved portfolio and analysis.")
             template = get_event_template(revision.template_id)
+            situation = _situation_snapshot(template, revision)
+            _validate_target(template, revision.target_symbol, item["result"]["current_weights"])
             payload = revision.model_dump(mode="json", exclude_none=True)
             payload["template_version"] = template.version
+            if situation:
+                payload["situation_snapshot"] = situation
             cooldown = gemini_cooldown_remaining()
-            if cooldown:
+            if cooldown and not settings.has_deepseek_key:
                 raise _gemini_rate_limit_error(cooldown)
             new_draft = await _call(store.create_draft, user.user_id, item["portfolio_id"],
                                     payload, idempotency_key)

@@ -196,10 +196,16 @@ export const searchInstruments = async (q: string, signal?: AbortSignal) =>
 export type EventTemplate = {
   template_id: string;
   version: string;
-  category: "macro" | "sector" | "issuer";
+  category: "macro" | "sector" | "issuer" | "custom";
   title: string;
   description: string;
   factor_ids: string[];
+  target_symbols?: string[];
+  situations: Array<{
+    situation_id: string;
+    title: string;
+    description: string;
+  }>;
 };
 export type Evidence = {
   evidence_id: string;
@@ -229,6 +235,7 @@ export type CaseGrid<T> = Record<
   Record<"1m" | "3m", T>
 >;
 export type DraftProposal = {
+  scenario_brief?: string;
   facts: SourcedFact[];
   missing_evidence: string[];
   evidence: Evidence[];
@@ -242,6 +249,14 @@ export type ScenarioDraft = {
     portfolio_id: string;
     analysis_id: string;
     template_id: string;
+    situation_id?: string | null;
+    target_symbol?: string | null;
+    situation_snapshot?: {
+      situation_id: string;
+      title: string;
+      description: string;
+    };
+    description?: string;
     question?: string;
     proposed_weights?: Record<string, number> | null;
   };
@@ -335,6 +350,9 @@ export const createDraft = (
     portfolio_id: string;
     analysis_id: string;
     template_id: string;
+    situation_id?: string;
+    target_symbol?: string;
+    description?: string;
     question?: string;
     proposed_weights?: Record<string, number>;
   },

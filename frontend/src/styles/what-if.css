@@ -127,53 +127,99 @@
   background: var(--background);
   border-radius: 6px;
 }
-.event-template-list {
-  max-height: 480px;
-  overflow-y: auto;
+.event-template-picker,
+.event-target-picker {
   display: grid;
   gap: 8px;
-  margin: 18px 0;
+  margin: 20px 0 24px;
 }
-.event-template-list label {
+.event-target-picker {
+  margin-top: -6px;
+}
+.event-template-picker label,
+.event-target-picker label,
+.event-situation-group legend {
+  font-size: 0.8125rem;
+  font-weight: 700;
+}
+.event-template-picker select,
+.event-target-picker select {
+  width: 100%;
+  min-height: 44px;
+  padding: 9px 12px;
+  border: 1px solid var(--control-border);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+}
+.event-template-picker p,
+.event-situation-group > p,
+.event-description-help {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+.event-situation-group {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.event-situation-group legend {
+  margin-bottom: 5px;
+}
+.event-situation-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 13px;
+}
+.event-situation-list label {
   display: flex;
   align-items: start;
   gap: 11px;
+  padding: 12px 14px;
   border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 14px;
+  border-radius: 7px;
+  background: var(--surface);
   cursor: pointer;
 }
-.event-template-list label.selected {
-  border-color: var(--ink);
-  background: var(--surface);
+.event-situation-list label:hover:not(.selected) {
+  border-color: var(--control-border);
 }
-.event-template-list input {
-  margin-top: 5px;
-  accent-color: var(--ink);
+.event-situation-list label:focus-within {
+  outline: 2px solid var(--bamboo);
+  outline-offset: 2px;
 }
-.event-template-list span {
+.event-situation-list label.selected {
+  border-color: var(--bamboo);
+  background: var(--selected);
+}
+.event-situation-list input {
+  flex: none;
+  margin-top: 3px;
+  accent-color: var(--bamboo);
+}
+.event-situation-list span {
   display: grid;
-  gap: 4px;
+  gap: 3px;
 }
-.event-template-list small {
+.event-situation-list strong {
+  font-size: 0.8125rem;
+}
+.event-situation-list small {
   color: var(--muted);
-  font-size: 0.65rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-}
-.event-template-list strong {
-  font-size: 0.875rem;
-}
-.event-template-list em {
   font-size: 0.75rem;
-  font-style: normal;
-  color: var(--muted);
-  line-height: 1.5;
+  line-height: 1.45;
+}
+.event-situation-group:disabled label {
+  cursor: default;
 }
 .event-question {
   display: grid;
   gap: 8px;
-  margin: 20px 0;
+  margin: 24px 0 7px;
   font-size: 0.8125rem;
   font-weight: 700;
 }
@@ -181,13 +227,52 @@
   width: 100%;
   resize: vertical;
   min-height: 90px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--control-border);
   border-radius: 7px;
   background: var(--surface);
   color: var(--ink);
   padding: 11px;
   font: inherit;
   font-weight: 400;
+}
+.event-question textarea:focus-visible {
+  outline: 2px solid var(--bamboo);
+  outline-offset: 2px;
+}
+.event-description-help {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 20px;
+}
+.event-description-help span {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+}
+.event-situation-summary {
+  margin: 14px 0 22px;
+  padding: 14px 16px;
+  border-radius: 7px;
+  background: var(--surface);
+}
+.event-situation-summary span {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--muted);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.event-situation-summary strong {
+  font-size: 0.9375rem;
+}
+.event-situation-summary p {
+  margin: 7px 0 0;
+  color: var(--muted);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
 }
 .event-stage {
   margin-top: 22px;
@@ -483,9 +568,6 @@
 @media (max-width: 850px) {
   .event-lab-grid {
     grid-template-columns: 1fr;
-  }
-  .event-template-list {
-    max-height: 330px;
   }
 }
 @media (max-width: 600px) {

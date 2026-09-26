@@ -25,6 +25,20 @@ LEASE_SECONDS = 120
 FACTOR_SYMBOLS = {"equity": "SPY", "rates": "TLT", "gold": "GLD"}
 
 
+def _scenario_brief(template: dict, request: dict) -> str:
+    selected = request.get("situation_snapshot") or next(
+        (item for item in template.get("situations", ())
+         if item["situation_id"] == request.get("situation_id")), None,
+    )
+    parts = [f"Target issuer: {request['target_symbol']}."] if request.get("target_symbol") else []
+    if selected:
+        parts.append(selected["description"])
+    details = (request.get("description") or request.get("question") or "").strip()
+    if details:
+        parts.append(details)
+    return " ".join(parts)[:1000]
+
+
 def _frame(snapshot: dict[str, object], key: str) -> pd.DataFrame:
     values = snapshot[key]
     if not isinstance(values, dict):
@@ -67,6 +81,9 @@ async def process_draft(store: MongoPortfolioStore, settings: Settings, job: dic
     allocation = record["allocation_snapshot"]
     symbols = sorted(allocation["holdings"][index]["symbol"]
                      for index in range(len(allocation["holdings"])))
+    if request.get("target_symbol") in symbols:
+        symbols.remove(request["target_symbol"])
+        symbols.insert(0, request["target_symbol"])
     as_of = pd.Timestamp(record["price_snapshot"]["dates"][-1]).date()
     fred = FredClient(settings.fred_api_key.get_secret_value() if settings.fred_api_key else "")
     evidence = []
@@ -76,15 +93,19 @@ async def process_draft(store: MongoPortfolioStore, settings: Settings, job: dic
     evidence.extend(asdict(official_source_evidence(source_id))
                     for source_id in template.official_source_ids)
     template_dict = asdict(template)
+    scenario_brief = _scenario_brief(template_dict, request)
     research = await research_event(settings=settings, template=template_dict,
-                                    question=request.get("question", ""), evidence=evidence,
+                                    question=scenario_brief, evidence=evidence,
                                     symbols=symbols)
     evidence = research["evidence"]
     design = await design_scenarios(settings=settings, template=template_dict,
-                                    question=request.get("question", ""),
+                                    question=scenario_brief,
                                     facts=research["facts"], evidence=evidence, symbols=symbols)
     proposal = {
         "template": template_dict,
+        "situation_id": request.get("situation_id"),
+        "target_symbol": request.get("target_symbol"),
+        "scenario_brief": scenario_brief,
         "facts": research["facts"],
         "evidence": evidence,
         "missing_evidence": research["missing_evidence"],

@@ -30,7 +30,8 @@ held-out calibration evidence. Current v2 runs omit conditional ranges and show
 the reason while returning deterministic cases.
 
 The scenario workflow is: save a portfolio, create an immutable analysis, choose
-a template, create a draft, review cited facts and proposed shocks, confirm the
+an event area and suggested situation or describe a custom one, create a draft,
+review cited facts and proposed shocks, confirm the
 shocks, then poll the run. Mongo stores queued jobs, leases, attempts, pinned
 snapshots, and run chat so work can resume after a process restart. The `rates`
 factor means **TLT adjusted return**, not a yield change. FRED yield observations

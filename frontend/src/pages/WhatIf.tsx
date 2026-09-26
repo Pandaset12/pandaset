@@ -46,6 +46,24 @@ const signed = (value: number) => `${value > 0 ? "+" : ""}${percentage(value)}`;
 const errorText = (cause: unknown) =>
   cause instanceof Error ? cause.message : "The event service is unavailable.";
 
+function savedSituationTitle(
+  item: ScenarioDraft,
+  templates: EventTemplate[],
+): string {
+  const template = templates.find(
+    (option) => option.template_id === item.request?.template_id,
+  );
+  return (
+    item.request?.situation_snapshot?.title ??
+    template?.situations?.find(
+      (option) => option.situation_id === item.request?.situation_id,
+    )?.title ??
+    (template?.category === "custom"
+      ? "Your situation"
+      : (template?.title ?? "Saved situation"))
+  );
+}
+
 function proposedToConfirmed(
   proposal: DraftProposal,
 ): CaseGrid<ConfirmedShock> {
@@ -190,7 +208,9 @@ export default function WhatIf({
   const [templatesBusy, setTemplatesBusy] = useState(true);
   const [templateError, setTemplateError] = useState("");
   const [templateId, setTemplateId] = useState("");
-  const [question, setQuestion] = useState("");
+  const [situationId, setSituationId] = useState("");
+  const [targetSymbol, setTargetSymbol] = useState("");
+  const [description, setDescription] = useState("");
   const [draft, setDraft] = useState<ScenarioDraft | null>(null);
   const [run, setRun] = useState<ScenarioRun | null>(null);
   const [shocks, setShocks] = useState<CaseGrid<ConfirmedShock> | null>(null);
@@ -253,6 +273,24 @@ export default function WhatIf({
   const selectedTemplate = templates.find(
     (item) => item.template_id === templateId,
   );
+  const selectedSituation = selectedTemplate?.situations?.find(
+    (item) => item.situation_id === situationId,
+  );
+  const selectedTargetSymbol =
+    selectedTemplate?.category === "issuer"
+      ? targetSymbol || selectedTemplate.target_symbols?.[0] || ""
+      : "";
+  const scenarioReady =
+    Boolean(selectedSituation || description.trim()) &&
+    (selectedTemplate?.category !== "issuer" || Boolean(selectedTargetSymbol));
+  const draftTemplate = templates.find(
+    (item) => item.template_id === draft?.request?.template_id,
+  );
+  const draftSituation =
+    draft?.request?.situation_snapshot ??
+    draftTemplate?.situations?.find(
+      (item) => item.situation_id === draft?.request?.situation_id,
+    );
   const proposal =
     draft?.status === "ready" || draft?.status === "confirmed"
       ? draft.proposal
@@ -300,6 +338,9 @@ export default function WhatIf({
 
   useEffect(() => {
     let cancelled = false;
+    setSituationId("");
+    setTargetSymbol("");
+    setDescription("");
     setTemplatesBusy(true);
     setTemplateError("");
     void listTemplates(portfolio.portfolio_id)
@@ -483,12 +524,15 @@ export default function WhatIf({
     setShocks(review.shocks);
     setDraftPollFailures(0);
     setTemplateId(item.request?.template_id ?? templateId);
-    setQuestion(item.request?.question ?? "");
+    setSituationId(item.request?.situation_id ?? "");
+    setTargetSymbol(item.request?.target_symbol ?? "");
+    setDescription(item.request?.description ?? item.request?.question ?? "");
     setError("");
   }
 
   async function startDraft() {
-    if (!analysis || !templateId || !validAllocation || busy) return;
+    if (!analysis || !templateId || !scenarioReady || !validAllocation || busy)
+      return;
     selectionGeneration.current += 1;
     setBusy(true);
     setError("");
@@ -505,7 +549,13 @@ export default function WhatIf({
           portfolio_id: portfolio.portfolio_id,
           analysis_id: analysis.analysis_id,
           template_id: templateId,
-          ...(question.trim() ? { question: question.trim() } : {}),
+          ...(selectedSituation
+            ? { situation_id: selectedSituation.situation_id }
+            : {}),
+          ...(selectedTargetSymbol
+            ? { target_symbol: selectedTargetSymbol }
+            : {}),
+          ...(description.trim() ? { description: description.trim() } : {}),
           ...(changedAllocation
             ? {
                 proposed_weights: Object.fromEntries(
@@ -623,7 +673,11 @@ export default function WhatIf({
         setShocks(review.shocks);
         setDraftPollFailures(0);
         setTemplateId(revision.request?.template_id ?? templateId);
-        setQuestion(revision.request?.question ?? "");
+        setSituationId(revision.request?.situation_id ?? "");
+        setTargetSymbol(revision.request?.target_symbol ?? "");
+        setDescription(
+          revision.request?.description ?? revision.request?.question ?? "",
+        );
         setMessages([]);
       } else {
         const latest = await listMessages(targetRun.run_id);
@@ -784,7 +838,11 @@ export default function WhatIf({
 
         <section className="event-panel" aria-labelledby="event-title">
           <div className="eyebrow">02 / EVENT</div>
-          <h2 id="event-title">Choose an event</h2>
+          <h2 id="event-title">Set up your situation</h2>
+          <p>
+            Choose a starting point, then add any details you want the research
+            and scenario proposal to consider.
+          </p>
           {templatesBusy ? (
             <p role="status">Loading curated events…</p>
           ) : templateError ? (
@@ -798,6 +856,8 @@ export default function WhatIf({
                     .then((found) => {
                       setTemplates(found);
                       setTemplateId(found[0]?.template_id ?? "");
+                      setSituationId("");
+                      setTargetSymbol("");
                       setTemplateError("");
                     })
                     .catch((cause) => setTemplateError(errorText(cause)))
@@ -810,51 +870,129 @@ export default function WhatIf({
           ) : templates.length === 0 ? (
             <p>No curated events are available for these holdings.</p>
           ) : (
-            <div
-              className="event-template-list"
-              role="radiogroup"
-              aria-label="Curated events"
-            >
-              {templates.map((item) => (
-                <label
-                  key={item.template_id}
-                  className={templateId === item.template_id ? "selected" : ""}
-                >
-                  <input
-                    type="radio"
-                    name="event-template"
-                    value={item.template_id}
-                    checked={templateId === item.template_id}
-                    disabled={Boolean(draft) || busy}
-                    onChange={() => setTemplateId(item.template_id)}
-                  />
-                  <span>
-                    <small>
-                      {item.category.toUpperCase()} · VERSION {item.version}
-                    </small>
-                    <strong>{item.title}</strong>
-                    <em>{item.description}</em>
-                  </span>
-                </label>
-              ))}
+            <div className="event-template-picker">
+              <label htmlFor="event-template-select">Event area</label>
+              <select
+                id="event-template-select"
+                value={templateId}
+                disabled={Boolean(draft) || busy}
+                onChange={(event) => {
+                  setTemplateId(event.target.value);
+                  setSituationId("");
+                  setTargetSymbol("");
+                  setDescription("");
+                }}
+              >
+                {templates.map((item) => (
+                  <option key={item.template_id} value={item.template_id}>
+                    {item.title}
+                  </option>
+                ))}
+              </select>
+              {selectedTemplate && <p>{selectedTemplate.description}</p>}
             </div>
           )}
-          <label className="event-question">
-            Context or question{" "}
-            <textarea
-              value={question}
-              maxLength={1000}
-              rows={3}
+          {selectedTemplate?.category === "issuer" && (
+            <div className="event-target-picker">
+              <label htmlFor="event-target-select">
+                Stock in this portfolio
+              </label>
+              <select
+                id="event-target-select"
+                value={selectedTargetSymbol}
+                disabled={Boolean(draft) || busy}
+                onChange={(event) => setTargetSymbol(event.target.value)}
+              >
+                {(selectedTemplate.target_symbols ?? []).map((symbol) => (
+                  <option key={symbol} value={symbol}>
+                    {symbol} ·{" "}
+                    {assets.find((asset) => asset.symbol === symbol)?.name ??
+                      symbol}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+          {selectedTemplate && selectedTemplate.category !== "custom" && (
+            <fieldset
+              className="event-situation-group"
               disabled={Boolean(draft) || busy}
-              placeholder="What would you like to explore?"
-              onChange={(event) => setQuestion(event.target.value)}
+            >
+              <legend>Suggested situations</legend>
+              <p>
+                Hypothetical starting points. Choose one or describe your own.
+              </p>
+              <div className="event-situation-list">
+                {(selectedTemplate.situations ?? []).map((item) => (
+                  <label
+                    key={item.situation_id}
+                    className={
+                      situationId === item.situation_id ? "selected" : ""
+                    }
+                  >
+                    <input
+                      type="radio"
+                      name="event-situation"
+                      value={item.situation_id}
+                      checked={situationId === item.situation_id}
+                      onChange={() => setSituationId(item.situation_id)}
+                    />
+                    <span>
+                      <strong>{item.title}</strong>
+                      <small>{item.description}</small>
+                    </span>
+                  </label>
+                ))}
+                <label className={!situationId ? "selected" : ""}>
+                  <input
+                    type="radio"
+                    name="event-situation"
+                    value=""
+                    checked={!situationId}
+                    onChange={() => setSituationId("")}
+                  />
+                  <span>
+                    <strong>Describe my own</strong>
+                    <small>Write another situation for this event area.</small>
+                  </span>
+                </label>
+              </div>
+            </fieldset>
+          )}
+          <label className="event-question" htmlFor="event-description">
+            {selectedSituation
+              ? "Add your details (optional)"
+              : "Describe what could happen"}
+            <textarea
+              id="event-description"
+              value={description}
+              maxLength={700}
+              rows={4}
+              disabled={Boolean(draft) || busy}
+              aria-required={!selectedSituation}
+              aria-describedby="event-description-help"
+              placeholder={
+                selectedSituation
+                  ? "For example, which holdings or timing matter to you?"
+                  : "Describe the event, timing, and holdings you care about."
+              }
+              onChange={(event) => setDescription(event.target.value)}
             />
           </label>
+          <p id="event-description-help" className="event-description-help">
+            {scenarioReady
+              ? "You will review and confirm any proposed shocks before a calculation runs."
+              : selectedTemplate?.category === "custom"
+                ? "Describe your situation to continue."
+                : "Choose a suggested situation or write your own to continue."}
+            <span>{description.length}/700</span>
+          </p>
           <button
             className="button dark full"
             disabled={
               !analysis ||
               !selectedTemplate ||
+              !scenarioReady ||
               !validAllocation ||
               busy ||
               Boolean(draft)
@@ -904,8 +1042,9 @@ export default function WhatIf({
                   disabled={chatBusy || busy}
                   onClick={() => openDraft(item)}
                 >
-                  <strong>Draft {item.status}</strong>
+                  <strong>{savedSituationTitle(item, templates)}</strong>
                   <small>
+                    {item.status} ·{" "}
                     {item.created_at
                       ? new Date(item.created_at).toLocaleString()
                       : item.draft_id}
@@ -988,6 +1127,24 @@ export default function WhatIf({
               Draft {draft.status}
             </span>
           </div>
+          {draft.request && (
+            <div className="event-situation-summary">
+              <span>Selected situation</span>
+              <strong>
+                {draftSituation?.title ??
+                  (draft.request.description || draft.request.question
+                    ? "Your own situation"
+                    : (draftTemplate?.title ?? "Event"))}
+              </strong>
+              {draft.request.target_symbol && (
+                <p>Target stock: {draft.request.target_symbol}</p>
+              )}
+              {draftSituation && <p>{draftSituation.description}</p>}
+              {(draft.request.description || draft.request.question) && (
+                <p>{draft.request.description ?? draft.request.question}</p>
+              )}
+            </div>
+          )}
           {["pending", "queued", "running"].includes(draft.status) && (
             <div className="api-state" role="status">
               <ArrowPath className="spin" size={18} />
