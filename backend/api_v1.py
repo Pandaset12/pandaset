@@ -82,7 +82,7 @@ def analyze(
         raise api_error(502, "INVALID_PROVIDER_DATA", "Provider returned inconsistent analysis data.") from exc
     except Exception as exc:
         log_failure("PROVIDER_UNAVAILABLE", exc)
-        raise api_error(502, "PROVIDER_UNAVAILABLE", "Analysis is unavailable. Check the selected provider's configuration, API key, usage limits, supported symbols, and service status.") from exc
+        raise api_error(502, "PROVIDER_UNAVAILABLE", "Analysis is unavailable. For Twelve Data, set TWELVE_DATA_API_KEY in backend/.env; also check key validity, usage limits, supported symbols, and provider status.") from exc
     analysis_id, created_at = store.save_analysis(metrics)
     return analysis_response(metrics, analysis_id, created_at)
 
@@ -110,7 +110,7 @@ def market_history(
         return provider.market_history(normalized, lookback_days)
     except ProviderUnavailable as exc:
         log_failure("MARKET_HISTORY_UNAVAILABLE", exc)
-        raise api_error(502, "MARKET_HISTORY_UNAVAILABLE", "Market data is unavailable. Verify the API key, quota, requested symbols, and provider status.") from exc
+        raise api_error(502, "MARKET_HISTORY_UNAVAILABLE", "Market data is unavailable. If Twelve Data is selected, set TWELVE_DATA_API_KEY in backend/.env; also check the key, quota, requested symbols, and provider status.") from exc
 
 
 @router.post("/portfolios/{portfolio_id}/ask", response_model=AnalystResponse)
