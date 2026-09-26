@@ -9,14 +9,14 @@ import {
   ArrowTopRightOnSquare as ExternalLink,
   MagnifyingGlass as Search,
 } from "../components/icons";
-import { assets, researchNotes, assetBySymbol } from "../data";
+import { assets, researchNotes, assetBySymbol } from "../../../quant/data";
 import {
   assetPath,
   covarianceMatrix,
   pct,
   signedPct,
   money,
-} from "../analytics";
+} from "../../../quant/analytics";
 import {
   AssetMark,
   PageHeading,

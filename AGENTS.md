@@ -2,16 +2,16 @@
 
 ## Project Structure & Module Organization
 
-PortfolioLens is a React, TypeScript, and Vite frontend. Application code lives in `src/`: `App.tsx` owns routing and shared portfolio state, `analytics.ts` contains calculations, `data.ts` defines illustrative sample data, `components/` holds reusable interface elements, and `pages/` contains the four workflows. Global styles are in `src/styles.css`. Tests are in `tests/`; design and verification notes are in `docs/`; fonts and licenses are in `public/fonts/`.
+PortfolioLens is a React, TypeScript, and Vite frontend. Application code lives in `frontend/src/`: `App.tsx` owns routing and shared portfolio state, `components/` holds reusable interface elements, and `pages/` contains the four workflows. Quantitative calculations and illustrative sample data live in `quant/`. Global styles are in `frontend/src/styles.css`. Quant tests are in `quant/tests/`; design and verification notes are in `docs/`; fonts and licenses are in `frontend/public/fonts/`.
 
-Keep the asset order in `src/data.ts` consistent with all portfolio weight and return arrays. Preserve visible labels that identify sample data and modeled results; the app is not connected to live market or brokerage services.
+Keep the asset order in `quant/data.ts` consistent with all portfolio weight and return arrays. Preserve visible labels that identify sample data and modeled results; the app is not connected to live market or brokerage services.
 
 ## Build, Test, and Development Commands
 
 - `npm install` installs the locked dependencies.
 - `npm run dev` starts Vite locally; use the URL it prints.
 - `npm test` runs the Node test suite through `tsx`.
-- `npm run build` type-checks with TypeScript and creates the production bundle in `dist/`.
+- `npm run build` type-checks with TypeScript and creates the production bundle in `frontend/dist/`.
 - `npm run preview` serves the production build locally.
 
 ## Coding Style & Naming Conventions

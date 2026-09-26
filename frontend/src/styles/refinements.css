@@ -1,0 +1,233 @@
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+.holdings-actions {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.holdings-actions .segmented button {
+  font-size: 0.75rem;
+}
+.return-drivers {
+  padding: 13px 0;
+}
+.driver-row {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  padding: 17px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.8125rem;
+}
+.driver-row:hover {
+  background: var(--raised);
+}
+.driver-row > span {
+  width: 47px;
+  font-weight: 500;
+}
+.driver-row > strong {
+  width: 79px;
+  text-align: right;
+  font-weight: 500;
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+.driver-track {
+  position: relative;
+  flex: 1;
+  height: 18px;
+}
+.driver-track::before {
+  content: "";
+  position: absolute;
+  left: 15%;
+  height: 30px;
+  top: -6px;
+  border-left: 1px solid var(--border);
+}
+.driver-track > i {
+  position: absolute;
+  display: block;
+  height: 100%;
+  left: 15%;
+  background: var(--positive);
+  border-radius: 0 2px 2px 0;
+}
+.driver-track > i.loss {
+  left: auto;
+  right: 85%;
+  background: var(--negative);
+  border-radius: 2px 0 0 2px;
+}
+@media (max-width: 720px) {
+  .holdings-section > .section-heading {
+    flex-wrap: wrap;
+    gap: 14px;
+  }
+  .holdings-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+  .holdings-actions .segmented button {
+    padding: 7px 12px;
+  }
+  .driver-row {
+    padding: 16px 0;
+    gap: 10px;
+  }
+  .driver-row > strong {
+    font-size: 0.75rem;
+  }
+  .driver-row > span {
+    font-size: 0.75rem;
+  }
+}
+
+.large-value > span {
+  color: var(--muted);
+}
+.allocation-mosaic span {
+  background: #0d1210e6;
+  color: var(--ink);
+  padding: 3px 4px;
+  border-radius: 2px;
+}
+.focus-label .edition {
+  opacity: 0.85;
+}
+.matrix-key div {
+  background: linear-gradient(
+    to right,
+    var(--negative),
+    var(--raised),
+    var(--brass)
+  );
+}
+.table-scroll,
+.matrix-scroll {
+  position: relative;
+}
+.chart-label {
+  font-size: 0.8125rem;
+}
+.chart-legend {
+  flex-wrap: wrap;
+}
+.chart-readout {
+  min-height: 16px;
+}
+@media (max-width: 720px) {
+  .workspace-bar {
+    display: block;
+  }
+  .workspace-bar > div {
+    justify-content: space-between;
+  }
+  .portfolio-selector,
+  .demo-badge {
+    white-space: nowrap;
+  }
+  .as-of {
+    display: block;
+    max-width: none;
+    text-align: left;
+    margin-top: 9px;
+    font-size: 0.75rem;
+  }
+  .performance-head {
+    flex-wrap: wrap;
+  }
+  .performance-head > .segmented {
+    margin-top: 9px;
+  }
+  .chart-wrap {
+    margin-top: 16px;
+  }
+  .chart-readout {
+    flex-basis: 100%;
+    margin-left: 0 !important;
+    min-height: 0;
+  }
+  .correlation-table {
+    min-width: 340px;
+  }
+  .risk-detail > section {
+    min-width: 0;
+  }
+  .chart-label {
+    font-size: 0.75rem;
+  }
+}
+.driver-track::before {
+  left: var(--zero, 5%);
+}
+.driver-track > i.loss {
+  right: auto;
+}
+.skip-link {
+  opacity: 0;
+}
+.skip-link:focus {
+  opacity: 1;
+}
+@media (max-width: 720px) {
+  .remove-asset {
+    width: 44px;
+    min-height: 44px;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .weight-input {
+    width: 130px;
+  }
+  .weight-input button {
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
+  }
+  .editor-row {
+    gap: 6px;
+  }
+  .editor-asset {
+    min-width: 60px;
+  }
+  .editor-table-head {
+    margin-right: 50px;
+  }
+}
+.scenario-editor {
+  min-width: 0;
+}
+@media (max-width: 380px) {
+  .scenario-editor {
+    padding: 15px;
+  }
+  .editor-asset > .asset-mark {
+    display: none;
+  }
+  .editor-asset {
+    min-width: 36px;
+  }
+  .current-weight {
+    min-width: 32px;
+  }
+  .editor-row {
+    gap: 2px;
+  }
+  .weight-input {
+    width: 130px;
+    padding: 0 2px;
+  }
+  .editor-table-head {
+    grid-template-columns: 1fr 32px 130px;
+    margin-right: 46px;
+  }
+}

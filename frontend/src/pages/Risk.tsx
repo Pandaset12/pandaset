@@ -5,8 +5,8 @@ import {
   InformationCircle as Info,
   RectangleStack as Layers,
 } from "../components/icons";
-import { assets } from "../data";
-import { analyze, correlationMatrix, pct } from "../analytics";
+import { assets } from "../../../quant/data";
+import { analyze, correlationMatrix, pct } from "../../../quant/analytics";
 import {
   AssetMark,
   PageHeading,

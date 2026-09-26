@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { dates } from "../data";
-import { pct, money } from "../analytics";
+import { dates } from "../../../quant/data";
+import { pct, money } from "../../../quant/analytics";
 export function LineChart({
   series,
   secondary,

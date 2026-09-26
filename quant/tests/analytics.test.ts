@@ -6,8 +6,8 @@ import {
   correlationMatrix,
   covarianceMatrix,
   validateWeights,
-} from "../src/analytics.ts";
-import { assets, initialWeights, returns, dates } from "../src/data.ts";
+} from "../analytics.ts";
+import { assets, initialWeights, returns, dates } from "../data.ts";
 const close = (actual: number, expected: number, tolerance = 1e-10) =>
   assert.ok(
     Math.abs(actual - expected) < tolerance,

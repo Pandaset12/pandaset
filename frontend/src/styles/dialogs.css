@@ -1,0 +1,339 @@
+/* Dialogs, editing, and guided analyst. */
+.modal {
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--raised);
+  color: var(--ink);
+  width: min(540px, calc(100vw - 32px));
+  max-height: 90dvh;
+  box-shadow: var(--shadow);
+  overflow: auto;
+}
+.modal.wide {
+  width: min(760px, calc(100vw - 32px));
+}
+.modal::backdrop {
+  background: #080c0aeb;
+  backdrop-filter: blur(3px);
+}
+.modal[open] {
+  animation: dialog-in 0.2s ease-out;
+}
+.modal-inner {
+  padding: 27px;
+}
+.modal-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+.modal-heading h2 {
+  font-family: var(--serif);
+  font-weight: 400;
+  font-size: 1.875rem;
+  letter-spacing: -0.5px;
+}
+.modal-description {
+  font-size: 0.875rem;
+  color: var(--muted);
+  margin-bottom: 18px;
+}
+.modal-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+  margin-top: 20px;
+}
+.modal-actions + .small-text {
+  font-size: 0.75rem;
+  margin-top: 15px;
+}
+.edit-weights {
+  border-top: 1px solid var(--border);
+}
+.edit-weights > label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--border);
+  gap: 10px;
+}
+.edit-weights > label > span:first-child {
+  display: flex;
+  gap: 9px;
+  align-items: center;
+}
+.edit-weights strong {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  width: 40px;
+}
+.edit-weights small {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+.edit-weight-input {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  display: flex;
+  gap: 2px;
+  align-items: center;
+  padding: 6px 9px;
+  font-size: 0.8125rem;
+  background: var(--surface);
+  color: var(--muted);
+}
+.edit-weight-input input {
+  width: 35px;
+  text-align: right;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.8125rem;
+}
+.method-intro {
+  display: flex;
+  gap: 11px;
+  align-items: flex-start;
+  padding: 15px;
+  background: var(--raised);
+  border-radius: 4px;
+  margin-bottom: 24px;
+}
+.method-intro > svg {
+  color: var(--muted);
+}
+.method-intro p {
+  font-size: 0.875rem;
+}
+.method-list {
+  margin: 0;
+}
+.method-list dt {
+  font-size: 0.875rem;
+  font-weight: 600;
+  margin-top: 19px;
+}
+.method-list dd {
+  font-size: 0.8125rem;
+  color: var(--muted);
+  margin: 6px 0 0;
+  line-height: 1.65;
+}
+.analyst-mode {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.75rem;
+  color: var(--muted);
+  margin-bottom: 16px;
+}
+.analyst-messages {
+  height: 375px;
+  max-height: 48dvh;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+.analyst-welcome {
+  text-align: center;
+  padding: 13px 8px;
+}
+.analyst-orb {
+  height: 58px;
+  width: 58px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--raised);
+  color: var(--muted);
+  border-radius: 14px;
+  margin: 0 auto 17px;
+}
+.analyst-welcome h3 {
+  font-family: var(--serif);
+  font-size: 1.875rem;
+}
+.analyst-welcome p {
+  font-size: 0.8125rem;
+  color: var(--muted);
+  max-width: 320px;
+  margin: 8px auto 20px;
+}
+.analyst-welcome button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 12px;
+  font-size: 0.8125rem;
+  margin-top: 7px;
+  text-align: left;
+}
+.analyst-welcome button:hover {
+  background: var(--raised);
+}
+.message {
+  padding: 13px 15px;
+  background: var(--raised);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  margin-bottom: 13px;
+  max-width: 96%;
+}
+.message.user {
+  background: var(--selected);
+  border-color: var(--border);
+  margin-left: 30px;
+}
+.message > span {
+  font-size: 0.75rem;
+  letter-spacing: 1px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.message p {
+  font-size: 0.8125rem;
+  line-height: 1.8;
+  white-space: pre-wrap;
+  margin-top: 7px;
+}
+.message > a {
+  font-size: 0.75rem;
+  color: var(--muted);
+  display: flex;
+  gap: 5px;
+  align-items: center;
+  margin-top: 13px;
+}
+.analyst-loading {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 0.8125rem;
+  color: var(--muted);
+  padding: 10px;
+}
+.analyst-input {
+  display: flex;
+  gap: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: 5px;
+  padding: 7px;
+  margin-top: 18px;
+}
+.analyst-input:focus-within {
+  outline: 2px solid var(--brass);
+}
+.analyst-input input {
+  border: 0;
+  flex: 1;
+  font-size: 0.8125rem;
+  padding: 4px 5px;
+  outline: none;
+  background: transparent;
+}
+.analyst-input button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 31px;
+  height: 31px;
+  border-radius: 4px;
+  background: var(--panel-deep);
+  color: var(--brass);
+}
+.analyst-footnote {
+  font-size: 0.75rem;
+  color: var(--muted);
+  margin-top: 9px;
+  text-align: center;
+}
+.toast {
+  position: fixed;
+  bottom: 25px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--raised);
+  box-shadow: var(--shadow);
+  padding: 12px 15px;
+  font-size: 0.8125rem;
+  z-index: 100;
+  max-width: calc(100vw - 30px);
+}
+.toast > svg {
+  color: var(--muted);
+}
+.toast > .icon-button {
+  width: 22px;
+  height: 22px;
+  margin-left: 12px;
+}
+.empty-state {
+  text-align: center;
+  padding: 26px 10px;
+}
+.empty-symbol {
+  font-family: var(--serif);
+  font-size: 2.1875rem;
+  color: var(--muted);
+  margin-bottom: 10px;
+}
+.empty-state h3 {
+  font-size: 1rem;
+  font-weight: 500;
+  margin-bottom: 7px;
+}
+.empty-state p {
+  font-size: 0.8125rem;
+  color: var(--muted);
+}
+.empty-state .text-button {
+  display: flex;
+  margin: 12px auto 0;
+  font-size: 0.75rem;
+}
+.error-page {
+  padding: 80px 30px;
+  text-align: center;
+}
+.error-page h1 {
+  font-family: var(--serif);
+  font-size: 2.5rem;
+}
+.error-page p {
+  margin: 18px 0 25px;
+  color: var(--muted);
+}
+.spin {
+  animation: spin 1s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

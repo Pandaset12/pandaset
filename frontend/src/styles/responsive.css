@@ -1,0 +1,1180 @@
+/* Small laptop and tablet. */
+@media (min-width: 1441px) {
+  .main-content {
+    padding-top: 39px;
+  }
+  .page-heading {
+    margin-bottom: 34px;
+  }
+  .overview-top {
+    grid-template-columns: minmax(0, 1fr) 345px;
+  }
+  .overview-bottom {
+    grid-template-columns: minmax(0, 1fr) 345px;
+  }
+  .focus-panel {
+    padding-left: 29px;
+    padding-right: 29px;
+  }
+  .focus-panel h2 {
+    font-size: 2.125rem;
+  }
+  .focus-panel > p {
+    font-size: 0.875rem;
+  }
+  .focus-bars {
+    margin-top: 35px;
+  }
+  .focus-bars > div:not(.focus-track) {
+    font-size: 0.75rem;
+  }
+}
+@media (max-width: 1200px) {
+  .header-inner {
+    padding: 0 32px;
+    gap: 25px;
+  }
+  .header-inner nav {
+    gap: 25px;
+    margin-left: 0;
+  }
+  .main-content {
+    padding-left: 32px;
+    padding-right: 32px;
+  }
+  .workspace-bar {
+    padding-left: 32px;
+    padding-right: 32px;
+  }
+  .site-footer {
+    margin: 0 32px;
+  }
+  .overview-top,
+  .overview-bottom {
+    grid-template-columns: minmax(0, 1fr) 290px;
+    gap: 24px;
+  }
+  .focus-panel {
+    padding: 23px 22px 0;
+  }
+  .focus-panel h2 {
+    font-size: 1.8125rem;
+  }
+  .focus-bars {
+    margin-top: 23px;
+  }
+  .metric-strip strong {
+    flex-direction: column;
+    gap: 3px;
+  }
+  .metric-strip > div {
+    padding: 0 18px;
+  }
+  .risk-summary {
+    grid-template-columns: 290px 1fr;
+    gap: 30px;
+  }
+  .two-columns {
+    gap: 35px;
+  }
+  .company-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .company-description {
+    margin-top: 14px;
+  }
+  .research-workspace {
+    grid-template-columns: 225px 1fr;
+  }
+  .company-detail {
+    padding: 26px;
+  }
+  .scenario-workspace {
+    grid-template-columns: 345px 1fr;
+    gap: 27px;
+  }
+  .scenario-editor {
+    padding: 22px 19px;
+  }
+  .scenario-presets {
+    gap: 8px;
+  }
+  .scenario-presets > span {
+    max-width: 110px;
+    line-height: 1.6;
+  }
+  .scenario-presets > button {
+    font-size: 0.75rem;
+    gap: 7px;
+  }
+}
+@media (max-width: 950px) {
+  .header-inner {
+    padding: 0 24px;
+    gap: 20px;
+  }
+  .brand {
+    font-size: 1.1875rem;
+  }
+  .header-inner nav {
+    gap: 20px;
+  }
+  .header-inner nav a {
+    font-size: 0.8125rem;
+  }
+  .key-hint {
+    display: none;
+  }
+  .analyst-button {
+    padding: 10px;
+  }
+  .main-content {
+    padding: 29px 24px 40px;
+  }
+  .workspace-bar {
+    padding: 18px 24px 0;
+  }
+  .site-footer {
+    margin: 0 24px;
+  }
+  .page-heading h1 {
+    font-size: 2.375rem;
+  }
+  .heading-actions .button {
+    padding: 10px 12px;
+    font-size: 0.75rem;
+  }
+  .overview-top {
+    grid-template-columns: minmax(0, 1fr) 255px;
+    gap: 18px;
+  }
+  .performance-panel {
+    padding: 20px 21px 0;
+  }
+  .performance-head {
+    flex-wrap: wrap;
+  }
+  .performance-head > .segmented {
+    margin: 3px 0 0;
+  }
+  .large-value {
+    font-size: 2.5rem;
+  }
+  .focus-panel {
+    padding: 21px 19px 0;
+  }
+  .focus-panel h2 {
+    font-size: 1.6875rem;
+    margin-top: 22px;
+  }
+  .focus-panel > p {
+    font-size: 0.75rem;
+  }
+  .focus-bars {
+    margin: 20px 0;
+  }
+  .focus-link {
+    font-size: 0.75rem;
+  }
+  .overview-bottom {
+    grid-template-columns: 1fr;
+  }
+  .briefing {
+    border-top: 1px solid var(--border);
+    padding-top: 25px;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0 25px;
+  }
+  .briefing > .section-heading {
+    grid-column: 1/-1;
+  }
+  .analyst-callout {
+    grid-column: 1/-1;
+    max-width: 350px;
+  }
+  .briefing-item {
+    border: 0;
+    padding-top: 5px;
+  }
+  .metric-strip > div > span {
+    font-size: 0.8125rem;
+  }
+  .risk-summary {
+    grid-template-columns: 240px 1fr;
+    gap: 28px;
+  }
+  .risk-intro h2 {
+    font-size: 2.125rem;
+  }
+  .risk-intro p {
+    font-size: 0.8125rem;
+  }
+  .risk-ticker {
+    width: 75px;
+    gap: 6px;
+  }
+  .risk-ticker .asset-mark {
+    width: 24px;
+    height: 24px;
+  }
+  .risk-bar-row {
+    gap: 9px;
+  }
+  .two-columns {
+    gap: 30px;
+  }
+  .correlation-table {
+    border-spacing: 3px;
+  }
+  .correlation-table td button,
+  .correlation-table td.matrix-static span {
+    height: 37px;
+    font-size: 0.8125rem;
+  }
+  .correlation-table th {
+    font-size: 0.8125rem;
+  }
+  .matrix-key {
+    font-size: 0.8125rem;
+    gap: 7px;
+  }
+  .matrix-key div {
+    width: 70px;
+  }
+  .company-identity h2 {
+    font-size: 1.6875rem;
+  }
+  .company-detail {
+    padding: 23px;
+  }
+  .research-workspace {
+    grid-template-columns: 200px 1fr;
+  }
+  .research-index {
+    padding: 18px 12px;
+  }
+  .asset-index-item {
+    padding: 10px 6px;
+    gap: 7px;
+  }
+  .asset-index-item small {
+    font-size: 0.75rem;
+  }
+  .asset-index-item > svg {
+    display: none;
+  }
+  .company-tabs {
+    gap: 10px;
+  }
+  .underlined-tabs {
+    gap: 15px;
+  }
+  .underlined-tabs button {
+    font-size: 0.75rem;
+  }
+  .compare-select select {
+    font-size: 0.75rem;
+    max-width: 110px;
+  }
+  .company-thesis {
+    gap: 20px;
+  }
+  .company-thesis p {
+    font-size: 0.75rem;
+  }
+  .company-thesis .eyebrow {
+    font-size: 0.75rem;
+  }
+  .company-action {
+    flex-wrap: wrap;
+  }
+  .reading-note {
+    padding-left: 17px;
+    padding-right: 17px;
+  }
+  .reading-note h3 {
+    font-size: 1.4375rem;
+  }
+  .scenario-workspace {
+    grid-template-columns: 315px minmax(0, 1fr);
+    gap: 24px;
+  }
+  .scenario-editor {
+    padding: 20px 14px;
+  }
+  .scenario-results .section-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .scenario-results .section-heading h2 {
+    font-size: 1.75rem;
+  }
+  .scenario-result-actions {
+    flex-wrap: wrap;
+  }
+  .scenario-presets {
+    flex-wrap: wrap;
+  }
+  .scenario-presets > span {
+    max-width: none;
+    width: 100%;
+    margin-bottom: 3px;
+  }
+  .scenario-empty {
+    padding: 30px 20px;
+  }
+  .scenario-empty h3 {
+    font-size: 1.8125rem;
+  }
+  .comparison-preview {
+    gap: 20px;
+  }
+  .volatility-change {
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .volatility-change > strong {
+    font-size: 1.9375rem;
+  }
+  .volatility-change > span:first-child {
+    font-size: 1.625rem;
+  }
+  .delta-pill {
+    margin-left: 0;
+  }
+  .scenario-comparison {
+    font-size: 0.75rem;
+  }
+  .scenario-comparison thead th {
+    font-size: 0.75rem;
+  }
+}
+/* Mobile: keep controls close to the data, stack working surfaces. */
+@media (max-width: 720px) {
+  .site-header {
+    height: auto;
+  }
+  .header-inner {
+    padding: 18px 20px 0;
+    flex-wrap: wrap;
+    gap: 14px;
+  }
+  .brand {
+    font-size: 1.3125rem;
+  }
+  .header-inner nav {
+    order: 3;
+    flex-basis: 100%;
+    justify-content: space-between;
+    gap: 18px;
+    height: 46px;
+    margin-top: 2px;
+    overflow-x: auto;
+  }
+  .header-inner nav a {
+    font-size: 0.8125rem;
+    padding-top: 0;
+    flex-shrink: 0;
+  }
+  .analyst-button {
+    margin-left: auto;
+    padding: 9px 12px;
+    font-size: 0.8125rem;
+  }
+  .header-inner nav a.active {
+    border-bottom-width: 2px;
+  }
+  .workspace-bar {
+    padding: 17px 20px 0;
+    gap: 10px;
+    align-items: flex-start;
+  }
+  .workspace-bar > div {
+    gap: 8px;
+  }
+  .portfolio-selector {
+    font-size: 0.75rem;
+    gap: 6px;
+  }
+  .portfolio-initial {
+    width: 22px;
+    height: 22px;
+  }
+  .demo-badge {
+    font-size: 0.75rem;
+    padding: 3px 4px;
+    gap: 3px;
+    letter-spacing: 0.5px;
+    margin-top: 3px;
+  }
+  .demo-badge svg {
+    width: 10px;
+  }
+  .as-of {
+    font-size: 0.75rem;
+    line-height: 1.6;
+    text-align: right;
+    max-width: 83px;
+  }
+  .separator {
+    margin: 0 5px;
+  }
+  .main-content {
+    padding: 27px 20px 32px;
+  }
+  .page-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    margin-bottom: 23px;
+    gap: 18px;
+  }
+  .page-heading h1 {
+    font-size: 2.3125rem;
+    letter-spacing: -0.5px;
+  }
+  .page-heading p {
+    font-size: 0.8125rem;
+    margin-top: 9px;
+  }
+  .heading-actions {
+    gap: 8px;
+  }
+  .heading-actions .button {
+    font-size: 0.75rem;
+    min-height: 37px;
+    padding: 9px 13px;
+  }
+  .overview-top {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+  .performance-panel {
+    padding: 22px 19px 0;
+  }
+  .performance-head {
+    flex-wrap: nowrap;
+    gap: 9px;
+  }
+  .performance-head .eyebrow {
+    font-size: 0.75rem;
+    letter-spacing: 1.1px;
+  }
+  .large-value {
+    font-size: 2.375rem;
+    letter-spacing: -1.6px;
+  }
+  .return-caption {
+    font-size: 0.75rem;
+    gap: 3px;
+    flex-wrap: wrap;
+  }
+  .return-caption > span {
+    font-size: 0.75rem;
+  }
+  .performance-head > .segmented {
+    margin-top: 4px;
+  }
+  .segmented {
+    padding: 2px;
+    gap: 1px;
+  }
+  .segmented button {
+    min-width: 25px;
+    padding: 5px 6px;
+    font-size: 0.75rem;
+  }
+  .chart-wrap {
+    margin-top: 23px;
+  }
+  .line-chart {
+    min-height: 156px;
+  }
+  .chart-legend {
+    font-size: 0.75rem;
+    gap: 13px;
+  }
+  .chart-legend .chart-readout {
+    font-size: 0.75rem;
+  }
+  .chart-label {
+    font-size: 0.8125rem;
+  }
+  .performance-bottom {
+    font-size: 0.75rem;
+    padding: 12px 0;
+    margin-top: 10px;
+  }
+  .performance-bottom button {
+    font-size: 0.75rem;
+  }
+  .focus-panel {
+    padding: 22px 23px 0;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0 22px;
+  }
+  .focus-label {
+    grid-column: 1/-1;
+  }
+  .focus-panel h2 {
+    font-size: 1.75rem;
+    grid-column: 1;
+    margin: 21px 0 12px;
+  }
+  .focus-panel > p {
+    grid-column: 1;
+    font-size: 0.75rem;
+    padding-bottom: 20px;
+  }
+  .focus-bars {
+    grid-column: 2;
+    grid-row: 2/4;
+    align-self: center;
+    margin: 0;
+  }
+  .focus-link {
+    grid-column: 1/-1;
+    padding: 15px 0 17px;
+  }
+  .focus-label .edition {
+    font-size: 0.75rem;
+  }
+  .focus-bars > div:not(.focus-track) {
+    font-size: 0.75rem;
+  }
+  .focus-bars strong {
+    font-size: 0.75rem;
+  }
+  .focus-track {
+    height: 7px;
+    margin-bottom: 20px;
+  }
+  .metric-strip {
+    grid-template-columns: 1fr 1fr;
+    gap: 20px 0;
+    padding: 23px 0;
+    margin-bottom: 27px;
+  }
+  .metric-strip > div {
+    padding: 0 20px;
+  }
+  .metric-strip > div:nth-child(3) {
+    padding-left: 0;
+  }
+  .metric-strip > div:nth-child(2) {
+    border: 0;
+  }
+  .metric-strip strong {
+    font-size: 1.8125rem;
+    gap: 3px;
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .metric-strip small {
+    font-size: 0.8125rem;
+    line-height: 1.45;
+  }
+  .metric-strip > div > span {
+    font-size: 0.8125rem;
+  }
+  .section-heading h2 {
+    font-size: 1.375rem;
+  }
+  .section-heading .eyebrow {
+    font-size: 0.8125rem;
+  }
+  .section-heading {
+    margin-bottom: 18px;
+  }
+  .table-tools {
+    padding-bottom: 10px;
+  }
+  .table-tools .search-field input {
+    font-size: 0.75rem;
+    width: 135px;
+  }
+  .table-tools .text-button {
+    font-size: 0.75rem;
+  }
+  .holdings-table {
+    min-width: 470px;
+  }
+  .holdings-table th {
+    font-size: 0.75rem;
+  }
+  .holdings-table td {
+    font-size: 0.75rem;
+    padding: 13px 9px;
+  }
+  .asset-cell {
+    gap: 9px;
+  }
+  .asset-cell strong {
+    font-size: 0.75rem;
+  }
+  .asset-cell small {
+    font-size: 0.75rem;
+  }
+  .table-footnote {
+    font-size: 0.75rem;
+  }
+  .briefing {
+    display: block;
+    padding-top: 24px;
+  }
+  .briefing .section-heading {
+    margin-bottom: 7px;
+  }
+  .briefing-item {
+    padding: 18px 0;
+    border-bottom: 1px solid var(--border);
+    grid-template-columns: 27px 1fr;
+  }
+  .briefing-item .eyebrow {
+    font-size: 0.75rem;
+  }
+  .briefing-item h3 {
+    font-size: 1.125rem;
+  }
+  .briefing-meta > span {
+    font-size: 0.75rem;
+  }
+  .analyst-callout {
+    max-width: none;
+    margin-top: 20px;
+  }
+  .analyst-callout strong {
+    font-size: 0.8125rem;
+  }
+  .analyst-callout .text-button {
+    font-size: 0.75rem;
+  }
+  .site-footer {
+    margin: 0 20px;
+    padding: 20px 0 25px;
+    font-size: 0.75rem;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+  .site-footer .text-button {
+    font-size: 0.75rem;
+  }
+  .risk-summary {
+    grid-template-columns: 1fr;
+    gap: 28px;
+    padding: 20px 0 27px;
+  }
+  .risk-intro {
+    padding-top: 0;
+  }
+  .risk-intro h2 {
+    font-size: 2.3125rem;
+    margin: 18px 0 13px;
+  }
+  .risk-intro p {
+    max-width: 100%;
+    font-size: 0.875rem;
+  }
+  .risk-intro .text-link {
+    margin-top: 17px;
+    font-size: 0.8125rem;
+  }
+  .risk-bars-panel {
+    border-top: 1px solid var(--border);
+    padding-top: 25px;
+  }
+  .risk-bars-panel .section-heading h2 {
+    font-size: 1.25rem;
+  }
+  .risk-ticker {
+    width: 85px;
+    font-size: 0.8125rem;
+  }
+  .risk-ticker .asset-mark {
+    width: 27px;
+    height: 27px;
+  }
+  .risk-bar-row {
+    padding: 9px 0;
+  }
+  .risk-bar-pair > div {
+    height: 14px;
+    font-size: 0.75rem;
+  }
+  .risk-bar-pair i {
+    height: 9px;
+  }
+  .two-columns {
+    grid-template-columns: 1fr;
+    gap: 30px;
+  }
+  .risk-detail {
+    padding: 27px 0;
+  }
+  .correlation-table th {
+    font-size: 0.8125rem;
+  }
+  .correlation-table td button,
+  .correlation-table td.matrix-static span {
+    height: 43px;
+    font-size: 0.8125rem;
+  }
+  .matrix-key {
+    font-size: 0.8125rem;
+  }
+  .matrix-key div {
+    width: 95px;
+  }
+  .correlation-insight p {
+    font-size: 0.8125rem;
+  }
+  .exposure-section {
+    border-top: 1px solid var(--border);
+    padding-top: 28px;
+  }
+  .wide-segment {
+    margin-top: 12px;
+  }
+  .wide-segment button {
+    font-size: 0.75rem;
+    padding: 7px 12px;
+  }
+  .allocation-mosaic {
+    height: 110px;
+  }
+  .next-step {
+    align-items: flex-start;
+    flex-direction: column;
+    padding-top: 24px;
+    gap: 17px;
+  }
+  .next-step h3 {
+    font-size: 1.75rem;
+  }
+  .next-step p {
+    font-size: 0.8125rem;
+  }
+  .research-workspace {
+    display: block;
+    overflow: visible;
+  }
+  .research-index {
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+    padding: 15px;
+    border-radius: 7px 7px 0 0;
+    display: block;
+  }
+  .research-index .search-field.large {
+    max-width: none;
+    padding: 8px;
+  }
+  .search-field.large input {
+    font-size: 0.8125rem;
+  }
+  .index-filter {
+    margin: 15px 3px 10px;
+  }
+  .index-filter button {
+    font-size: 0.75rem;
+  }
+  .asset-index-list {
+    display: flex;
+    flex-direction: row;
+    gap: 6px;
+    overflow-x: auto;
+    padding-bottom: 7px;
+    scrollbar-width: thin;
+  }
+  .asset-index-item {
+    padding: 8px 10px;
+    flex-shrink: 0;
+    gap: 7px;
+    background: var(--raised);
+  }
+  .asset-index-item small {
+    display: none;
+  }
+  .asset-index-item strong {
+    font-size: 0.75rem;
+  }
+  .asset-index-item .asset-mark {
+    height: 24px;
+    width: 24px;
+    font-size: 0.9375rem;
+    border-radius: 5px;
+  }
+  .library-note {
+    display: none;
+  }
+  .company-detail {
+    padding: 21px 16px;
+  }
+  .company-header {
+    gap: 13px;
+  }
+  .company-identity {
+    gap: 10px;
+  }
+  .company-identity h2 {
+    font-size: 1.75rem;
+  }
+  .company-identity .eyebrow {
+    font-size: 0.75rem;
+  }
+  .company-identity > .asset-mark {
+    width: 38px;
+    height: 38px;
+  }
+  .ownership-tag {
+    font-size: 0.75rem;
+    padding: 5px 7px;
+  }
+  .company-description {
+    font-size: 0.8125rem;
+    line-height: 1.6;
+  }
+  .company-tabs {
+    margin-top: 22px;
+    gap: 10px;
+  }
+  .underlined-tabs {
+    gap: 16px;
+  }
+  .underlined-tabs button {
+    font-size: 0.75rem;
+    white-space: nowrap;
+  }
+  .compare-select select {
+    font-size: 0.75rem;
+    max-width: 100px;
+  }
+  .company-chart-head {
+    margin-top: 21px;
+  }
+  .company-price {
+    font-size: 1.9375rem;
+    gap: 11px;
+  }
+  .company-price > span {
+    font-size: 0.75rem;
+  }
+  .company-thesis {
+    grid-template-columns: 1fr;
+    gap: 23px;
+    padding-top: 23px;
+  }
+  .company-thesis .eyebrow {
+    font-size: 0.75rem;
+  }
+  .company-thesis h3 {
+    font-size: 1rem;
+  }
+  .company-thesis p {
+    font-size: 0.875rem;
+  }
+  .company-action {
+    gap: 18px;
+    padding-top: 20px;
+  }
+  .company-action > .text-button {
+    font-size: 0.75rem;
+  }
+  .company-action > .button {
+    font-size: 0.75rem;
+  }
+  .sources-view {
+    padding-top: 25px;
+  }
+  .source-card {
+    padding: 15px;
+  }
+  .source-card strong {
+    font-size: 0.8125rem;
+  }
+  .reading-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 0;
+  }
+  .reading-note {
+    padding: 20px 16px 15px;
+  }
+  .reading-note:nth-child(2) {
+    border-right: 0;
+  }
+  .reading-note:nth-child(3) {
+    padding-left: 0;
+  }
+  .reading-note h3 {
+    font-size: 1.625rem;
+    margin-bottom: 17px;
+  }
+  .reading-number {
+    font-size: 1.5rem;
+    margin-bottom: 14px;
+  }
+  .reading-note .eyebrow {
+    font-size: 0.75rem;
+  }
+  .reading-bottom {
+    font-size: 0.75rem;
+  }
+  .research-reading {
+    padding-top: 27px;
+  }
+  .sample-label {
+    font-size: 0.75rem;
+  }
+  .scenario-badge {
+    font-size: 0.8125rem;
+  }
+  .scenario-presets {
+    display: flex;
+    gap: 7px;
+    margin-bottom: 22px;
+  }
+  .scenario-presets > span {
+    font-size: 0.8125rem;
+  }
+  .scenario-presets > button {
+    font-size: 0.8125rem;
+    min-height: 44px;
+    gap: 6px;
+    padding: 8px 9px;
+  }
+  .scenario-presets > button > svg {
+    width: 12px;
+  }
+  .scenario-workspace {
+    grid-template-columns: 1fr;
+    gap: 30px;
+  }
+  .scenario-editor {
+    padding: 23px;
+  }
+  .editor-table-head {
+    grid-template-columns: 1fr 48px 130px;
+    font-size: 0.8125rem;
+    margin-right: 50px;
+  }
+  .editor-table-head > span:last-child {
+    padding-right: 0;
+  }
+  .editor-asset {
+    gap: 10px;
+  }
+  .editor-asset strong {
+    font-size: 0.8125rem;
+  }
+  .current-weight {
+    font-size: 0.8125rem;
+    min-width: 42px;
+  }
+  .weight-input {
+    width: 130px;
+    height: 46px;
+  }
+  .weight-input input {
+    font-size: 0.875rem;
+  }
+  .weight-input button {
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
+  }
+  .editor-row {
+    padding: 13px 0;
+  }
+  .editor-note {
+    font-size: 0.8125rem;
+  }
+  .add-asset select {
+    font-size: 0.8125rem;
+    padding: 9px;
+  }
+  .allocation-total {
+    font-size: 0.875rem;
+  }
+  .scenario-results {
+    padding-top: 0;
+    min-height: 480px;
+  }
+  .scenario-results .section-heading {
+    flex-direction: row;
+    align-items: center;
+  }
+  .scenario-results .section-heading h2 {
+    font-size: 1.875rem;
+  }
+  .scenario-results .section-heading .results-status {
+    font-size: 0.75rem;
+  }
+  .scenario-empty {
+    padding: 36px 23px;
+  }
+  .scenario-empty h3 {
+    font-size: 2.1875rem;
+  }
+  .scenario-empty > p {
+    font-size: 0.8125rem;
+  }
+  .comparison-preview {
+    font-size: 0.75rem;
+    gap: 25px;
+  }
+  .scenario-disclaimer p {
+    font-size: 0.75rem;
+  }
+  .comparison-summary {
+    padding: 20px;
+  }
+  .volatility-change {
+    gap: 12px;
+  }
+  .volatility-change > span:first-child {
+    font-size: 1.9375rem;
+  }
+  .volatility-change > strong {
+    font-size: 2.25rem;
+  }
+  .delta-pill {
+    margin-left: auto;
+    font-size: 0.75rem;
+  }
+  .comparison-summary p {
+    font-size: 0.8125rem;
+  }
+  .scenario-comparison {
+    font-size: 0.75rem;
+  }
+  .scenario-comparison thead th {
+    font-size: 0.75rem;
+  }
+  .scenario-result-actions {
+    gap: 20px;
+  }
+  .modal-inner {
+    padding: 23px;
+  }
+  .modal-heading h2 {
+    font-size: 1.75rem;
+  }
+  .edit-weights small {
+    display: none;
+  }
+  .edit-weights > label {
+    padding: 10px 0;
+  }
+  .modal-actions {
+    gap: 12px;
+  }
+  .modal-actions .button,
+  .modal-actions .text-button {
+    font-size: 0.75rem;
+  }
+  .method-intro p {
+    font-size: 0.8125rem;
+  }
+  .analyst-mode {
+    font-size: 0.75rem;
+  }
+  .analyst-messages {
+    height: 360px;
+  }
+  .message p {
+    font-size: 0.875rem;
+  }
+  .analyst-welcome button {
+    font-size: 0.8125rem;
+    padding: 12px 10px;
+  }
+  .analyst-input input {
+    font-size: 1rem;
+  }
+  .toast {
+    font-size: 0.75rem;
+    min-width: 290px;
+    padding: 11px 12px;
+    bottom: 15px;
+  }
+}
+@media (max-width: 380px) {
+  .header-inner,
+  .workspace-bar {
+    padding-left: 15px;
+    padding-right: 15px;
+  }
+  .main-content {
+    padding-left: 15px;
+    padding-right: 15px;
+  }
+  .header-inner nav {
+    gap: 12px;
+  }
+  .header-inner nav a {
+    font-size: 0.75rem;
+  }
+  .brand {
+    font-size: 1.1875rem;
+  }
+  .brand > .panda-mark {
+    width: 27px;
+    height: 29px;
+  }
+  .page-heading h1 {
+    font-size: 2.125rem;
+  }
+  .large-value {
+    font-size: 2.125rem;
+  }
+  .focus-panel {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+  .focus-panel h2,
+  .focus-panel > p,
+  .focus-bars {
+    grid-column: 1;
+    grid-row: auto;
+  }
+  .focus-panel h2 {
+    font-size: 1.9375rem;
+  }
+  .focus-panel > p {
+    padding-bottom: 0;
+  }
+  .focus-bars {
+    margin: 20px 0;
+  }
+  .performance-panel {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+  .segmented button {
+    font-size: 0.75rem;
+    min-width: 23px;
+    padding: 5px;
+  }
+  .scenario-editor {
+    padding: 19px 16px;
+  }
+  .company-identity h2 {
+    font-size: 1.5625rem;
+  }
+  .company-tabs {
+    flex-wrap: wrap;
+  }
+  .company-tabs > .compare-select {
+    margin-bottom: 10px;
+  }
+  .underlined-tabs button {
+    padding-bottom: 10px;
+  }
+  .delta-pill {
+    margin-left: 0;
+  }
+}
