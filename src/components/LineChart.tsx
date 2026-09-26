@@ -87,8 +87,8 @@ export function LineChart({
             x2="0"
             y2="1"
           >
-            <stop offset="0%" stopColor="#89a4b4" stopOpacity=".13" />
-            <stop offset="100%" stopColor="#89a4b4" stopOpacity=".015" />
+            <stop offset="0%" stopColor="var(--brass)" stopOpacity=".13" />
+            <stop offset="100%" stopColor="var(--brass)" stopOpacity=".015" />
           </linearGradient>
         </defs>
         {[0, 1, 2, 3].map((i) => {
@@ -100,7 +100,7 @@ export function LineChart({
                 x2={width - pad.right + 3}
                 y1={y(value)}
                 y2={y(value)}
-                stroke="#43515b"
+                stroke="var(--border)"
                 strokeDasharray="3 5"
               />
               <text
@@ -123,7 +123,7 @@ export function LineChart({
           <path
             d={path(secondary)}
             fill="none"
-            stroke="#8396a0"
+            stroke="var(--comparison)"
             strokeWidth="1.7"
             strokeDasharray="5 5"
           />
@@ -131,7 +131,7 @@ export function LineChart({
         <path
           d={path(series)}
           fill="none"
-          stroke="#89a4b4"
+          stroke="var(--brass)"
           strokeWidth="2.6"
           strokeLinejoin="round"
         />
@@ -162,15 +162,15 @@ export function LineChart({
               x2={x(index)}
               y1={pad.top}
               y2={height - pad.bottom}
-              stroke="#8396a0"
+              stroke="var(--comparison)"
               strokeDasharray="4 4"
             />
             <circle
               cx={x(index)}
               cy={y(series[index])}
               r="5"
-              fill="#89a4b4"
-              stroke="white"
+              fill="var(--brass)"
+              stroke="var(--ink)"
               strokeWidth="2"
             />
           </g>

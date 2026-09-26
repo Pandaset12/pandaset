@@ -171,14 +171,14 @@ export default function Risk({
                       const value = correlationMatrix[i][j];
                       const background =
                         i === j
-                          ? "#22313b"
+                          ? "#222c25"
                           : value < 0
-                            ? `rgba(115,72,78,${Math.abs(value) * 0.6 + 0.06})`
+                            ? `rgba(208,125,114,${Math.abs(value) * 0.6 + 0.06})`
                             : value > 0.55
-                              ? `rgba(60,89,104,${0.83 + value * 0.15})`
-                              : `rgba(60,89,104,${value * 0.5 + 0.06})`;
+                              ? `rgba(194,163,107,${0.83 + value * 0.15})`
+                              : `rgba(194,163,107,${value * 0.5 + 0.06})`;
                       const color =
-                        value > 0.55 && i !== j ? "#fff" : "#e4eaee";
+                        value > 0.55 && i !== j ? "#17150f" : "#eeece4";
                       const isDiagonal = rowIndex === columnIndex;
                       const isSelectable = rowIndex < columnIndex;
 
@@ -294,7 +294,11 @@ export default function Risk({
             ).map(({ label, value, color }) => (
               <div
                 key={label}
-                style={{ flexGrow: value, background: color }}
+                style={{
+                  flexGrow: value,
+                  background: color,
+                  backgroundColor: `color-mix(in srgb, ${color} 38%, var(--raised))`,
+                }}
                 title={`${label}: ${pct(value)}`}
               >
                 {value > 0.12 && <span>{pct(value, 0)}</span>}
