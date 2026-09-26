@@ -1,8 +1,10 @@
 import json
+from urllib.error import HTTPError
 from urllib.parse import parse_qs, urlsplit
 
 import pytest
 
+from backend.market_data_errors import MarketHistoryNotFound
 from backend.twelve_data import ProviderUnavailable, TwelveDataPriceProvider
 
 
@@ -74,3 +76,32 @@ def test_provider_rejects_invalid_or_nonpositive_values():
     provider._fetch = lambda *_: {"AAPL": rows("AAPL", [("2026-01-02", 0), ("2026-01-01", 100)])}
     with pytest.raises(ProviderUnavailable, match="invalid prices"):
         provider.prices(["AAPL"])
+
+
+def test_upstream_http_404_is_missing_history(monkeypatch):
+    def missing_history(request, timeout):
+        raise HTTPError(request.full_url, 404, "Not Found", None, None)
+
+    monkeypatch.setattr("backend.twelve_data.urlopen", missing_history)
+    with pytest.raises(MarketHistoryNotFound, match="no history"):
+        TwelveDataPriceProvider("test-key").prices(["UNKNOWN"])
+
+
+def test_upstream_auth_and_quota_http_errors_remain_provider_failures(monkeypatch):
+    def upstream_error(request, timeout):
+        raise HTTPError(request.full_url, 429, "Too Many Requests", None, None)
+
+    monkeypatch.setattr("backend.twelve_data.urlopen", upstream_error)
+    with pytest.raises(ProviderUnavailable):
+        TwelveDataPriceProvider("test-key").prices(["AAPL"])
+
+
+def test_upstream_json_404_is_missing_history(monkeypatch):
+    class Response:
+        def __enter__(self): return self
+        def __exit__(self, *args): return False
+        def read(self): return json.dumps({"status": "error", "code": 404}).encode()
+
+    monkeypatch.setattr("backend.twelve_data.urlopen", lambda request, timeout: Response())
+    with pytest.raises(MarketHistoryNotFound, match="no history"):
+        TwelveDataPriceProvider("test-key").prices(["UNKNOWN"])

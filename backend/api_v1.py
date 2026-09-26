@@ -58,6 +58,16 @@ def require_portfolio(store: PortfolioStore, portfolio_id: str) -> Portfolio:
     return portfolio
 
 
+def require_supported_symbol_union(saved_weights: dict[str, float], proposed_weights: dict[str, float]) -> None:
+    symbol_count = len(set(saved_weights) | set(proposed_weights))
+    if symbol_count > MAX_PORTFOLIO_SYMBOLS:
+        raise api_error(
+            422,
+            "SYMBOL_LIMIT_EXCEEDED",
+            f"Saved and proposed allocations may contain at most {MAX_PORTFOLIO_SYMBOLS} distinct symbols combined.",
+        )
+
+
 def scenario_matches_snapshot(
     metrics: AnalyticsSnapshot,
     comparison: dict,
@@ -385,6 +395,7 @@ async def scenario_explanation(
     provider: QuantProvider = Depends(get_provider),
 ):
     portfolio = await run_in_threadpool(require_portfolio, store, portfolio_id)
+    require_supported_symbol_union(portfolio.weights, request.proposed_weights)
     try:
         metrics, _ = await run_in_threadpool(
             store.get_analysis, portfolio_id, request.analysis_id
@@ -407,6 +418,14 @@ async def scenario_explanation(
         )
     except IntegrationPending as exc:
         raise api_error(501, "QUANT_INTEGRATION_PENDING", str(exc)) from exc
+    except SymbolLimitExceeded as exc:
+        raise api_error(422, "SYMBOL_LIMIT_EXCEEDED", str(exc)) from exc
+    except MarketHistoryNotFound as exc:
+        log_failure("MARKET_HISTORY_NOT_FOUND", exc)
+        raise api_error(404, "MARKET_HISTORY_NOT_FOUND", "Market history is unavailable for one or more allocation symbols.") from exc
+    except ProviderUnavailable as exc:
+        log_failure("PROVIDER_UNAVAILABLE", exc)
+        raise api_error(502, "PROVIDER_UNAVAILABLE", "Market data is unavailable for the requested scenario.") from exc
     except (ValidationError, ValueError) as exc:
         log_failure("INVALID_SCENARIO_COMPARISON", exc)
         raise api_error(502, "INVALID_SCENARIO_COMPARISON", "The quant provider returned an invalid comparison.") from exc
@@ -528,12 +547,7 @@ def what_if(
     store: PortfolioStore = Depends(get_store), provider: QuantProvider = Depends(get_provider),
 ):
     portfolio = require_portfolio(store, portfolio_id)
-    symbol_count = len(set(portfolio.weights) | set(request.weights))
-    if symbol_count > MAX_PORTFOLIO_SYMBOLS:
-        raise api_error(
-            422, "SYMBOL_LIMIT_EXCEEDED",
-            f"Saved and proposed allocations may contain at most {MAX_PORTFOLIO_SYMBOLS} distinct symbols combined.",
-        )
+    require_supported_symbol_union(portfolio.weights, request.weights)
     try:
         return provider.simulate(
             WhatIfRequest(portfolio_id=portfolio_id, proposed_weights=request.weights)

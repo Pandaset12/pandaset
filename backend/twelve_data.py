@@ -32,7 +32,11 @@ class TwelveDataPriceProvider:
         try:
             with urlopen(request, timeout=self._timeout_seconds) as response:
                 payload = json.loads(response.read().decode("utf-8"))
-        except (HTTPError, URLError, TimeoutError, OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        except HTTPError as exc:
+            if exc.code == 404:
+                raise MarketHistoryNotFound("Twelve Data has no history for one or more requested symbols.") from None
+            raise ProviderUnavailable("Twelve Data could not be reached or returned invalid data.") from exc
+        except (URLError, TimeoutError, OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
             raise ProviderUnavailable("Twelve Data could not be reached or returned invalid data.") from exc
         if not isinstance(payload, dict):
             raise ProviderUnavailable("Twelve Data returned an invalid response.")
@@ -51,7 +55,11 @@ class TwelveDataPriceProvider:
             item = next((value for key, value in candidates.items() if str(key).upper() == symbol), None)
         if item is None:
             raise MarketHistoryNotFound(f"Twelve Data has no history for {symbol}.")
-        if not isinstance(item, dict) or item.get("status") == "error" or not isinstance(item.get("values"), list):
+        if not isinstance(item, dict):
+            raise ProviderUnavailable(f"Twelve Data has no usable history for {symbol}.")
+        if item.get("status") == "error" and str(item.get("code")) == "404":
+            raise MarketHistoryNotFound(f"Twelve Data has no history for {symbol}.")
+        if item.get("status") == "error" or not isinstance(item.get("values"), list):
             raise ProviderUnavailable(f"Twelve Data has no usable history for {symbol}.")
         return item
 
@@ -66,6 +74,8 @@ class TwelveDataPriceProvider:
 
         payload = self._fetch(normalized, lookback_days + 1)
         if payload.get("status") == "error":
+            if str(payload.get("code")) == "404":
+                raise MarketHistoryNotFound("Twelve Data has no history for one or more requested symbols.")
             raise ProviderUnavailable("Twelve Data rejected the history request.")
         columns, common_dates = {}, None
         for symbol in normalized:
