@@ -75,7 +75,7 @@ is a sample session-date label, not a live quote or exchange closing timestamp.
 | POST | `/api/v1/portfolios/{id}/what-if` | Compare saved and proposed holdings on common sample prices |
 
 Holdings use `{"symbol":"NVDA","weight":0.3}`. Weights are finite long-only
-decimals and must sum to 1 (tolerance 0.000001). Duplicate symbols are rejected
+decimals and must sum to 1 (tolerance 1e-10). Duplicate symbols are rejected
 after normalization. We never silently rescale inputs.
 
 V1 errors use `{"error":{"code":"...","message":"..."}}`. Input errors are
