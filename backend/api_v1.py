@@ -82,7 +82,7 @@ def analyze(
         raise api_error(502, "INVALID_PROVIDER_DATA", "Provider returned inconsistent analysis data.") from exc
     except Exception as exc:
         log_failure("PROVIDER_UNAVAILABLE", exc)
-        raise api_error(502, "PROVIDER_UNAVAILABLE", "Analysis provider is currently unavailable.") from exc
+        raise api_error(502, "PROVIDER_UNAVAILABLE", "Analysis is unavailable. Check the selected provider's configuration, API key, usage limits, supported symbols, and service status.") from exc
     analysis_id, created_at = store.save_analysis(metrics)
     return analysis_response(metrics, analysis_id, created_at)
 
@@ -110,7 +110,7 @@ def market_history(
         return provider.market_history(normalized, lookback_days)
     except ProviderUnavailable as exc:
         log_failure("MARKET_HISTORY_UNAVAILABLE", exc)
-        raise api_error(404, "MARKET_HISTORY_UNAVAILABLE", "History is unavailable for one or more requested symbols.") from exc
+        raise api_error(502, "MARKET_HISTORY_UNAVAILABLE", "Market data is unavailable. Verify the API key, quota, requested symbols, and provider status.") from exc
 
 
 @router.post("/portfolios/{portfolio_id}/ask", response_model=AnalystResponse)
@@ -167,7 +167,7 @@ def what_if(
         raise api_error(501, "QUANT_INTEGRATION_PENDING", str(exc)) from exc
     except ProviderUnavailable as exc:
         log_failure("PROVIDER_UNAVAILABLE", exc)
-        raise api_error(502, "PROVIDER_UNAVAILABLE", "What-if provider is unavailable.") from exc
+        raise api_error(502, "PROVIDER_UNAVAILABLE", "What-if analysis is unavailable. Check the selected market-data provider, API key, quota, and supported symbols.") from exc
     except Exception as exc:
         log_failure("PROVIDER_UNAVAILABLE", exc)
-        raise api_error(502, "PROVIDER_UNAVAILABLE", "What-if provider is unavailable.") from exc
+        raise api_error(502, "PROVIDER_UNAVAILABLE", "What-if analysis is unavailable. Check the selected market-data provider, API key, quota, and supported symbols.") from exc
