@@ -1,7 +1,5 @@
-import { useEffect, useState, Component } from "react";
-import type { ReactNode, ErrorInfo } from "react";
+import { useEffect, useState } from "react";
 import {
-  ArrowPath as RotateCcw,
   ArrowUpRight,
   ChatBubbleLeftRight,
   Check,
@@ -9,116 +7,17 @@ import {
   InformationCircle as Info,
   XMark as X,
 } from "./components/icons";
-import { assets, initialWeights, asOf } from "../../quant/data";
+import { initialWeights, asOf } from "../../quant/data";
 import { validateWeights } from "../../quant/analytics";
-import { Brand, Modal, AssetMark } from "./components/UI";
+import { Brand } from "./components/UI";
+import { ErrorBoundary } from "./components/ErrorBoundary";
+import { EditPortfolio } from "./components/EditPortfolio";
+import { MethodologyModal } from "./components/MethodologyModal";
 import { Analyst } from "./components/Analyst";
 import Overview from "./pages/Overview";
 import Risk from "./pages/Risk";
 import Research from "./pages/Research";
 import WhatIf from "./pages/WhatIf";
-class ErrorBoundary extends Component<
-  { children: ReactNode },
-  { error: boolean }
-> {
-  state = { error: false };
-  static getDerivedStateFromError() {
-    return { error: true };
-  }
-  componentDidCatch(error: Error, info: ErrorInfo) {
-    console.error("PandaSet rendering error", error, info.componentStack);
-  }
-  render() {
-    return this.state.error ? (
-      <main className="error-page">
-        <h1>Something didn’t load.</h1>
-        <p>Your sample portfolio can be restored by reloading the page.</p>
-        <button className="button dark" onClick={() => location.reload()}>
-          Reload PandaSet
-          <RotateCcw size={16} />
-        </button>
-      </main>
-    ) : (
-      this.props.children
-    );
-  }
-}
-function EditPortfolio({
-  weights,
-  onClose,
-  onSave,
-}: {
-  weights: number[];
-  onClose: () => void;
-  onSave: (w: number[]) => void;
-}) {
-  const [draft, setDraft] = useState([...weights]);
-  const total = draft.reduce((a, b) => a + b, 0);
-  const valid = validateWeights(draft);
-  return (
-    <Modal title="Edit your sample portfolio" onClose={onClose}>
-      <p className="modal-description">
-        Set the allocation for each asset. Your weights should add up to 100%.
-      </p>
-      <div className="edit-weights">
-        {assets.map((a, i) => (
-          <label key={a.symbol}>
-            <span>
-              <AssetMark asset={a} small />
-              <strong>{a.symbol}</strong>
-              <small>{a.short}</small>
-            </span>
-            <span className="edit-weight-input">
-              <input
-                aria-label={`${a.symbol} portfolio allocation`}
-                type="number"
-                min="0"
-                max="100"
-                step="1"
-                value={draft[i]}
-                onChange={(e) =>
-                  setDraft(
-                    draft.map((v, j) => (i === j ? Number(e.target.value) : v)),
-                  )
-                }
-              />
-              %
-            </span>
-          </label>
-        ))}
-      </div>
-      <div className={`allocation-total ${valid ? "valid" : "invalid"}`}>
-        <span>Total allocation</span>
-        <strong>{Number(total.toFixed(2))}%</strong>
-      </div>
-      {!valid && (
-        <p className="field-error" role="alert">
-          Allocations must total 100%, with each value between 0% and 100%.
-        </p>
-      )}
-      <div className="modal-actions">
-        <button
-          className="text-button"
-          onClick={() => setDraft([...initialWeights])}
-        >
-          <RotateCcw size={15} />
-          Restore example
-        </button>
-        <button
-          className="button dark"
-          disabled={!valid}
-          onClick={() => onSave(draft)}
-        >
-          Update portfolio
-          <Check size={16} />
-        </button>
-      </div>
-      <p className="small-text muted">
-        Changes stay in this session. Reloading restores the example portfolio.
-      </p>
-    </Modal>
-  );
-}
 function Application() {
   const [hash, setHash] = useState(location.hash || "#/");
   const [weights, setWeights] = useState([...initialWeights]);
@@ -266,50 +165,7 @@ function Application() {
           onSave={apply}
         />
       )}
-      {method && (
-        <Modal
-          title="The numbers behind the view"
-          onClose={() => setMethod(false)}
-        >
-          <div className="method-intro">
-            <Info size={20} />
-            <p>
-              PandaSet is an interactive interface demo. Prices, returns, and
-              portfolio values are illustrative, not live market data.
-            </p>
-          </div>
-          <dl className="method-list">
-            <dt>Sample period</dt>
-            <dd>
-              252 synthetic daily returns ending September 25, 2026. Every page
-              uses the same observations.
-            </dd>
-            <dt>Portfolio model</dt>
-            <dd>
-              Constant daily allocations, with no deposits, withdrawals, fees,
-              or taxes. Displayed value is a sample balance of $128,450.
-            </dd>
-            <dt>Risk & correlation</dt>
-            <dd>
-              Volatility uses the sample covariance matrix, annualized by 252
-              trading days. Risk contributions sum to 100%; they can be negative
-              for diversifying positions.
-            </dd>
-            <dt>Returns & drawdown</dt>
-            <dd>
-              Returns compound daily. Return contribution uses each day’s
-              allocation and preceding portfolio growth. Drawdown is the largest
-              decline from an earlier peak in the sample.
-            </dd>
-            <dt>Research & explanations</dt>
-            <dd>
-              Research primers link to official sources. The analyst uses
-              curated explanations and computed metrics; Gemini and news feeds
-              are not connected.
-            </dd>
-          </dl>
-        </Modal>
-      )}
+      {method && <MethodologyModal onClose={() => setMethod(false)} />}
       {analyst !== null && (
         <Analyst
           key={analyst}

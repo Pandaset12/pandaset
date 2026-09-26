@@ -1,0 +1,293 @@
+/* Risk: an editorial lead, paired bars, and a full matrix. */
+.risk-summary {
+  display: grid;
+  grid-template-columns: 340px 1fr;
+  gap: 50px;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  padding: 31px 0;
+}
+.label-chip {
+  font-size: 0.75rem;
+  letter-spacing: 1px;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.risk-intro {
+  padding-top: 10px;
+}
+.risk-intro h2 {
+  font-family: var(--serif);
+  font-size: 2.4375rem;
+  line-height: 1.15;
+  font-weight: 400;
+  margin: 21px 0 17px;
+  letter-spacing: -0.5px;
+}
+.risk-intro h2 em {
+  font-style: normal;
+  background: var(--brass);
+  color: var(--ink-on-accent);
+  padding: 0 6px;
+}
+.risk-intro p {
+  font-size: 0.875rem;
+  color: var(--muted);
+  max-width: 280px;
+}
+.risk-intro .text-link {
+  margin-top: 25px;
+}
+.risk-bars-panel .section-heading {
+  margin-bottom: 15px;
+}
+.risk-bars-panel .section-heading h2 {
+  font-size: 1.125rem;
+}
+.legend-square {
+  width: 9px;
+  height: 9px;
+  background: var(--brass);
+  display: inline-block;
+  border-radius: 1px;
+}
+.legend-square.pale {
+  background: var(--bar-secondary);
+}
+.risk-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 8px 0;
+}
+.risk-bar-row:hover {
+  background: var(--raised);
+}
+.risk-ticker {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 90px;
+  flex-shrink: 0;
+  font-size: 0.8125rem;
+}
+.risk-bar-pair {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.risk-bar-pair > div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.8125rem;
+  height: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.risk-bar-pair i {
+  height: 8px;
+  display: block;
+  min-width: 1px;
+  border-radius: 1px;
+}
+.capital-bar {
+  background: var(--bar-secondary);
+}
+.risk-bar {
+  background: var(--brass);
+}
+.risk-bar-row > svg {
+  color: var(--muted);
+}
+.risk-bars-panel > .small-text {
+  font-size: 0.8125rem;
+  margin-top: 14px;
+  max-width: 530px;
+  line-height: 1.55;
+}
+.two-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 58px;
+}
+.risk-detail {
+  padding: 36px 0;
+}
+.matrix-scroll {
+  overflow-x: auto;
+}
+.correlation-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 4px;
+  table-layout: fixed;
+}
+.correlation-table th {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--muted);
+  height: 26px;
+  white-space: nowrap;
+}
+.correlation-table td {
+  padding: 0;
+  text-align: center;
+}
+.correlation-table td button {
+  width: 100%;
+  height: 44px;
+  border-radius: 3px;
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+  border: 2px solid transparent;
+  transition: transform 0.15s;
+}
+.correlation-table td.matrix-static span {
+  display: flex;
+  width: 100%;
+  height: 44px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 3px;
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+}
+.correlation-table td.matrix-diagonal span {
+  font-weight: 600;
+}
+.correlation-table td.matrix-empty {
+  background: transparent;
+}
+.correlation-table td button:hover {
+  transform: scale(1.06);
+}
+.correlation-table td button.selected {
+  border: 2px solid var(--brass-dark);
+  box-shadow: 0 0 0 2px var(--ink);
+}
+.matrix-key {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: flex-end;
+  font-size: 0.8125rem;
+  color: var(--muted);
+  margin-top: 15px;
+}
+.matrix-key div {
+  width: 110px;
+  height: 6px;
+  background: linear-gradient(
+    to right,
+    var(--negative),
+    var(--raised),
+    var(--brass)
+  );
+}
+.matrix-hint {
+  margin-top: 10px;
+  color: var(--muted);
+}
+.correlation-insight {
+  border-left: 1px solid var(--border);
+  padding: 0 0 0 15px;
+  margin-top: 26px;
+}
+.correlation-insight > strong {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.8125rem;
+}
+.correlation-insight strong > span {
+  font-size: 1rem;
+  font-variant-numeric: tabular-nums;
+}
+.correlation-insight p {
+  font-size: 0.8125rem;
+  color: var(--muted);
+  margin-top: 8px;
+}
+.wide-segment {
+  margin-top: 28px;
+}
+.wide-segment button {
+  min-width: 100px;
+}
+.allocation-mosaic {
+  display: flex;
+  gap: 4px;
+  height: 124px;
+  margin: 22px 0 17px;
+}
+.allocation-mosaic > div {
+  flex-basis: 0;
+  min-width: 0;
+  display: flex;
+  align-items: flex-end;
+  padding: 10px 7px;
+  color: white;
+  font-size: 0.8125rem;
+  border-radius: 3px;
+}
+.exposure-list > div {
+  display: flex;
+  justify-content: space-between;
+  padding: 10px 0;
+  font-size: 0.8125rem;
+  border-bottom: 1px solid var(--border);
+}
+.exposure-list > div > span {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.exposure-list i {
+  height: 7px;
+  width: 7px;
+  border-radius: 1px;
+}
+.exposure-list strong {
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+.note-panel {
+  display: flex;
+  gap: 10px;
+  padding: 17px;
+  background: var(--raised);
+  border-radius: 5px;
+  margin-top: 20px;
+}
+.note-panel > svg {
+  color: var(--muted);
+}
+.note-panel p {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+.note-panel strong {
+  font-weight: 600;
+  color: var(--positive);
+}
+.next-step {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+  border-top: 1px solid var(--border);
+  padding: 25px 0 0;
+  margin-top: 10px;
+}
+.next-step h3 {
+  font-family: var(--serif);
+  font-size: 1.75rem;
+}
+.next-step p {
+  font-size: 0.8125rem;
+  color: var(--muted);
+  margin-top: 6px;
+}
