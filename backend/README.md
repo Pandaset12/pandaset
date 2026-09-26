@@ -5,8 +5,8 @@ saved snapshots, Gemini prompts, and error handling. Market ingestion, Tiger Dat
 MongoDB infrastructure and financial formulas belong to the data/quant teammates.
 See [the shared HLD](../PortfolioLens-HLD.md) and [integration design](INTEGRATION.md).
 
-This branch is an API scaffold with an explicit offline demo. It does not yet connect the team's
-market-data or quant modules. Gemini is optional and needs a team API key.
+The default provider connects the quant engine to fictional sample prices for an
+offline demo. Real market-data access remains unconnected. Gemini is optional and needs a team API key.
 
 ## Run locally
 
@@ -55,11 +55,12 @@ Use the interactive docs' **Try it out** buttons:
 
 The default answer has `status: "demo"` and explicitly labels the fixture as
 fictional. It is a deterministic snapshot summary, not an arbitrary-question AI.
-The fixture is NVDA 30%, SPY 40%, JPM 20%, TLT 10%. Creating another portfolio
-with these same weights also supports the demo flow. Other allocations can be
-saved, but analysis returns 501 until the real quant adapter is connected.
-Missing returns, correlations, asset volatility, observations and market timestamps
-are `null`, never invented zeroes.
+The seeded allocation is NVDA 30%, SPY 40%, JPM 20%, TLT 10%. Any valid allocation
+using these symbols can be analyzed and compared using the existing seven fictional
+price rows (six daily returns). Unsupported symbols fail with 502; prices are never
+invented or filled. Weights must total one within 1e-10 and are never renormalized.
+Undefined risk shares and correlation cells remain `null`. The UTC midnight `as_of`
+is a sample session-date label, not a live quote or exchange closing timestamp.
 
 ## Routes and error handling
 
@@ -71,10 +72,10 @@ are `null`, never invented zeroes.
 | POST | `/api/v1/portfolios/{id}/analysis` | Validate provider output and save a snapshot |
 | GET | `/api/v1/portfolios/{id}/analyses/{analysis_id}` | Read that snapshot |
 | POST | `/api/v1/portfolios/{id}/ask` | Explain exactly the selected saved snapshot |
-| POST | `/api/v1/portfolios/{id}/what-if` | Validate proposed `holdings`; currently returns 501 |
+| POST | `/api/v1/portfolios/{id}/what-if` | Compare saved and proposed holdings on common sample prices |
 
 Holdings use `{"symbol":"NVDA","weight":0.3}`. Weights are finite long-only
-decimals and must sum to 1 (tolerance 0.000001). Duplicate symbols are rejected
+decimals and must sum to 1 (tolerance 1e-10). Duplicate symbols are rejected
 after normalization. We never silently rescale inputs.
 
 V1 errors use `{"error":{"code":"...","message":"..."}}`. Input errors are
@@ -137,18 +138,16 @@ to it. Text offsets refer to `grounding_text` (the original JSON model response)
 [search display requirements](https://ai.google.dev/gemini-api/docs/generate-content/google-search)
 and [URL retrieval status](https://ai.google.dev/gemini-api/docs/generate-content/url-context).
 
-Enabling Gemini does not enable live prices or quant calculations. Daily P&L
+Enabling Gemini does not enable live prices. Quant calculations run through the provider. Daily P&L
 attribution and natural-language execution of what-if calculations remain
 pending; the prompt instructs the model to explain those limitations.
 
 ## Team integration checklist
 
-- **Quant (Nel A):** the two public functions now exist on the
-  `quant-engine` branch, and its 83 tests were independently rerun successfully.
-  Integration still needs an adapter for output fields, undefined values,
-  correlation roundoff, weight precision and what-if asset unions. See the
-  [quant integration review](docs/QUANT_REVIEW.md). The current API still uses
-  `DemoQuantProvider`; formulas remain in the quant module.
+- **Quant (Nel A):** `EngineQuantProvider` calls both public functions. The adapter
+  handles output fields, undefined values, correlation roundoff, weight precision
+  and what-if asset unions. Formulas remain unchanged in the quant module.
+  `DemoQuantProvider` remains available only for precomputed-fixture regression tests.
 - **Data/infrastructure (Vincent):** supply normalized adjusted-close price access,
   source/freshness metadata, and the MongoDB portfolio/snapshot adapter. Agree on
   where the API invokes data loading before calling the quant function. Live

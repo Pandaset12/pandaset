@@ -7,6 +7,7 @@ from google.genai import types
 from backend import main
 from backend.config import Settings, get_settings
 from backend.gemini_service import extract_evidence
+from backend.providers import DemoQuantProvider, get_provider
 
 
 @pytest.fixture
@@ -14,6 +15,7 @@ def client(tmp_path):
     app = main.create_app(Settings(
         _env_file=None, analyst_mode="demo", storage_path=tmp_path / "test.sqlite3"
     ))
+    app.dependency_overrides[get_provider] = DemoQuantProvider
     with TestClient(app) as test_client:
         yield test_client
 
