@@ -119,7 +119,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "analyst_mode": settings.analyst_mode,
             "gemini_configured": settings.has_gemini_key,
             "quant_integration": "quant_engine_sample_prices",
-            "data_mode": "demo",
+            "data_mode": "live" if settings.market_data_provider == "twelvedata" else "demo",
             "storage_backend": "sqlite",
             "authentication_enabled": False,
         }
