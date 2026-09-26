@@ -72,6 +72,7 @@ is a sample session-date label, not a live quote or exchange closing timestamp.
 | --- | --- | --- |
 | GET | `/health` | Process/configuration status |
 | POST | `/api/v1/portfolios` | Validate and save `name` plus `holdings`; returns 201 |
+| PUT | `/api/v1/portfolios/{id}` | Replace the authenticated owner's portfolio name and holdings; retains ID and creation time |
 | GET | `/api/v1/portfolios/{id}` | Read saved portfolio |
 | POST | `/api/v1/portfolios/{id}/analysis` | Validate provider output and save a snapshot |
 | GET | `/api/v1/portfolios/{id}/analyses/{analysis_id}` | Read that snapshot |
@@ -228,3 +229,10 @@ ephemeral filesystem survives rebuilds or is shared across replicas. Confirm a
 single-instance persistent volume or complete the team's MongoDB adapter before
 claiming durable shared persistence. See the rollout gates in
 [INTEGRATION.md](INTEGRATION.md).
+# Investor ownership
+
+Set `SUPABASE_URL` and `SUPABASE_ANON_KEY` in `backend/.env` to the same project used by frontend authentication. The backend validates Bearer tokens through Supabase Auth. New portfolios are owned by the authenticated user; legacy SQLite rows are retained with no owner and are not returned to investors. `/api/v1/portfolios` lists only the caller's portfolios. No Supabase service role secret is needed.
+
+Updating a portfolio preserves its `portfolio_id`, `owner_id`, and original `created_at`. When its allocation changes, saved analyses for that portfolio are deleted in the same SQLite transaction. Old analysis IDs then return 404; the client creates a fresh analysis for the new allocation. An analysis computed before an update cannot be saved afterward.
+
+Market-history preflight and subsequent analysis reuse successful per-symbol daily price frames for 60 seconds. The cache obtains an analysis-length window even when preflight requests only two days, so the immediate analysis does not fetch those symbols again. Failed history requests are not cached. The cache lives in the API process; separate workers have separate caches.

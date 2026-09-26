@@ -6,6 +6,7 @@ from pydantic import ValidationError
 from starlette.concurrency import run_in_threadpool
 
 from .config import Settings, get_settings
+from .auth import current_user_id
 from .observability import log_failure
 from .gemini_service import (
     GeminiNotConfigured,
@@ -37,7 +38,7 @@ from .schemas import (
     ScenarioExplanationRequest,
     WhatIfRequest,
 )
-from .storage import PortfolioStore, SnapshotNotFound
+from .storage import PortfolioStore, SnapshotNotFound, StalePortfolio
 
 
 router = APIRouter(prefix="/api/v1", tags=["PortfolioLens v1"])
@@ -51,8 +52,8 @@ def api_error(status: int, code: str, message: str) -> HTTPException:
     return HTTPException(status_code=status, detail={"code": code, "message": message})
 
 
-def require_portfolio(store: PortfolioStore, portfolio_id: str) -> Portfolio:
-    portfolio = store.get(portfolio_id)
+def require_portfolio(store: PortfolioStore, portfolio_id: str, owner_id: str) -> Portfolio:
+    portfolio = store.get(portfolio_id, owner_id)
     if portfolio is None:
         raise api_error(404, "PORTFOLIO_NOT_FOUND", "Portfolio not found.")
     return portfolio
@@ -179,21 +180,39 @@ def analysis_response(metrics: AnalyticsSnapshot, analysis_id: str, created_at: 
 
 
 @router.post("/portfolios", response_model=Portfolio, status_code=201)
-def create_portfolio(request: PortfolioInput, store: PortfolioStore = Depends(get_store)):
-    return store.create(request)
+def create_portfolio(request: PortfolioInput, store: PortfolioStore = Depends(get_store), owner_id: str = Depends(current_user_id)):
+    return store.create(request, owner_id)
+
+
+@router.get("/portfolios", response_model=list[Portfolio])
+def list_portfolios(store: PortfolioStore = Depends(get_store), owner_id: str = Depends(current_user_id)):
+    return store.list_for_owner(owner_id)
 
 
 @router.get("/portfolios/{portfolio_id}", response_model=Portfolio)
-def get_portfolio(portfolio_id: str, store: PortfolioStore = Depends(get_store)):
-    return require_portfolio(store, portfolio_id)
+def get_portfolio(portfolio_id: str, store: PortfolioStore = Depends(get_store), owner_id: str = Depends(current_user_id)):
+    return require_portfolio(store, portfolio_id, owner_id)
+
+
+@router.put("/portfolios/{portfolio_id}", response_model=Portfolio)
+def update_portfolio(
+    portfolio_id: str, request: PortfolioInput,
+    store: PortfolioStore = Depends(get_store), owner_id: str = Depends(current_user_id),
+):
+    require_portfolio(store, portfolio_id, owner_id)
+    updated = store.update(portfolio_id, owner_id, request)
+    if updated is None:
+        raise api_error(404, "PORTFOLIO_NOT_FOUND", "Portfolio not found.")
+    return updated
 
 
 @router.post("/portfolios/{portfolio_id}/analysis", response_model=AnalysisResponse)
 def analyze(
     portfolio_id: str, store: PortfolioStore = Depends(get_store),
     provider: QuantProvider = Depends(get_provider),
+    owner_id: str = Depends(current_user_id),
 ):
-    portfolio = require_portfolio(store, portfolio_id)
+    portfolio = require_portfolio(store, portfolio_id, owner_id)
     try:
         result = provider.analyze(portfolio.model_copy(deep=True))
         payload = result.model_dump() if isinstance(result, AnalyticsSnapshot) else result
@@ -213,13 +232,16 @@ def analyze(
     except Exception as exc:
         log_failure("PROVIDER_UNAVAILABLE", exc)
         raise api_error(502, "PROVIDER_UNAVAILABLE", "Analysis is unavailable. For Twelve Data, set TWELVE_DATA_API_KEY in backend/.env; also check key validity, usage limits, supported symbols, and provider status.") from exc
-    analysis_id, created_at = store.save_analysis(metrics)
+    try:
+        analysis_id, created_at = store.save_analysis(metrics, owner_id)
+    except StalePortfolio as exc:
+        raise api_error(409, "PORTFOLIO_CHANGED", "Portfolio changed during analysis. Retry analysis.") from exc
     return analysis_response(metrics, analysis_id, created_at)
 
 
 @router.get("/portfolios/{portfolio_id}/analyses/{analysis_id}", response_model=AnalysisResponse)
-def get_analysis(portfolio_id: str, analysis_id: str, store: PortfolioStore = Depends(get_store)):
-    require_portfolio(store, portfolio_id)
+def get_analysis(portfolio_id: str, analysis_id: str, store: PortfolioStore = Depends(get_store), owner_id: str = Depends(current_user_id)):
+    require_portfolio(store, portfolio_id, owner_id)
     try:
         metrics, created_at = store.get_analysis(portfolio_id, analysis_id)
     except SnapshotNotFound as exc:
@@ -250,8 +272,9 @@ def market_history(
 async def ask(
     portfolio_id: str, request: AskRequest, store: PortfolioStore = Depends(get_store),
     settings: Settings = Depends(get_settings),
+    owner_id: str = Depends(current_user_id),
 ):
-    await run_in_threadpool(require_portfolio, store, portfolio_id)
+    await run_in_threadpool(require_portfolio, store, portfolio_id, owner_id)
     try:
         metrics, _ = await run_in_threadpool(store.get_analysis, portfolio_id, request.analysis_id)
     except SnapshotNotFound as exc:
@@ -360,8 +383,9 @@ async def analysis_briefing(
     request: AnalysisWorkflowRequest,
     store: PortfolioStore = Depends(get_store),
     settings: Settings = Depends(get_settings),
+    owner_id: str = Depends(current_user_id),
 ):
-    await run_in_threadpool(require_portfolio, store, portfolio_id)
+    await run_in_threadpool(require_portfolio, store, portfolio_id, owner_id)
     return await analysis_workflow_response(
         "analysis_briefing", portfolio_id, request, store, settings
     )
@@ -376,8 +400,9 @@ async def risk_explanation(
     request: AnalysisWorkflowRequest,
     store: PortfolioStore = Depends(get_store),
     settings: Settings = Depends(get_settings),
+    owner_id: str = Depends(current_user_id),
 ):
-    await run_in_threadpool(require_portfolio, store, portfolio_id)
+    await run_in_threadpool(require_portfolio, store, portfolio_id, owner_id)
     return await analysis_workflow_response(
         "risk_explanation", portfolio_id, request, store, settings
     )
@@ -393,8 +418,9 @@ async def scenario_explanation(
     store: PortfolioStore = Depends(get_store),
     settings: Settings = Depends(get_settings),
     provider: QuantProvider = Depends(get_provider),
+    owner_id: str = Depends(current_user_id),
 ):
-    portfolio = await run_in_threadpool(require_portfolio, store, portfolio_id)
+    portfolio = await run_in_threadpool(require_portfolio, store, portfolio_id, owner_id)
     require_supported_symbol_union(portfolio.weights, request.proposed_weights)
     try:
         metrics, _ = await run_in_threadpool(
@@ -415,6 +441,7 @@ async def scenario_explanation(
                 portfolio_id=portfolio_id,
                 proposed_weights=request.proposed_weights,
             ),
+            portfolio,
         )
     except IntegrationPending as exc:
         raise api_error(501, "QUANT_INTEGRATION_PENDING", str(exc)) from exc
@@ -545,12 +572,13 @@ async def research_summary(
 def what_if(
     portfolio_id: str, request: AllocationInput,
     store: PortfolioStore = Depends(get_store), provider: QuantProvider = Depends(get_provider),
+    owner_id: str = Depends(current_user_id),
 ):
-    portfolio = require_portfolio(store, portfolio_id)
+    portfolio = require_portfolio(store, portfolio_id, owner_id)
     require_supported_symbol_union(portfolio.weights, request.weights)
     try:
         return provider.simulate(
-            WhatIfRequest(portfolio_id=portfolio_id, proposed_weights=request.weights)
+            WhatIfRequest(portfolio_id=portfolio_id, proposed_weights=request.weights), portfolio
         )
     except IntegrationPending as exc:
         raise api_error(501, "QUANT_INTEGRATION_PENDING", str(exc)) from exc

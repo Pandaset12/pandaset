@@ -8,7 +8,7 @@ import {
   MagnifyingGlass as Search,
   InformationCircle as Info,
 } from "../components/icons";
-import { assets, researchNotes } from "../../../quant/data";
+import { researchNotes, type Asset } from "../../../quant/data";
 import { pct, signedPct } from "../../../quant/analytics";
 import {
   AssetMark,
@@ -19,15 +19,18 @@ import {
 } from "../components/UI";
 import { LineChart } from "../components/LineChart";
 import type { AnalysisResponse } from "../api/portfolio";
+import { allocationPercent } from "../workspace/holdings";
 
 export default function Overview({
   analysis,
+  holdings: portfolioAssets,
   onEdit,
   onAsk,
   onBrief,
   onMethod,
 }: {
   analysis: AnalysisResponse;
+  holdings: Asset[];
   onEdit: () => void;
   onAsk: (q?: string) => void;
   onBrief: () => void;
@@ -36,7 +39,7 @@ export default function Overview({
   const [view, setView] = useState<"holdings" | "drivers">("holdings");
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<"weight" | "return">("weight");
-  const holdings = assets
+  const holdings = portfolioAssets
     .map((asset) => ({
       asset,
       weight: analysis.weights[asset.symbol] ?? 0,
@@ -58,7 +61,9 @@ export default function Overview({
   const topRisk = Object.entries(analysis.risk_contribution)
     .filter(([, value]) => value !== null)
     .sort((a, b) => (b[1] ?? 0) - (a[1] ?? 0))[0];
-  const topAsset = assets.find((asset) => asset.symbol === topRisk?.[0]);
+  const topAsset = portfolioAssets.find(
+    (asset) => asset.symbol === topRisk?.[0],
+  );
   const chartValues = analysis.series?.portfolio_index;
   const chartDates = analysis.series?.dates ?? [];
   const portfolioSeries = chartValues?.every(
@@ -73,7 +78,7 @@ export default function Overview({
     ? benchmark
     : undefined;
   const sectors = Object.entries(
-    assets.reduce<Record<string, number>>((grouped, asset) => {
+    portfolioAssets.reduce<Record<string, number>>((grouped, asset) => {
       grouped[asset.sector] =
         (grouped[asset.sector] ?? 0) + (analysis.weights[asset.symbol] ?? 0);
       return grouped;
@@ -197,15 +202,15 @@ export default function Overview({
               <h2>{topAsset.short} leads estimated risk contribution.</h2>
               <p>
                 {topAsset.symbol} is{" "}
-                {pct(analysis.weights[topAsset.symbol] ?? 0, 0)} of capital and
-                accounts for {pct(topRisk[1] ?? 0, 0)} of estimated portfolio
-                volatility.
+                {allocationPercent(analysis.weights[topAsset.symbol] ?? 0)} of
+                capital and accounts for {pct(topRisk[1] ?? 0, 0)} of estimated
+                portfolio volatility.
               </p>
               <div className="focus-bars">
                 <div>
                   <span>Capital allocated</span>
                   <strong>
-                    {pct(analysis.weights[topAsset.symbol] ?? 0, 0)}
+                    {allocationPercent(analysis.weights[topAsset.symbol] ?? 0)}
                   </strong>
                 </div>
                 <div className="focus-track">
@@ -347,7 +352,9 @@ export default function Overview({
                           </span>
                         </a>
                       </th>
-                      <td className="align-right">{pct(weight, 0)}</td>
+                      <td className="align-right">
+                        {allocationPercent(weight)}
+                      </td>
                       <td className="align-right numeric">
                         {analysis.return_contribution?.[asset.symbol] == null
                           ? "Unavailable"

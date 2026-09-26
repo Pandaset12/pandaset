@@ -9,7 +9,7 @@ import {
   ArrowTopRightOnSquare as ExternalLink,
   MagnifyingGlass as Search,
 } from "../components/icons";
-import { assets, researchNotes, assetBySymbol } from "../../../quant/data";
+import { assets, researchNotes, type Asset } from "../../../quant/data";
 import { signedPct } from "../../../quant/analytics";
 import {
   createRequestGuard,
@@ -27,18 +27,30 @@ import { LineChart } from "../components/LineChart";
 
 export default function Research({
   weights,
+  holdings,
   onAsk,
   onSummarizeSource,
   query,
 }: {
   weights: number[];
+  holdings: Asset[];
   onAsk: (q?: string) => void;
   onSummarizeSource: (symbol: string) => void;
   query: URLSearchParams;
 }) {
+  const library = [
+    ...holdings,
+    ...assets.filter(
+      (asset) => !holdings.some((holding) => holding.symbol === asset.symbol),
+    ),
+  ];
   const symbol = query.get("symbol");
-  const selected = assetBySymbol(symbol || "NVDA");
-  const idx = assets.indexOf(selected);
+  const selected =
+    library.find((asset) => asset.symbol === symbol) ??
+    holdings[0] ??
+    assets[0];
+  const weightFor = (ticker: string) =>
+    weights[holdings.findIndex((asset) => asset.symbol === ticker)] ?? 0;
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<"all" | "owned">("all");
   const [compare, setCompare] = useState("");
@@ -49,15 +61,17 @@ export default function Research({
   const [error, setError] = useState("");
   const requestId = useRef(createRequestGuard());
   const note = researchNotes.find((item) => item.id === noteId);
-  const results = assets.filter(
-    (asset, index) =>
-      (filter === "all" || weights[index] > 0) &&
+  const results = library.filter(
+    (asset) =>
+      (filter === "all" || weightFor(asset.symbol) > 0) &&
       `${asset.symbol} ${asset.name}`
         .toLowerCase()
         .includes(search.toLowerCase()),
   );
   const peer =
-    compare && compare !== selected.symbol ? assetBySymbol(compare) : null;
+    compare && compare !== selected.symbol
+      ? (library.find((asset) => asset.symbol === compare) ?? null)
+      : null;
   const symbols = peer ? [selected.symbol, peer.symbol] : [selected.symbol];
 
   async function loadHistory() {
@@ -126,7 +140,7 @@ export default function Research({
               aria-pressed={filter === "all"}
               onClick={() => setFilter("all")}
             >
-              All assets <span>08</span>
+              All assets <span>{library.length}</span>
             </button>
             <button
               aria-pressed={filter === "owned"}
@@ -170,7 +184,7 @@ export default function Research({
           )}
           <div className="library-note">
             <span className="eyebrow">A FOCUSED UNIVERSE</span>
-            <p>Eight assets. A clearer view of how they fit together.</p>
+            <p>Your holdings and the sample research library.</p>
             <span>
               Price charts use backend history · currently demo fixture data
             </span>
@@ -188,8 +202,8 @@ export default function Research({
               </div>
             </div>
             <span className="ownership-tag">
-              {weights[idx] > 0
-                ? `${weights[idx]}% of your portfolio`
+              {weightFor(selected.symbol) > 0
+                ? `${weightFor(selected.symbol)}% of your portfolio`
                 : "Not in your portfolio"}
             </span>
           </div>
@@ -221,7 +235,7 @@ export default function Research({
                 onChange={(event) => setCompare(event.target.value)}
               >
                 <option value="">Compare with…</option>
-                {assets
+                {library
                   .filter((asset) => asset.symbol !== selected.symbol)
                   .map((asset) => (
                     <option key={asset.symbol} value={asset.symbol}>
@@ -336,8 +350,8 @@ export default function Research({
                       </tr>
                       <tr>
                         <th>Portfolio allocation</th>
-                        <td>{weights[idx]}%</td>
-                        <td>{weights[assets.indexOf(peer)]}%</td>
+                        <td>{weightFor(selected.symbol)}%</td>
+                        <td>{weightFor(peer.symbol)}%</td>
                       </tr>
                     </tbody>
                   </table>
@@ -382,25 +396,30 @@ export default function Research({
                 Use company filings and fund disclosures to check financial
                 results, business risks, and portfolio composition.
               </p>
-              <a
-                href={selected.source}
-                target="_blank"
-                rel="noreferrer"
-                className="source-card"
-              >
-                <div>
-                  <strong>{selected.short} · Investor information</strong>
-                  <span>Official issuer website</span>
-                </div>
-                <ArrowUpRight size={20} />
-              </a>
-              <button
-                className="button dark source-summary-button"
-                onClick={() => onSummarizeSource(selected.symbol)}
-              >
-                Summarize this issuer source
-                <ArrowUpRight size={15} />
-              </button>
+              {selected.source ? (
+                <>
+                  <a
+                    href={selected.source}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="source-card"
+                  >
+                    <div>
+                      <strong>{selected.short} · Investor information</strong>
+                      <span>Official issuer website</span>
+                    </div>
+                    <ArrowUpRight size={20} />
+                  </a>
+                  <button
+                    className="button dark source-summary-button"
+                    onClick={() => onSummarizeSource(selected.symbol)}
+                  >
+                    Summarize this issuer source <ArrowUpRight size={15} />
+                  </button>
+                </>
+              ) : (
+                <p>No curated issuer source is available for this holding.</p>
+              )}
               <a
                 href={`https://www.sec.gov/edgar/search/#/q=${encodeURIComponent(selected.name)}`}
                 target="_blank"

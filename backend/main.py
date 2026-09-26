@@ -12,21 +12,23 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from .config import Settings, get_settings
 from .gemini_service import GeminiNotConfigured, GeminiUnavailable, generate_answer, metric_summary
-from .api_v1 import router as v1_router
+from .api_v1 import get_store, require_portfolio, router as v1_router
+from .auth import current_user_id
 from .observability import log_failure, request_id_context
 from .storage import PortfolioStore
+from .price_cache import RecentPriceCache
 from .providers import (
     IntegrationPending,
-    PortfolioNotFound,
     QuantProvider,
     get_provider,
     demo_metrics,
 )
-from .market_data_errors import ProviderUnavailable
+from .market_data_errors import MarketHistoryNotFound, ProviderUnavailable, SymbolLimitExceeded
 from .schemas import (
     AnalystRequest,
     AnalystResponse,
     AnalyticsSnapshot,
+    Portfolio,
     WhatIfRequest,
 )
 
@@ -39,6 +41,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         store = await run_in_threadpool(PortfolioStore, settings.storage_path)
         await run_in_threadpool(store.seed_demo, demo_metrics())
         app.state.store = store
+        app.state.price_cache = RecentPriceCache()
         yield
 
     application = FastAPI(
@@ -75,8 +78,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         CORSMiddleware,
         allow_origins=[item.strip() for item in settings.cors_origins.split(",") if item.strip()],
         allow_credentials=False,
-        allow_methods=["GET", "POST"],
-        allow_headers=["Content-Type"],
+        allow_methods=["GET", "POST", "PUT"],
+        allow_headers=["Content-Type", "Authorization"],
         expose_headers=["X-Request-ID"],
     )
 
@@ -129,35 +132,46 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "market_data_ready": market_data_ready,
             "data_mode": "live" if live_data else "demo",
             "storage_backend": "sqlite",
-            "authentication_enabled": False,
+            "authentication_enabled": settings.authentication_enabled,
         }
 
-    def read_metrics(portfolio_id: str, provider: QuantProvider) -> AnalyticsSnapshot:
+    def read_metrics(portfolio: Portfolio, provider: QuantProvider) -> AnalyticsSnapshot:
         try:
-            return provider.get_analytics(portfolio_id)
+            return provider.analyze(portfolio)
+        except MarketHistoryNotFound as exc:
+            raise HTTPException(status_code=404, detail={
+                "code": "market_history_not_found", "message": "Market history is unavailable for one or more portfolio symbols."
+            }) from exc
+        except SymbolLimitExceeded as exc:
+            raise HTTPException(status_code=422, detail={
+                "code": "symbol_limit_exceeded", "message": str(exc)
+            }) from exc
         except ProviderUnavailable as exc:
             raise HTTPException(status_code=502, detail={
-                "code": "provider_unavailable", "message": "Sample price data is unavailable."
+                "code": "provider_unavailable", "message": "Market data is unavailable from the selected provider."
             }) from exc
-        except PortfolioNotFound:
-            raise HTTPException(
-                status_code=404,
-                detail={"code": "portfolio_not_found", "message": "Portfolio not found."},
-            )
+        except IntegrationPending as exc:
+            raise HTTPException(status_code=501, detail={
+                "code": "quant_integration_pending", "message": str(exc)
+            }) from exc
 
     @application.get(
         "/api/portfolios/{portfolio_id}/analytics", response_model=AnalyticsSnapshot, deprecated=True
     )
-    def analytics(portfolio_id: str, provider: QuantProvider = Depends(get_provider)):
-        return read_metrics(portfolio_id, provider)
+    def analytics(portfolio_id: str, provider: QuantProvider = Depends(get_provider),
+                  store: PortfolioStore = Depends(get_store), owner_id: str = Depends(current_user_id)):
+        return read_metrics(require_portfolio(store, portfolio_id, owner_id), provider)
 
     @application.post("/api/analyst", response_model=AnalystResponse, deprecated=True)
     async def analyst(
         request: AnalystRequest,
         settings: Settings = Depends(get_settings),
         provider: QuantProvider = Depends(get_provider),
+        store: PortfolioStore = Depends(get_store),
+        owner_id: str = Depends(current_user_id),
     ):
-        metrics = await run_in_threadpool(read_metrics, request.portfolio_id, provider)
+        portfolio = await run_in_threadpool(require_portfolio, store, request.portfolio_id, owner_id)
+        metrics = await run_in_threadpool(read_metrics, portfolio, provider)
         warnings = list(metrics.notes)
         if settings.analyst_mode == "demo":
             warnings.append("Offline demo response; Gemini and web tools were not called.")
@@ -186,13 +200,26 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
 
     @application.post("/api/what-if", deprecated=True)
-    def what_if(request: WhatIfRequest, provider: QuantProvider = Depends(get_provider)):
-        read_metrics(request.portfolio_id, provider)
+    def what_if(
+        request: WhatIfRequest,
+        provider: QuantProvider = Depends(get_provider),
+        store: PortfolioStore = Depends(get_store),
+        owner_id: str = Depends(current_user_id),
+    ):
+        portfolio = require_portfolio(store, request.portfolio_id, owner_id)
         try:
-            return provider.simulate(request)
+            return provider.simulate(request, portfolio)
+        except MarketHistoryNotFound as exc:
+            raise HTTPException(status_code=404, detail={
+                "code": "market_history_not_found", "message": "Market history is unavailable for one or more allocation symbols."
+            }) from exc
+        except SymbolLimitExceeded as exc:
+            raise HTTPException(status_code=422, detail={
+                "code": "symbol_limit_exceeded", "message": str(exc)
+            }) from exc
         except ProviderUnavailable as exc:
             raise HTTPException(status_code=502, detail={
-                "code": "provider_unavailable", "message": "Sample price data is unavailable."
+                "code": "provider_unavailable", "message": "Market data is unavailable from the selected provider."
             }) from exc
         except IntegrationPending as exc:
             raise HTTPException(
