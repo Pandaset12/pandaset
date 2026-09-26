@@ -15,7 +15,7 @@ from .config import Settings
 from .event_agents import design_scenarios, research_event
 from .event_sources import FredClient, official_source_evidence
 from .event_templates import get_event_template
-from .gemini_service import GeminiUnavailable
+from .gemini_service import GeminiRateLimited, GeminiUnavailable, gemini_cooldown_remaining
 from .mongo_store import InvalidTransition, MongoPortfolioStore
 from .twelve_data import ProviderUnavailable
 
@@ -161,6 +161,9 @@ class EventWorker:
                 await run_in_threadpool(self.store.expire_exhausted_jobs, MAX_ATTEMPTS)
                 did_work = False
                 for kind in ("draft", "run"):
+                    if kind == "draft" and gemini_cooldown_remaining():
+                        # Calculation runs do not use Gemini; keep processing them.
+                        continue
                     claim = self.store.claim_next_draft if kind == "draft" else self.store.claim_next_run
                     job = await run_in_threadpool(claim, self.worker_id,
                                                   lease_seconds=LEASE_SECONDS,
@@ -178,7 +181,9 @@ class EventWorker:
                         pass
                     except Exception as exc:
                         fail = self.store.fail_draft if kind == "draft" else self.store.fail_run
-                        retryable = isinstance(exc, (GeminiUnavailable, ProviderUnavailable, TimeoutError, OSError))
+                        retryable = (not isinstance(exc, GeminiRateLimited) and
+                                     isinstance(exc, (GeminiUnavailable, ProviderUnavailable,
+                                                      TimeoutError, OSError)))
                         try:
                             await run_in_threadpool(fail, job["owner_id"], job["id"],
                                                     str(exc), worker_id=self.worker_id,

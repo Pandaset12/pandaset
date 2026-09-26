@@ -19,6 +19,7 @@ from .event_agents import answer_run_question
 from .event_jobs import FACTOR_SYMBOLS
 from .event_schemas import ChatRequest, ConfirmRequest, DraftRequest, validate_shocks
 from .event_templates import EventTemplateNotFound, get_event_template, list_event_templates
+from .gemini_service import GeminiRateLimited, gemini_cooldown_remaining
 from .instruments import SUPPORTED_INSTRUMENTS, resolve_instrument, search_instruments
 from .mongo_store import (IdempotencyConflict, InvalidTransition, MongoPortfolioStore,
                           QuotaExceeded, RecordNotFound, ReservationInProgress)
@@ -30,8 +31,14 @@ from .twelve_data import CoverageError, ProviderUnavailable, RateLimitError, Twe
 router = APIRouter(prefix="/api/v2", tags=["event-lab"])
 
 
-def _error(status: int, code: str, message: str) -> HTTPException:
-    return HTTPException(status_code=status, detail={"code": code, "message": message})
+def _error(status: int, code: str, message: str, *, headers: dict[str, str] | None = None) -> HTTPException:
+    return HTTPException(status_code=status, detail={"code": code, "message": message}, headers=headers)
+
+
+def _gemini_rate_limit_error(seconds: int) -> HTTPException:
+    return _error(429, "GEMINI_RATE_LIMITED",
+                  f"Gemini rate limit reached. Try again in about {seconds} seconds.",
+                  headers={"Retry-After": str(seconds)})
 
 
 def _not_found() -> HTTPException:
@@ -256,6 +263,9 @@ async def create_draft(body: DraftRequest, context=Depends(_store),
         raise _error(422, "PRICE_COVERAGE", str(exc)) from exc
     payload = body.model_dump(mode="json", exclude_none=True)
     payload["template_version"] = template.version
+    cooldown = gemini_cooldown_remaining()
+    if cooldown:
+        raise _gemini_rate_limit_error(cooldown)
     draft = await _call(store.create_draft, user.user_id, body.portfolio_id,
                         payload, idempotency_key)
     return {"draft_id": draft["id"], "status": draft["status"]}
@@ -461,6 +471,9 @@ async def post_message(run_id: str, body: ChatRequest, context=Depends(_store),
             template = get_event_template(revision.template_id)
             payload = revision.model_dump(mode="json", exclude_none=True)
             payload["template_version"] = template.version
+            cooldown = gemini_cooldown_remaining()
+            if cooldown:
+                raise _gemini_rate_limit_error(cooldown)
             new_draft = await _call(store.create_draft, user.user_id, item["portfolio_id"],
                                     payload, idempotency_key)
             return await _save_chat_message(
@@ -473,6 +486,8 @@ async def post_message(run_id: str, body: ChatRequest, context=Depends(_store),
                                                result=item["result"],
                                                facts=item["result"].get("facts", []),
                                                evidence=item["result"].get("evidence", []))
+        except GeminiRateLimited as exc:
+            raise _gemini_rate_limit_error(exc.retry_after_seconds) from exc
         except Exception as exc:
             raise _error(502, "ANSWER_UNAVAILABLE", "The grounded answer is unavailable.") from exc
         return await _save_chat_message(

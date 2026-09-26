@@ -142,7 +142,7 @@ is not used by this service. Never commit actual keys.
 | ANALYST_MODE | `demo` or `gemini` |
 | GEMINI_API_KEY | Server-side key; required in Gemini mode |
 | GEMINI_MODEL | `gemini-3.8-flash`; confirm team account access |
-| GEMINI_FALLBACK_MODEL | `gemini-3.5-flash-lite`; tried after a failed Gemini response. Set empty to disable. |
+| GEMINI_FALLBACK_MODEL | `gemini-3.5-flash-lite`; tried after non-quota Gemini failures. Set empty to disable. |
 | GEMINI_TIMEOUT_SECONDS | 45 per model; maximum 120 |
 | CORS_ORIGINS | Comma-separated frontend origins; localhost ports 3000 and 5173 |
 | STORAGE_PATH | Optional override for the SQLite file |
@@ -152,9 +152,15 @@ workflow-specific prompt and JSON response schema. The primary model has a
 bounded timeout and at most two HTTP attempts. If it fails or returns an invalid
 response, the adapter tries the configured fallback model with the same prompt,
 context, validation, and timeout. The fallback is skipped in demo mode, without
-an API key, or when its model name matches the primary. An exhausted fallback
-returns the existing safe partial response; sequential attempts can take up to
-twice `GEMINI_TIMEOUT_SECONDS`. Each action receives only its scoped context:
+an API key, when its model name matches the primary, or after a 429 rate-limit
+response. On 429, the adapter honors the provider's `Retry-After` or retry delay
+when present (otherwise 60 seconds), pauses new Gemini requests locally, and
+returns a specific rate-limit message. The event worker leaves queued drafts
+untouched during that pause and does not immediately rerun a draft that hit 429;
+deterministic calculation runs continue. An exhausted fallback
+returns the existing safe partial response for v1 or fails the v2 draft;
+sequential attempts can take up to twice `GEMINI_TIMEOUT_SECONDS`. Each action
+receives only its scoped context:
 Ask Panda gets its selected snapshot and explicitly requested web inputs;
 Overview and Risk get one validated snapshot; What-if gets the server-calculated
 baseline, proposal, differences, and assumptions; Research gets one curated
