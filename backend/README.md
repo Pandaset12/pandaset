@@ -6,7 +6,7 @@ MongoDB infrastructure and financial formulas belong to the data/quant teammates
 See [the shared HLD](../PortfolioLens-HLD.md) and [integration design](INTEGRATION.md).
 
 The default provider connects the quant engine to fictional sample prices for an
-offline demo. Real market-data access remains unconnected. Gemini is optional and needs a team API key.
+offline demo. Real market data is optional and uses adjusted daily end-of-day prices from Twelve Data, not intraday quotes; see [setup guide](docs/TWELVE_DATA.md). Gemini is optional and needs a team API key.
 
 ## Run locally
 
@@ -59,8 +59,10 @@ The default answer has `status: "demo"` and explicitly labels the fixture as
 fictional. It is a deterministic snapshot summary, not an arbitrary-question AI.
 The seeded allocation is NVDA 30%, SPY 40%, JPM 20%, TLT 10%. Any valid allocation
 using NVDA, MSFT, AAPL, JPM, VTI, TLT, AMD, GLD, or SPY can be analyzed and compared
-using seven fictional price rows (six daily returns). Unsupported symbols fail with 502; prices are never
+using seven fictional price rows (six daily returns). Unsupported symbols return 404; prices are never
 invented or filled. Weights must total one within 1e-10 and are never renormalized.
+Portfolios and proposed allocations accept at most eight symbols; a what-if comparison
+also requires the combined saved/proposed symbol set to stay within eight.
 Undefined risk shares and correlation cells remain `null`. The UTC midnight `as_of`
 is a sample session-date label, not a live quote or exchange closing timestamp.
 
@@ -74,7 +76,7 @@ is a sample session-date label, not a live quote or exchange closing timestamp.
 | POST | `/api/v1/portfolios/{id}/analysis` | Validate provider output and save a snapshot |
 | GET | `/api/v1/portfolios/{id}/analyses/{analysis_id}` | Read that snapshot |
 | POST | `/api/v1/portfolios/{id}/ask` | Explain exactly the selected saved snapshot |
-| POST | `/api/v1/portfolios/{id}/what-if` | Compare saved and proposed holdings on common sample prices |
+| POST | `/api/v1/portfolios/{id}/what-if` | Compare saved and proposed holdings on the selected market-data history |
 | POST | `/api/v1/portfolios/{id}/briefing` | Write a briefing from one saved analysis |
 | POST | `/api/v1/portfolios/{id}/risk/explanation` | Explain risk using one saved analysis |
 | POST | `/api/v1/portfolios/{id}/what-if/explanation` | Recalculate and explain a proposal against a saved analysis |

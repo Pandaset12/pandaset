@@ -20,10 +20,17 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:3000,http://localhost:5173"
     storage_path: Path = Path(__file__).parent / "data" / "portfoliolens.sqlite3"
     gemini_timeout_seconds: float = Field(default=45, gt=0, le=120)
+    market_data_provider: Literal["sample", "twelvedata"] = "sample"
+    twelve_data_api_key: SecretStr | None = None
+    market_data_timeout_seconds: float = Field(default=15, gt=0, le=60)
 
     @property
     def has_gemini_key(self) -> bool:
         return bool(self.gemini_api_key and self.gemini_api_key.get_secret_value())
+
+    @property
+    def has_twelve_data_key(self) -> bool:
+        return bool(self.twelve_data_api_key and self.twelve_data_api_key.get_secret_value())
 
 
 @lru_cache
