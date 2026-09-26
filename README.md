@@ -1,54 +1,66 @@
 # PandaSet
 
-A responsive investment research interface built with React, TypeScript, and Vite. Four connected workspaces share a portfolio model and a forest-green visual system:
+**A clearer view of what you own.** PandaSet is an interactive portfolio research demo built with React, TypeScript, and Vite. Explore performance, risk, company research, and allocation scenarios through one shared sample portfolio.
 
-- **Overview** — portfolio performance, period controls, holdings, return attribution, and relevant research connections.
-- **Risk & exposure** — capital versus risk contributions, an interactive correlation matrix, and allocation breakdowns.
-- **Research** — eight searchable assets, comparisons, company context, and links to official sources.
-- **What-if lab** — editable allocations, validation, presets, recalculated comparisons, and applying a scenario to the sample portfolio.
+> [!IMPORTANT]
+> PandaSet uses illustrative prices, returns, and portfolio values. It does not connect to live markets, brokerage accounts, news feeds, or an AI service.
 
-The contextual analyst provides curated explanations grounded in the current calculations. It is clearly labeled as a guided demo.
+## Explore the app
 
-## Run locally
+| Workspace           | What you can do                                                                                      |
+| ------------------- | ---------------------------------------------------------------------------------------------------- |
+| **Overview**        | Review sample performance, holdings, return attribution, and related research.                       |
+| **Risk & exposure** | Compare capital and risk contributions, inspect correlations, and see allocation breakdowns.         |
+| **Research**        | Search eight sample assets, compare companies, and follow links to official sources.                 |
+| **What-if lab**     | Change weights, try presets, compare modeled outcomes, and apply a scenario for the current session. |
 
-Requires Node.js 22.12 or newer.
+**Ask Panda** offers curated explanations using the app’s calculations. It is a guided demo, not a connected AI assistant.
+
+## Quick start
+
+Requires **Node.js 22.12+** and npm.
 
 ```sh
 npm install
 npm run dev
 ```
 
-Use the local address printed by Vite. If the default port is occupied, Vite chooses the next available port.
+Open the local URL printed by Vite. Run all commands from the repository root.
 
-```sh
-npm test         # Financial invariants and scenario validation
-npm run build   # TypeScript check and optimized static build
-npm run preview # Serve the production build
+| Command           | Purpose                                                       |
+| ----------------- | ------------------------------------------------------------- |
+| `npm test`        | Run the quant calculation and scenario tests.                 |
+| `npm run build`   | Type-check and create the production app in `frontend/dist/`. |
+| `npm run preview` | Serve the production build locally.                           |
+
+The app uses hash routes, so the built `frontend/dist/` directory can be served from a static host without route rewrites.
+
+## Project map
+
+```text
+frontend/
+  src/
+    App.tsx         Routes and session portfolio state
+    pages/          Overview, risk, research, and what-if views
+    components/     Shared UI, charts, dialogs, and Ask Panda
+    styles/         Feature styles and responsive rules
+  public/           Favicon and self-hosted fonts
+quant/
+  analytics.ts      Portfolio and risk calculations
+  data.ts           Illustrative assets and return series
+  tests/            Calculation and scenario tests
+backend/            Placeholder for a future service
+docs/               Design and verification notes
 ```
 
-All navigation uses hash routes, so `frontend/dist/` can be served by a static host without route rewrites. This project has no Sites dependency or hosting configuration.
+The root `package.json` provides the development, test, and build commands. The frontend imports the shared sample model from `quant/`. There is **no backend implementation** yet.
 
-## Data and integration boundaries
+## How the sample works
 
-This is a complete frontend implementation using **illustrative data**. It is not connected to market data, brokerage accounts, a news feed, or Gemini. Research links point to external issuer and public-disclosure sources; their contents are not ingested. The UI discloses these boundaries in the sample-data badge, methodology dialog, research labels, and analyst.
+`quant/data.ts` defines eight assets, initial weights, research primers, and a deterministic series of 252 synthetic daily returns. Asset order must remain aligned with weight and return arrays. Portfolio edits live only in browser state; reloading restores the sample.
 
-`quant/data.ts` defines assets, initial allocations, research primers, and a deterministic 252-day sample. It generates correlated daily observations calibrated to the disclosed sample annual returns. The portfolio uses constant daily weights, excluding fees, taxes, deposits, and withdrawals. Editing a portfolio updates application state for the current session; reloading restores the sample.
+`quant/analytics.ts` calculates compounded returns, linked return contributions, annualized volatility, correlations, risk contributions, and drawdown. The model assumes constant daily weights and excludes fees, taxes, deposits, and withdrawals. The methodology dialog in the app explains these assumptions alongside the results.
 
-`quant/analytics.ts` contains the portfolio calculations. Return contributions are geometrically linked to reconcile to the total compounded return. Risk contributions use the sample covariance matrix and sum to one, including possible negative contributions. Volatility is annualized using 252 trading days. Drawdown is computed from the modeled portfolio path.
+Research links open external issuer and public-disclosure pages. PandaSet does not ingest their contents. A future backend can replace the sample data and curated analyst responses; API credentials must stay out of the browser bundle.
 
-To integrate a backend, replace the fixture data adapter while keeping aligned return arrays and the asset ordering contract. Replace the analyst response function with the desired service and preserve visible loading, error, and source-attribution states. Do not put API keys in the browser bundle.
-
-## Structure
-
-- `frontend/` — Vite application and public assets.
-- `quant/` — illustrative data, portfolio calculations, and tests.
-- `backend/` — reserved for a future service; no backend is implemented yet.
-- `frontend/src/App.tsx` — navigation, portfolio state, editing, and methodology.
-- `frontend/src/pages/` — four workflow-specific pages.
-- `frontend/src/components/` — shared UI, responsive chart, and contextual analyst.
-- `frontend/src/styles.css` — stylesheet entry point; feature styles live in `frontend/src/styles/`.
-- `quant/tests/analytics.test.ts` — seven financial consistency checks.
-- `docs/design-system.md` — visual direction and component conventions.
-- `docs/verification.md` — verification evidence and limitations.
-
-Fonts are self-hosted. Their licenses are included in `frontend/public/fonts/`.
+See [design notes](docs/design-system.md) and [verification notes](docs/verification.md) for more detail. Font licenses are in `frontend/public/fonts/`.
