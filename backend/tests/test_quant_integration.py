@@ -64,6 +64,21 @@ def test_creation_analysis_mapping_persistence_and_ask(client):
     assert client.get("/health").json()["quant_integration"] == "quant_engine_sample_prices"
 
 
+@pytest.mark.parametrize("weights", [
+    {"NVDA": 0.24, "MSFT": 0.20, "AAPL": 0.16, "JPM": 0.12, "VTI": 0.18, "TLT": 0.10},
+    {"AMD": 0.5, "GLD": 0.5},
+])
+def test_frontend_portfolios_have_sample_prices(client, weights):
+    portfolio_id = create(client, weights)
+    response = client.post(f"/api/v1/portfolios/{portfolio_id}/analysis")
+    assert response.status_code == 200, response.text
+    analysis = response.json()
+    assert analysis["portfolio_id"] == portfolio_id
+    assert analysis["weights"] == weights
+    assert analysis["data_mode"] == "demo"
+    assert analysis["observation_count"] == 6
+
+
 def test_what_if_union_and_deltas_use_saved_baseline_without_mutation(client):
     portfolio_id = create(client, {"NVDA": 1.0})
     before = client.get(f"/api/v1/portfolios/{portfolio_id}").json()
@@ -137,10 +152,10 @@ def test_weight_tolerance_matches_engine_without_normalization(client):
 
 
 def test_missing_sample_history_fails_instead_of_fabricating_prices(client):
-    portfolio_id = create(client, {"AAPL": 1.0})
+    portfolio_id = create(client, {"UNKNOWN": 1.0})
     assert client.post(f"/api/v1/portfolios/{portfolio_id}/analysis").status_code == 502
     response = client.post("/api/v1/portfolios/demo/what-if", json={
-        "holdings": [{"symbol": "AAPL", "weight": 1.0}],
+        "holdings": [{"symbol": "UNKNOWN", "weight": 1.0}],
     })
     assert response.status_code == 502
     assert response.json()["error"]["code"] == "PROVIDER_UNAVAILABLE"
