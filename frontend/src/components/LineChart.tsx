@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { dates } from "../../../quant/data";
 import { pct, money } from "../../../quant/analytics";
 export function LineChart({
+  dates,
   series,
   secondary,
   label = "Portfolio",
@@ -10,6 +10,7 @@ export function LineChart({
   endValue = 1,
   compact = false,
 }: {
+  dates: string[];
   series: number[];
   secondary?: number[];
   label?: string;
@@ -37,7 +38,8 @@ export function LineChart({
   min -= gap * 0.13;
   max += gap * 0.15;
   const x = (i: number) =>
-    pad.left + (i / (series.length - 1)) * (width - pad.left - pad.right);
+    pad.left +
+    (i / Math.max(1, series.length - 1)) * (width - pad.left - pad.right);
   const y = (n: number) =>
     pad.top + ((max - n) / (max - min)) * (height - pad.top - pad.bottom);
   const path = (values: number[]) =>
@@ -50,7 +52,7 @@ export function LineChart({
     currency ? money((v / series.at(-1)!) * endValue) : pct(v - 1, 0);
   const index = Math.min(hover ?? series.length - 1, series.length - 1);
   const date = new Date(
-    dates[253 - series.length + index] + "T12:00:00Z",
+    (dates[index] || dates.at(-1) || "") + "T12:00:00Z",
   ).toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
@@ -145,13 +147,14 @@ export function LineChart({
               textAnchor={i === 0 ? "start" : i === 4 ? "end" : "middle"}
               className="chart-label"
             >
-              {new Date(
-                dates[253 - series.length + idx] + "T12:00:00Z",
-              ).toLocaleDateString("en-US", {
-                month: "short",
-                timeZone: "UTC",
-                ...(series.length < 70 ? { day: "numeric" as const } : {}),
-              })}
+              {new Date((dates[idx] || "") + "T12:00:00Z").toLocaleDateString(
+                "en-US",
+                {
+                  month: "short",
+                  timeZone: "UTC",
+                  ...(series.length < 70 ? { day: "numeric" as const } : {}),
+                },
+              )}
             </text>
           );
         })}

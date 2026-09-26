@@ -6,51 +6,78 @@ import {
   RectangleStack as Layers,
 } from "../components/icons";
 import { assets } from "../../../quant/data";
-import { analyze, correlationMatrix, pct } from "../../../quant/analytics";
+import { pct } from "../../../quant/analytics";
 import {
   AssetMark,
   PageHeading,
   SectionTitle,
   NextStep,
 } from "../components/UI";
+import type { AnalysisResponse } from "../api/portfolio";
+
 export default function Risk({
-  weights,
+  analysis,
   onAsk,
   onMethod,
 }: {
-  weights: number[];
+  analysis: AnalysisResponse;
   onAsk: (q?: string) => void;
   onMethod: () => void;
 }) {
-  const metrics = analyze(weights);
-  const active = assets
-    .map((a, i) => ({ a, i }))
-    .filter(({ i }) => weights[i] > 0)
-    .sort((a, b) => metrics.risk[b.i] - metrics.risk[a.i]);
-  const [pair, setPair] = useState<[number, number]>([0, 1]);
+  const [pair, setPair] = useState<[string, string] | null>(null);
   const [view, setView] = useState<"sectors" | "holdings">("sectors");
-  const top = assets[metrics.topRisk];
-  const selectedPositions = pair.map((assetIndex) =>
-    active.findIndex(({ i }) => i === assetIndex),
-  );
-  const hasSelectedPair =
-    selectedPositions[0] >= 0 &&
-    selectedPositions[1] >= 0 &&
-    selectedPositions[0] !== selectedPositions[1];
-  const selectedOrder = hasSelectedPair
-    ? [Math.min(...selectedPositions), Math.max(...selectedPositions)]
-    : [0, active.length > 1 ? 1 : 0];
-  const selected: [number, number] = [
-    active[selectedOrder[0]].i,
-    active[selectedOrder[1]].i,
-  ];
-  const corr = correlationMatrix[selected[0]][selected[1]];
-  const max = Math.max(...weights, ...metrics.risk.map((v) => v * 100)) * 1.12;
+  const active = assets
+    .map((asset) => ({
+      asset,
+      weight: analysis.weights[asset.symbol] ?? 0,
+      risk: analysis.risk_contribution[asset.symbol] ?? null,
+    }))
+    .filter((item) => item.weight > 0)
+    .sort((a, b) => (b.risk ?? -Infinity) - (a.risk ?? -Infinity));
+  const bestDefined = active.find((item) => item.risk !== null);
+  const top = bestDefined?.asset ?? active[0]?.asset;
+  const selected: [string, string] =
+    pair &&
+    active.some((item) => item.asset.symbol === pair[0]) &&
+    active.some((item) => item.asset.symbol === pair[1])
+      ? pair
+      : [
+          active[0]?.asset.symbol ?? "",
+          active[1]?.asset.symbol ?? active[0]?.asset.symbol ?? "",
+        ];
+  const correlation =
+    analysis.correlation_matrix?.[selected[0]]?.[selected[1]] ?? null;
+  const max =
+    Math.max(
+      1,
+      ...active.map((item) => item.weight * 100),
+      ...active.map((item) => Math.abs(item.risk ?? 0) * 100),
+    ) * 1.12;
+  const categories = Object.entries(
+    active.reduce<Record<string, number>>((grouped, { asset, weight }) => {
+      grouped[asset.sector] = (grouped[asset.sector] ?? 0) + weight;
+      return grouped;
+    }, {}),
+  ).sort((a, b) => b[1] - a[1]);
+  const exposure =
+    view === "sectors"
+      ? categories.map(([label, value]) => ({
+          label,
+          value,
+          color:
+            assets.find((asset) => asset.sector === label)?.color ?? "#888",
+        }))
+      : active.map(({ asset, weight }) => ({
+          label: asset.symbol,
+          value: weight,
+          color: asset.color,
+        }));
+
   return (
     <>
       <PageHeading
         title="Risk & exposure"
-        description="Understand how your holdings behave together."
+        description="Understand how the holdings in your saved analysis behave together."
       >
         <button className="button subtle" onClick={onMethod}>
           <Info size={16} />
@@ -64,25 +91,47 @@ export default function Risk({
           Explain my risk
         </button>
       </PageHeading>
+      <section
+        className="backend-analysis"
+        aria-label="Risk analysis provenance"
+      >
+        <strong>Analysis {analysis.analysis_id}</strong>
+        <span>
+          {analysis.data_quality.source} · {analysis.lookback_days} return
+          observations
+        </span>
+      </section>
       <div className="risk-summary">
         <div className="risk-intro">
           <span className="label-chip">
             <Layers size={14} />
             PORTFOLIO RISK
           </span>
-          <h2>
-            {top.short} drives
-            <br />
-            <em>{pct(metrics.risk[metrics.topRisk], 0)}</em> of your risk.
-          </h2>
-          <p>
-            Position size tells part of the story. Volatility and the way assets
-            move together tell the rest.
-          </p>
-          <a href={`#/what-if?reduce=${top.symbol}`} className="text-link">
-            Test a smaller position
-            <ArrowUpRight size={17} />
-          </a>
+          {top && bestDefined && bestDefined.risk !== null ? (
+            <>
+              <h2>
+                {top.short} contributes
+                <br />
+                <em>{pct(bestDefined.risk, 0)}</em> of estimated risk.
+              </h2>
+              <p>
+                Risk contribution and volatility below come from the saved
+                backend analysis.
+              </p>
+              <a href={`#/what-if?reduce=${top.symbol}`} className="text-link">
+                Test a smaller position
+                <ArrowUpRight size={17} />
+              </a>
+            </>
+          ) : (
+            <>
+              <h2>Risk contribution unavailable.</h2>
+              <p>
+                The backend did not return a defined risk contribution for the
+                active analysis.
+              </p>
+            </>
+          )}
         </div>
         <section className="risk-bars-panel">
           <SectionTitle title="Capital vs. risk">
@@ -98,32 +147,32 @@ export default function Risk({
             </div>
           </SectionTitle>
           <div className="risk-bars">
-            {active.map(({ a, i }) => (
+            {active.map(({ asset, weight, risk }) => (
               <a
-                href={`#/research?symbol=${a.symbol}`}
+                href={`#/research?symbol=${asset.symbol}`}
                 className="risk-bar-row"
-                key={a.symbol}
+                key={asset.symbol}
               >
                 <span className="risk-ticker">
-                  <AssetMark asset={a} small />
-                  <strong>{a.symbol}</strong>
+                  <AssetMark asset={asset} small />
+                  <strong>{asset.symbol}</strong>
                 </span>
                 <div className="risk-bar-pair">
                   <div>
                     <i
                       className="capital-bar"
-                      style={{ width: `${(weights[i] / max) * 100}%` }}
+                      style={{ width: `${((weight * 100) / max) * 100}%` }}
                     />
-                    <span>{weights[i]}%</span>
+                    <span>{pct(weight, 0)}</span>
                   </div>
                   <div>
                     <i
                       className="risk-bar"
                       style={{
-                        width: `${((Math.abs(metrics.risk[i]) * 100) / max) * 100}%`,
+                        width: `${((Math.abs(risk ?? 0) * 100) / max) * 100}%`,
                       }}
                     />
-                    <span>{pct(metrics.risk[i], 1)}</span>
+                    <span>{risk === null ? "Unavailable" : pct(risk, 1)}</span>
                   </div>
                 </div>
                 <ArrowUpRight size={15} />
@@ -131,9 +180,8 @@ export default function Risk({
             ))}
           </div>
           <p className="muted small-text">
-            Risk contribution estimates how much each holding adds to or offsets
-            portfolio risk over this sample year, accounting for how its daily
-            returns move with the rest. Negative values reduced modeled risk.
+            Risk contribution is an estimate based on the backend’s daily return
+            sample. Undefined values remain unavailable.
           </p>
         </section>
       </div>
@@ -151,116 +199,130 @@ export default function Risk({
               <Info size={17} />
             </button>
           </SectionTitle>
-          <div className="matrix-scroll">
-            <table className="correlation-table">
-              <caption className="sr-only">
-                {active.length > 1
-                  ? "Correlation of daily returns over one year. Select a cell above the diagonal for a pair explanation. The lower half is blank to avoid repeating pairs. The diagonal shows each holding’s correlation with itself."
-                  : "Correlation of daily returns over one year. Comparing correlation requires two holdings. Use the Long-term portfolio edit control above to add another holding."}
-              </caption>
-              <thead>
-                <tr>
-                  <th />
-                  {active.map(({ a }) => (
-                    <th key={a.symbol} scope="col">
-                      {a.symbol}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {active.map(({ a, i }, rowIndex) => (
-                  <tr key={a.symbol}>
-                    <th scope="row">{a.symbol}</th>
-                    {active.map(({ a: b, i: j }, columnIndex) => {
-                      const value = correlationMatrix[i][j];
-                      const background =
-                        i === j
-                          ? "#222c25"
-                          : value < 0
-                            ? `rgba(208,125,114,${Math.abs(value) * 0.6 + 0.06})`
-                            : value > 0.55
-                              ? `rgba(194,163,107,${0.83 + value * 0.15})`
-                              : `rgba(194,163,107,${value * 0.5 + 0.06})`;
-                      const color =
-                        value > 0.55 && i !== j ? "#17150f" : "#eeece4";
-                      const isDiagonal = rowIndex === columnIndex;
-                      const isSelectable = rowIndex < columnIndex;
-
-                      return (
-                        <td
-                          key={b.symbol}
-                          className={
-                            isDiagonal
-                              ? "matrix-static matrix-diagonal"
-                              : isSelectable
-                                ? ""
-                                : "matrix-empty"
-                          }
-                        >
-                          {isSelectable ? (
-                            <button
-                              className={
-                                selected[0] === i && selected[1] === j
-                                  ? "selected"
-                                  : ""
-                              }
-                              style={{ background, color }}
-                              onClick={() => setPair([i, j])}
-                              aria-label={`${a.symbol} and ${b.symbol}: ${value.toFixed(2)} correlation`}
-                              aria-pressed={
-                                selected[0] === i && selected[1] === j
-                              }
-                            >
-                              {value.toFixed(2)}
-                            </button>
-                          ) : isDiagonal ? (
-                            <span
-                              style={{ background, color }}
-                              aria-label={`${a.symbol} self-correlation: ${value.toFixed(2)}`}
-                            >
-                              {value.toFixed(2)}
-                            </span>
-                          ) : null}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <p className="matrix-hint small-text">
-            {active.length > 1
-              ? "Select a cell above the diagonal to explore a pair. The lower half is blank to avoid repeating pairs. Diagonal cells show each holding’s self-correlation."
-              : "Correlation needs two holdings. Use the Long-term portfolio edit control above to add another holding."}
-          </p>
-          <div className="matrix-key">
-            <span>−1 · Opposite</span>
-            <div />
-            <span>+1 · Together</span>
-          </div>
-          <div className="correlation-insight">
-            <strong>
-              {active.length > 1
-                ? `${assets[selected[0]].symbol} × ${assets[selected[1]].symbol}`
-                : `${assets[selected[0]].symbol} · one holding`}
-              {active.length > 1 && <span>{corr.toFixed(2)}</span>}
-            </strong>
-            <p>
-              {active.length < 2
-                ? "Correlation describes how two holdings move together. Add another holding with the Long-term portfolio edit control above to compare a pair."
-                : selected[0] === selected[1]
-                  ? "An asset is perfectly correlated with itself. Select two different holdings to explore their relationship."
-                  : corr > 0.65
-                    ? "These holdings often moved together in the sample. Owning both may offer less diversification than their separate names suggest."
-                    : corr > 0.25
-                      ? "These holdings had a moderate tendency to move together. Their returns still differ on many days."
-                      : corr < -0.1
-                        ? "These holdings tended to move in opposite directions in the sample. This relationship can change over time."
-                        : "These holdings showed a weak relationship in the sample. Low historical correlation does not guarantee protection in a downturn."}
+          {!analysis.correlation_matrix ? (
+            <p className="api-state" role="status">
+              Correlation matrix unavailable for this analysis.
             </p>
-          </div>
+          ) : (
+            <>
+              <div className="matrix-scroll">
+                <table className="correlation-table">
+                  <caption className="sr-only">
+                    Pairwise correlations of daily returns for the active
+                    analysis. Undefined correlations are labeled unavailable.
+                  </caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">Holding</th>
+                      {active.map(({ asset }) => (
+                        <th key={asset.symbol} scope="col">
+                          {asset.symbol}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {active.map(({ asset: row }, rowIndex) => (
+                      <tr key={row.symbol}>
+                        <th scope="row">{row.symbol}</th>
+                        {active.map(({ asset: column }, columnIndex) => {
+                          const value =
+                            analysis.correlation_matrix?.[row.symbol]?.[
+                              column.symbol
+                            ] ?? null;
+                          const diagonal = rowIndex === columnIndex;
+                          const selectable =
+                            rowIndex < columnIndex && value !== null;
+                          const background =
+                            value === null
+                              ? "#333"
+                              : diagonal
+                                ? "#222c25"
+                                : value < 0
+                                  ? `rgba(208,125,114,${Math.abs(value) * 0.6 + 0.06})`
+                                  : `rgba(194,163,107,${Math.min(0.95, value * 0.6 + 0.06)})`;
+                          return (
+                            <td
+                              key={column.symbol}
+                              className={
+                                diagonal
+                                  ? "matrix-static matrix-diagonal"
+                                  : selectable
+                                    ? ""
+                                    : "matrix-empty"
+                              }
+                            >
+                              {selectable ? (
+                                <button
+                                  className={
+                                    selected[0] === row.symbol &&
+                                    selected[1] === column.symbol
+                                      ? "selected"
+                                      : ""
+                                  }
+                                  style={{
+                                    background,
+                                    color: value > 0.55 ? "#17150f" : "#eeece4",
+                                  }}
+                                  onClick={() =>
+                                    setPair([row.symbol, column.symbol])
+                                  }
+                                  aria-label={`${row.symbol} and ${column.symbol}: ${value.toFixed(2)} correlation`}
+                                  aria-pressed={
+                                    selected[0] === row.symbol &&
+                                    selected[1] === column.symbol
+                                  }
+                                >
+                                  {value.toFixed(2)}
+                                </button>
+                              ) : diagonal ? (
+                                <span
+                                  style={{ background }}
+                                  aria-label={`${row.symbol} self-correlation: ${value === null ? "unavailable" : value.toFixed(2)}`}
+                                >
+                                  {value === null ? "—" : value.toFixed(2)}
+                                </span>
+                              ) : null}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="matrix-hint small-text">
+                Select a cell above the diagonal to explore a pair. The lower
+                half is blank to avoid repeating pairs.
+              </p>
+              <div className="matrix-key">
+                <span>−1 · Opposite</span>
+                <div />
+                <span>+1 · Together</span>
+              </div>
+              <div className="correlation-insight">
+                <strong>
+                  {selected[0] && selected[1]
+                    ? `${selected[0]} × ${selected[1]}`
+                    : "Correlation unavailable"}
+                  <span>
+                    {correlation === null
+                      ? "Unavailable"
+                      : correlation.toFixed(2)}
+                  </span>
+                </strong>
+                <p>
+                  {correlation === null
+                    ? "The selected correlation is undefined in this sample."
+                    : correlation > 0.65
+                      ? "These holdings moved together in this sample."
+                      : correlation < -0.1
+                        ? "These holdings tended to move in opposite directions in this sample."
+                        : "These holdings showed a weak to moderate relationship in this sample."}
+                </p>
+              </div>
+            </>
+          )}
         </section>
         <section className="exposure-section">
           <SectionTitle
@@ -285,18 +347,7 @@ export default function Risk({
             </button>
           </div>
           <div className="allocation-mosaic" aria-label="Portfolio allocation">
-            {(view === "sectors"
-              ? metrics.sectors.map(([label, v]) => ({
-                  label,
-                  value: v,
-                  color: assets.find((a) => a.sector === label)!.color,
-                }))
-              : active.map(({ a, i }) => ({
-                  label: a.symbol,
-                  value: weights[i] / 100,
-                  color: a.color,
-                }))
-            ).map(({ label, value, color }) => (
+            {exposure.map(({ label, value, color }) => (
               <div
                 key={label}
                 style={{
@@ -311,18 +362,7 @@ export default function Risk({
             ))}
           </div>
           <div className="exposure-list">
-            {(view === "sectors"
-              ? metrics.sectors.map(([label, v]) => ({
-                  label,
-                  value: v,
-                  color: assets.find((a) => a.sector === label)!.color,
-                }))
-              : active.map(({ a, i }) => ({
-                  label: a.symbol,
-                  value: weights[i] / 100,
-                  color: a.color,
-                }))
-            ).map(({ label, value, color }) => (
+            {exposure.map(({ label, value, color }) => (
               <div key={label}>
                 <span>
                   <i style={{ background: color }} />
@@ -335,16 +375,15 @@ export default function Risk({
           <div className="note-panel">
             <Info size={18} />
             <p>
-              <strong>Look beyond the label.</strong> Broad-market funds can
-              include companies you hold directly. This view groups funds
-              separately and does not look through their underlying holdings.
+              <strong>Look beyond the label.</strong> Funds are grouped as their
+              own category; this view does not look through underlying holdings.
             </p>
           </div>
         </section>
       </div>
       <NextStep
         title="What would a different mix look like?"
-        body="Adjust your allocations and compare the estimated risk side by side."
+        body="Adjust your allocations and compare backend estimates side by side."
         to="#/what-if"
         label="Open the scenario lab"
       />

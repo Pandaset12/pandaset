@@ -32,7 +32,15 @@ test("creates a portfolio, then analyzes its returned ID", async () => {
               portfolio_id: "saved-id",
               created_at: "2026-01-01",
             }
-          : { portfolio_id: "saved-id", analysis_id: "analysis-id" },
+          : {
+              portfolio_id: "saved-id",
+              analysis_id: "analysis-id",
+              weights: Object.fromEntries(
+                portfolioInput(initialWeights).holdings.map(
+                  ({ symbol, weight }) => [symbol, weight],
+                ),
+              ),
+            },
       ),
       { status: calls.length === 1 ? 201 : 200 },
     );

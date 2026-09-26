@@ -23,6 +23,61 @@ def check_weights(weights: dict[str, float]) -> dict[str, float]:
     return normalized
 
 
+class AnalysisSeries(BaseModel):
+    """Aligned normalized index values, including the initial price date."""
+
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+
+    dates: list[str]
+    portfolio_index: list[float | None]
+    asset_index: dict[str, list[float | None]]
+    return_contribution: dict[str, float | None] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def aligned_series(self):
+        size = len(self.dates)
+        if size < 1 or len(self.portfolio_index) != size:
+            raise ValueError("Series dates and portfolio values must be aligned.")
+        if any(len(values) != size for values in self.asset_index.values()):
+            raise ValueError("All asset series must align with the date labels.")
+        if len(set(self.dates)) != size:
+            raise ValueError("Series date labels must be unique.")
+        if self.portfolio_index[0] is not None and not math.isclose(self.portfolio_index[0], 1.0, rel_tol=0, abs_tol=1e-10):
+            raise ValueError("Portfolio history must start at normalized value one.")
+        if any(values[0] is not None and not math.isclose(values[0], 1.0, rel_tol=0, abs_tol=1e-10) for values in self.asset_index.values()):
+            raise ValueError("Asset history must start at normalized value one.")
+        if self.return_contribution and set(self.return_contribution) != set(self.asset_index):
+            raise ValueError("Series return contributions must cover every series symbol.")
+        return self
+
+
+class MarketHistoryResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+    symbols: list[str]
+    dates: list[str]
+    asset_index: dict[str, list[float | None]]
+    data_mode: Literal["demo", "live"]
+    data_source: str
+    freshness: Literal["fresh", "stale", "unknown"]
+    requested_lookback_days: int
+    observation_count: int
+    warnings: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def aligned_history(self):
+        if not self.dates or set(self.asset_index) != set(self.symbols):
+            raise ValueError("Market history must include dates and every requested symbol.")
+        if any(len(values) != len(self.dates) for values in self.asset_index.values()):
+            raise ValueError("All market history series must align with the date labels.")
+        if len(set(self.dates)) != len(self.dates):
+            raise ValueError("Market history date labels must be unique.")
+        if any(values[0] is None or not math.isclose(values[0], 1.0, rel_tol=0, abs_tol=1e-10) for values in self.asset_index.values()):
+            raise ValueError("Market history series must start at normalized value one.")
+        if self.observation_count != len(self.dates) - 1:
+            raise ValueError("Market history observation count must match its date range.")
+        return self
+
+
 class AnalyticsSnapshot(BaseModel):
     model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
 
@@ -36,6 +91,10 @@ class AnalyticsSnapshot(BaseModel):
     risk_contribution: dict[str, float | None]
     notes: list[str] = Field(default_factory=list)
     portfolio_return: float | None = None
+    annualized_return: float | None = None
+    max_drawdown: float | None = None
+    return_contribution: dict[str, float | None] | None = None
+    series: AnalysisSeries | None = None
     asset_volatility: dict[str, float] | None = None
     correlation_matrix: dict[str, dict[str, float | None]] | None = None
     observation_count: int | None = Field(default=None, ge=2)
@@ -58,6 +117,12 @@ class AnalyticsSnapshot(BaseModel):
         if self.asset_volatility is not None:
             if set(self.asset_volatility) != symbols or any(v < 0 for v in self.asset_volatility.values()):
                 raise ValueError("Asset volatilities must be nonnegative and cover all holdings.")
+        if self.return_contribution is not None and set(self.return_contribution) != symbols:
+            raise ValueError("Return contributions must cover exactly the portfolio symbols.")
+        if self.series is not None and set(self.series.asset_index) != symbols:
+            raise ValueError("Asset series must cover exactly the portfolio symbols.")
+        if self.series is not None and self.observation_count is not None and len(self.series.dates) != self.observation_count + 1:
+            raise ValueError("Series date count must include one initial date plus each return observation.")
         if self.correlation_matrix is not None:
             matrix = self.correlation_matrix
             if set(matrix) != symbols or any(set(row) != symbols for row in matrix.values()):
@@ -231,6 +296,8 @@ class AnalysisResponse(BaseModel):
     as_of: datetime | None
     lookback_days: int
     portfolio_return: float | None
+    annualized_return: float | None = None
+    max_drawdown: float | None = None
     portfolio_volatility: float
     asset_volatility: dict[str, float] | None
     correlation_matrix: dict[str, dict[str, float | None]] | None
@@ -243,3 +310,5 @@ class AnalysisResponse(BaseModel):
     return_frequency: Literal["daily"]
     volatility_unit: Literal["annualized_decimal"]
     assumptions: list[str]
+    return_contribution: dict[str, float | None] | None = None
+    series: AnalysisSeries | None = None

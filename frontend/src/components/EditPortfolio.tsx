@@ -6,18 +6,25 @@ import { Modal, AssetMark } from "./UI";
 
 export function EditPortfolio({
   weights,
+  busy,
+  error,
   onClose,
   onSave,
 }: {
   weights: number[];
+  busy: boolean;
+  error: string;
   onClose: () => void;
-  onSave: (w: number[]) => void;
+  onSave: (w: number[]) => Promise<boolean>;
 }) {
   const [draft, setDraft] = useState([...weights]);
   const total = draft.reduce((a, b) => a + b, 0);
   const valid = validateWeights(draft);
   return (
-    <Modal title="Edit your sample portfolio" onClose={onClose}>
+    <Modal
+      title="Edit your sample portfolio"
+      onClose={busy ? () => undefined : onClose}
+    >
       <p className="modal-description">
         Set the allocation for each asset. Your weights should add up to 100%.
       </p>
@@ -37,6 +44,7 @@ export function EditPortfolio({
                 max="100"
                 step="1"
                 value={draft[i]}
+                disabled={busy}
                 onChange={(e) =>
                   setDraft(
                     draft.map((v, j) => (i === j ? Number(e.target.value) : v)),
@@ -60,6 +68,7 @@ export function EditPortfolio({
       <div className="modal-actions">
         <button
           className="text-button"
+          disabled={busy}
           onClick={() => setDraft([...initialWeights])}
         >
           <RotateCcw size={15} />
@@ -67,13 +76,18 @@ export function EditPortfolio({
         </button>
         <button
           className="button dark"
-          disabled={!valid}
-          onClick={() => onSave(draft)}
+          disabled={!valid || busy}
+          onClick={() => void onSave(draft)}
         >
-          Update portfolio
+          {busy ? "Saving…" : "Update portfolio"}
           <Check size={16} />
         </button>
       </div>
+      {error && (
+        <p className="field-error" role="alert">
+          {error}
+        </p>
+      )}
       <p className="small-text muted">
         Changes stay in this session. Reloading restores the example portfolio.
       </p>

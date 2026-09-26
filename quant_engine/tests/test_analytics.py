@@ -18,6 +18,7 @@ def test_full_report(prices):
     assert report["matrices"]["sample_covariance"]["A"]["B"] == pytest.approx(-.01)
     assert sum(a["component_risk_contribution"] for a in report["assets"].values()) == pytest.approx(.05)
     assert sum(a["percentage_risk_contribution"] for a in report["assets"].values()) == pytest.approx(1)
+    assert sum(a["return_contribution"] for a in report["assets"].values()) == pytest.approx(p["cumulative_return"])
     assert json.loads(json.dumps(report, allow_nan=False)) == report
 
 

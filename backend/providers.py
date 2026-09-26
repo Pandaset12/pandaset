@@ -7,7 +7,7 @@ from fastapi import Request
 import pandas as pd
 from quant_engine import analyze_portfolio, compare_portfolios
 
-from .schemas import AnalyticsSnapshot, Portfolio, WhatIfRequest
+from .schemas import AnalysisSeries, AnalyticsSnapshot, MarketHistoryResponse, Portfolio, WhatIfRequest
 
 
 class PortfolioNotFound(Exception):
@@ -41,6 +41,8 @@ class QuantProvider(Protocol):
 
     def simulate(self, request: WhatIfRequest) -> dict: ...
 
+    def market_history(self, symbols: list[str], lookback_days: int) -> MarketHistoryResponse: ...
+
 
 class DemoQuantProvider:
     """Precomputed fictional fixture; this does not calculate financial risk."""
@@ -66,6 +68,9 @@ class DemoQuantProvider:
             "Proposed weights were validated, but no risk comparison was calculated."
         )
 
+    def market_history(self, symbols: list[str], lookback_days: int) -> MarketHistoryResponse:
+        return build_market_history(SamplePriceProvider(), symbols, lookback_days)
+
 
 class SamplePriceProvider:
     """Existing fictional daily-price fixture; never live market data."""
@@ -82,15 +87,54 @@ class SamplePriceProvider:
         )
 
 
+def build_market_history(prices_provider, symbols: list[str], lookback_days: int) -> MarketHistoryResponse:
+    frame = prices_provider.prices(symbols).tail(lookback_days + 1)
+    if len(frame) < 2:
+        raise ProviderUnavailable("At least two dated prices are required for market history.")
+    series = {
+        symbol: [float(value / frame[symbol].iloc[0]) for value in frame[symbol].tolist()]
+        for symbol in symbols
+    }
+    return MarketHistoryResponse(
+        symbols=symbols,
+        dates=[stamp.strftime("%Y-%m-%d") for stamp in frame.index],
+        asset_index=series,
+        data_mode="demo",
+        data_source="synthetic_fixture",
+        freshness="unknown",
+        requested_lookback_days=lookback_days,
+        observation_count=len(frame) - 1,
+        warnings=["FICTIONAL sample prices; not live market observations."],
+    )
+
+
 def map_quant_report(report: dict, portfolio_id: str) -> AnalyticsSnapshot:
     """Map the sample-price report explicitly, without normalizing weights or metrics."""
     metadata = report["metadata"]
+    symbols = list(report["weights"])
+    dates = [metadata["start_date"][:10], *[date[:10] for date in report["series"]["dates"]]]
+    portfolio_index = [1.0, *[1 + value for value in report["series"]["portfolio_cumulative_returns"]]]
+    asset_index = {
+        symbol: [1.0, *[1 + value for value in report["series"]["asset_cumulative_returns"][symbol]]]
+        for symbol in symbols
+    }
+    return_contribution = {
+        symbol: report["assets"][symbol]["return_contribution"] for symbol in symbols
+    }
+    series = AnalysisSeries(
+        dates=dates, portfolio_index=portfolio_index, asset_index=asset_index,
+        return_contribution=return_contribution,
+    )
     return AnalyticsSnapshot(
         portfolio_id=portfolio_id, data_mode="demo",
         data_as_of=metadata["end_date"],
         lookback_trading_days=metadata["return_observations"],
         observation_count=metadata["return_observations"],
         portfolio_return=report["portfolio"]["cumulative_return"],
+        annualized_return=report["portfolio"]["geometric_annualized_return"],
+        max_drawdown=report["portfolio"]["maximum_drawdown"],
+        return_contribution=return_contribution,
+        series=series,
         portfolio_volatility=report["portfolio"]["annualized_volatility"],
         weights=report["weights"],
         asset_volatility={symbol: asset["annualized_volatility"]
@@ -141,9 +185,14 @@ class EngineQuantProvider:
             "current_analysis": map_quant_report(result["baseline"], request.portfolio_id).model_dump(mode="json"),
             "proposed_analysis": map_quant_report(result["proposed"], request.portfolio_id).model_dump(mode="json"),
             "delta": {"portfolio_return": differences["cumulative_return"],
-                      "portfolio_volatility": differences["annualized_volatility"]},
+                      "portfolio_volatility": differences["annualized_volatility"],
+                      "annualized_return": differences["geometric_annualized_return"],
+                      "max_drawdown": differences["maximum_drawdown"]},
             "difference_convention": result["difference_convention"],
         }
+
+    def market_history(self, symbols: list[str], lookback_days: int) -> MarketHistoryResponse:
+        return build_market_history(self.prices, symbols, lookback_days)
 
 
 def get_provider(request: Request) -> QuantProvider:

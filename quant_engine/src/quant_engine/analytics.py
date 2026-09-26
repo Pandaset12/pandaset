@@ -49,6 +49,13 @@ def analyze_portfolio(prices, weights, *, periods_per_year=252,
         annual, weights, returns=returns, periods_per_year=periods_per_year)
     asset_cumulative = cumulative_returns(returns)
     portfolio_cumulative = cumulative_returns(portfolio)
+    return_contribution = {symbol: 0.0 for symbol in weights.index}
+    portfolio_value = 1.0
+    for timestamp, portfolio_return in portfolio.items():
+        period_contributions = weights * returns.loc[timestamp]
+        for symbol, contribution in period_contributions.items():
+            return_contribution[symbol] += portfolio_value * contribution
+        portfolio_value *= 1 + portfolio_return
     warnings = []
     if sigma == 0:
         warnings.append("Zero portfolio volatility: risk contributions and diversification ratio are undefined")
@@ -85,6 +92,7 @@ def analyze_portfolio(prices, weights, *, periods_per_year=252,
         },
         "assets": {
             a: {"cumulative_return": asset_cumulative[a].iloc[-1],
+                "return_contribution": return_contribution[a],
                 "geometric_annualized_return": annualized_return(returns[a], periods_per_year),
                 "annualized_arithmetic_mean_return": annualized_arithmetic_mean(returns[a], periods_per_year),
                 "annualized_volatility": vol[a],
