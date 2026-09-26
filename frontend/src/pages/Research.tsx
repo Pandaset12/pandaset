@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
+import type { KeyboardEvent } from "react";
 import {
   ArrowUpRight,
   ArrowRight,
@@ -8,6 +9,8 @@ import {
   ChatBubbleLeftRight,
   ArrowTopRightOnSquare as ExternalLink,
   MagnifyingGlass as Search,
+  ArrowPath,
+  InformationCircle,
 } from "../components/icons";
 import { assets, researchNotes, assetBySymbol } from "../../../quant/data";
 import { signedPct } from "../../../quant/analytics";
@@ -36,7 +39,9 @@ export default function Research({
   onSummarizeSource: (symbol: string) => void;
   query: URLSearchParams;
 }) {
-  const symbol = query.get("symbol");
+  const symbol = query.get("symbol")?.trim().toUpperCase();
+  const unsupportedSymbol =
+    !!symbol && !assets.some((asset) => asset.symbol === symbol);
   const selected = assetBySymbol(symbol || "NVDA");
   const idx = assets.indexOf(selected);
   const [search, setSearch] = useState("");
@@ -45,16 +50,18 @@ export default function Research({
   const [tab, setTab] = useState<"overview" | "sources">("overview");
   const [noteId, setNoteId] = useState<string | null>(query.get("note"));
   const [history, setHistory] = useState<MarketHistoryResponse | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const requestId = useRef(createRequestGuard());
+  const sectionId = useId();
+  const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const note = researchNotes.find((item) => item.id === noteId);
   const results = assets.filter(
     (asset, index) =>
       (filter === "all" || weights[index] > 0) &&
       `${asset.symbol} ${asset.name}`
         .toLowerCase()
-        .includes(search.toLowerCase()),
+        .includes(search.trim().toLowerCase()),
   );
   const peer =
     compare && compare !== selected.symbol ? assetBySymbol(compare) : null;
@@ -82,26 +89,95 @@ export default function Research({
     }
   }
   useEffect(() => {
+    if (unsupportedSymbol) {
+      setLoading(false);
+      setHistory(null);
+      return;
+    }
     void loadHistory();
     return () => {
       requestId.current.invalidate();
     };
-  }, [selected.symbol, compare]);
+  }, [selected.symbol, compare, unsupportedSymbol]);
+
+  function navigateTabs(event: KeyboardEvent<HTMLButtonElement>) {
+    if (!["ArrowRight", "ArrowLeft", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    const next =
+      event.key === "Home"
+        ? 0
+        : event.key === "End"
+          ? 1
+          : tab === "overview"
+            ? 1
+            : 0;
+    setTab(next === 0 ? "overview" : "sources");
+    tabRefs.current[next]?.focus();
+  }
 
   const selectedRaw = history?.asset_index[selected.symbol];
-  const selectedPath = selectedRaw?.every(
-    (value): value is number => value !== null,
-  )
-    ? selectedRaw
-    : null;
+  const selectedPath =
+    selectedRaw &&
+    selectedRaw.length >= 2 &&
+    selectedRaw.length === history?.dates.length &&
+    selectedRaw.every(
+      (value): value is number =>
+        value !== null && Number.isFinite(value) && value > 0,
+    )
+      ? selectedRaw
+      : null;
   const peerRaw = peer ? history?.asset_index[peer.symbol] : undefined;
-  const peerPath = peerRaw?.every((value): value is number => value !== null)
-    ? peerRaw
-    : undefined;
+  const peerPath =
+    peerRaw &&
+    peerRaw.length >= 2 &&
+    peerRaw.length === history?.dates.length &&
+    peerRaw.every(
+      (value): value is number =>
+        value !== null && Number.isFinite(value) && value > 0,
+    )
+      ? peerRaw
+      : undefined;
   const sampleReturn = selectedPath?.length
-    ? selectedPath.at(-1)! - selectedPath[0]
+    ? selectedPath.at(-1)! / selectedPath[0] - 1
     : null;
-  const peerReturn = peerPath?.length ? peerPath.at(-1)! - peerPath[0] : null;
+  const peerReturn = peerPath?.length
+    ? peerPath.at(-1)! / peerPath[0] - 1
+    : null;
+  const issuerHost = new URL(selected.source).hostname.replace(/^www\./, "");
+  const sourceName =
+    history?.data_source === "twelve_data_adjusted_daily"
+      ? "Twelve Data · adjusted daily closes"
+      : history?.data_source === "synthetic_fixture"
+        ? "Fictional sample prices"
+        : history?.data_source.replaceAll("_", " ");
+  const freshnessLabel =
+    history?.freshness === "fresh"
+      ? "Up to date"
+      : history?.freshness === "stale"
+        ? "May be out of date"
+        : "Freshness not verified";
+
+  if (unsupportedSymbol) {
+    return (
+      <>
+        <PageHeading
+          title="Research library"
+          description="Explore a holding. Understand its place in your portfolio."
+        />
+        <Empty
+          title="This asset isn't in the research library"
+          action={
+            <a className="button subtle" href="#/research">
+              Browse supported assets
+            </a>
+          }
+        >
+          We don't have a research profile for {symbol} yet. The library
+          currently covers {assets.length} selected assets.
+        </Empty>
+      </>
+    );
+  }
 
   return (
     <>
@@ -110,7 +186,7 @@ export default function Research({
         description="Explore a holding. Understand its place in your portfolio."
       />
       <div className="research-workspace">
-        <aside className="research-index">
+        <aside className="research-index" aria-label="Research asset directory">
           <label className="search-field large">
             <Search size={18} />
             <input
@@ -126,7 +202,7 @@ export default function Research({
               aria-pressed={filter === "all"}
               onClick={() => setFilter("all")}
             >
-              All assets <span>08</span>
+              All assets <span>{assets.length}</span>
             </button>
             <button
               aria-pressed={filter === "owned"}
@@ -135,7 +211,11 @@ export default function Research({
               Your holdings
             </button>
           </div>
-          <div className="asset-index-list">
+          <p className="research-result-count" role="status" aria-live="polite">
+            {results.length} {results.length === 1 ? "asset" : "assets"}
+            {filter === "owned" ? " in your holdings" : " in the library"}
+          </p>
+          <nav className="asset-index-list" aria-label="Research assets">
             {results.map((asset) => (
               <a
                 className={`asset-index-item ${asset.symbol === selected.symbol ? "active" : ""}`}
@@ -153,30 +233,44 @@ export default function Research({
                 <ArrowUpRight size={16} />
               </a>
             ))}
-          </div>
+          </nav>
           {!results.length && (
-            <Empty title="Nothing here yet">
-              Try another ticker or view all assets.
-              <button
-                className="text-button"
-                onClick={() => {
-                  setSearch("");
-                  setFilter("all");
-                }}
-              >
-                Reset filters
-              </button>
+            <Empty
+              title={
+                search.trim()
+                  ? "No matching assets"
+                  : "No holdings in this library"
+              }
+              action={
+                <button
+                  className="text-button"
+                  onClick={() => {
+                    setSearch("");
+                    setFilter("all");
+                  }}
+                >
+                  Reset filters
+                </button>
+              }
+            >
+              {search.trim()
+                ? "Try a company name or ticker, or clear your filters."
+                : "Your portfolio may include assets outside this curated selection. Browse all assets to explore."}
             </Empty>
           )}
           <div className="library-note">
             <span className="eyebrow">A FOCUSED UNIVERSE</span>
-            <p>Eight assets. A clearer view of how they fit together.</p>
+            <p>Explore the businesses behind your holdings.</p>
             <span>
-              Price charts use backend history · currently demo fixture data
+              Curated issuer profiles and public disclosures. Each chart
+              identifies its price source.
             </span>
           </div>
         </aside>
-        <section className="company-detail">
+        <section
+          className="company-detail"
+          aria-label={`${selected.symbol} research`}
+        >
           <div className="company-header">
             <div className="company-identity">
               <AssetMark asset={selected} />
@@ -197,229 +291,331 @@ export default function Research({
           <div className="company-tabs">
             <div
               className="underlined-tabs"
-              role="group"
+              role="tablist"
               aria-label="Research sections"
             >
               <button
-                aria-pressed={tab === "overview"}
+                role="tab"
+                id={`${sectionId}-overview-tab`}
+                aria-controls={`${sectionId}-overview-panel`}
+                aria-selected={tab === "overview"}
+                tabIndex={tab === "overview" ? 0 : -1}
+                ref={(node) => {
+                  tabRefs.current[0] = node;
+                }}
+                onKeyDown={navigateTabs}
                 onClick={() => setTab("overview")}
               >
                 Overview
               </button>
               <button
-                aria-pressed={tab === "sources"}
+                role="tab"
+                id={`${sectionId}-sources-tab`}
+                aria-controls={`${sectionId}-sources-panel`}
+                aria-selected={tab === "sources"}
+                tabIndex={tab === "sources" ? 0 : -1}
+                ref={(node) => {
+                  tabRefs.current[1] = node;
+                }}
+                onKeyDown={navigateTabs}
                 onClick={() => setTab("sources")}
               >
                 Sources & filings
-                <ExternalLink size={12} />
               </button>
             </div>
-            <label className="compare-select">
-              <span className="sr-only">Compare against another asset</span>
-              <select
-                value={compare === selected.symbol ? "" : compare}
-                onChange={(event) => setCompare(event.target.value)}
-              >
-                <option value="">Compare with…</option>
-                {assets
-                  .filter((asset) => asset.symbol !== selected.symbol)
-                  .map((asset) => (
-                    <option key={asset.symbol} value={asset.symbol}>
-                      {asset.symbol}
-                    </option>
-                  ))}
-              </select>
-              <ChevronDown size={14} />
-            </label>
-          </div>
-          {tab === "overview" ? (
-            <>
-              <div className="company-chart-head">
-                <div>
-                  <span className="eyebrow">NORMALIZED PRICE HISTORY</span>
-                  <div className="company-price">
-                    {sampleReturn === null
-                      ? "Unavailable"
-                      : signedPct(sampleReturn)}
-                    <span> over available history</span>
-                  </div>
-                </div>
-                <span className="label-chip">
-                  {history?.observation_count ?? 0} return observations
-                </span>
-              </div>
-              {loading && (
-                <p role="status" className="api-state">
-                  Loading dated history…
-                </p>
-              )}
-              {error && (
-                <div className="api-state" role="alert">
-                  <p>{error}</p>
-                  <button
-                    className="button subtle"
-                    onClick={() => void loadHistory()}
-                    disabled={loading}
-                  >
-                    Retry history
-                  </button>
-                </div>
-              )}
-              {!loading && !error && selectedPath && history && (
-                <LineChart
-                  dates={history.dates}
-                  series={selectedPath}
-                  secondary={peerPath}
-                  label={selected.symbol}
-                  secondaryLabel={peer?.symbol}
-                  compact
-                />
-              )}
-              {!loading && !error && !selectedPath && (
-                <p role="status" className="api-state">
-                  Dated price history is unavailable. No local series was
-                  substituted.
-                </p>
-              )}
-              {history && (
-                <div
-                  className="backend-analysis"
-                  aria-label="Price history provenance"
+            {tab === "overview" && (
+              <label className="compare-select">
+                <span className="sr-only">Compare against another asset</span>
+                <select
+                  value={compare === selected.symbol ? "" : compare}
+                  onChange={(event) => setCompare(event.target.value)}
                 >
-                  <strong>
-                    {history.data_mode === "demo" ? "DEMO DATA" : "LIVE DATA"}
-                  </strong>
+                  <option value="">Compare with…</option>
+                  {assets
+                    .filter((asset) => asset.symbol !== selected.symbol)
+                    .map((asset) => (
+                      <option key={asset.symbol} value={asset.symbol}>
+                        {asset.symbol}
+                      </option>
+                    ))}
+                </select>
+                <ChevronDown size={14} />
+              </label>
+            )}
+          </div>
+          <div
+            role="tabpanel"
+            id={`${sectionId}-overview-panel`}
+            aria-labelledby={`${sectionId}-overview-tab`}
+            hidden={tab !== "overview"}
+            tabIndex={0}
+          >
+            <div className="company-chart-head">
+              <div>
+                <span className="eyebrow">NORMALIZED PRICE HISTORY</span>
+                <div className="company-price">
+                  {loading
+                    ? "—"
+                    : sampleReturn === null
+                      ? "—"
+                      : signedPct(sampleReturn)}
                   <span>
-                    {history.data_source} · {history.freshness} ·{" "}
+                    {loading
+                      ? "Loading price history"
+                      : sampleReturn === null
+                        ? "Return not available"
+                        : "over available history"}
+                  </span>
+                </div>
+              </div>
+              {history && !loading && selectedPath && (
+                <span className="label-chip">
+                  {history.observation_count} daily returns
+                </span>
+              )}
+            </div>
+            {loading && (
+              <div
+                role="status"
+                className="research-chart-state"
+                aria-live="polite"
+              >
+                <ArrowPath size={22} className="spin" aria-hidden="true" />
+                <strong>
+                  Loading {selected.symbol}
+                  {peer ? ` and ${peer.symbol}` : ""} history
+                </strong>
+                <p>Fetching dated prices for this chart.</p>
+                <div className="research-skeleton" aria-hidden="true">
+                  <i />
+                  <i />
+                  <i />
+                </div>
+              </div>
+            )}
+            {error && (
+              <div className="research-chart-state is-error" role="alert">
+                <InformationCircle size={22} aria-hidden="true" />
+                <strong>Price history couldn't be loaded</strong>
+                <p>{error}</p>
+                <p className="small-text muted">
+                  You can still read the company profile and official sources.
+                </p>
+                <button
+                  className="button subtle"
+                  onClick={() => void loadHistory()}
+                  disabled={loading}
+                >
+                  <ArrowPath size={15} aria-hidden="true" /> Retry history
+                </button>
+              </div>
+            )}
+            {!loading && !error && selectedPath && history && (
+              <LineChart
+                dates={history.dates}
+                series={selectedPath}
+                secondary={peerPath}
+                label={selected.symbol}
+                secondaryLabel={peer?.symbol}
+                compact
+              />
+            )}
+            {!loading && !error && !selectedPath && (
+              <div role="status" className="research-chart-state">
+                <BookOpen size={22} aria-hidden="true" />
+                <strong>No usable price history yet</strong>
+                <p>
+                  A chart needs at least two dated prices. Official issuer
+                  sources are still available in Sources &amp; filings.
+                </p>
+                <button
+                  className="button subtle"
+                  onClick={() => void loadHistory()}
+                >
+                  Retry history
+                </button>
+              </div>
+            )}
+            {history && (
+              <div
+                className="research-provenance"
+                aria-label="Price history provenance"
+              >
+                <strong>
+                  {history.data_mode === "demo"
+                    ? "SAMPLE DATA"
+                    : "MARKET DATA · DAILY"}
+                </strong>
+                <span>
+                  {sourceName} · {freshnessLabel}
+                </span>
+                {history.dates.length > 0 && (
+                  <span>
                     {history.dates[0]} to {history.dates.at(-1)}
                   </span>
-                  {history.warnings.map((warning) => (
-                    <small key={warning}>{warning}</small>
-                  ))}
-                </div>
-              )}
-              {peer && (
-                <div className="comparison-table-wrap">
-                  <div className="comparison-title">
-                    <strong>
-                      {selected.symbol} vs. {peer.symbol}
-                    </strong>
-                    <button
-                      className="icon-button"
-                      onClick={() => setCompare("")}
-                      aria-label="Remove comparison"
-                    >
-                      <X size={16} />
-                    </button>
-                  </div>
-                  <table className="comparison-table">
-                    <thead>
-                      <tr>
-                        <th>Available-history return · backend</th>
-                        <th>{selected.symbol}</th>
-                        <th>{peer.symbol}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr>
-                        <th>Return</th>
-                        <td>
-                          {sampleReturn === null
-                            ? "Unavailable"
-                            : signedPct(sampleReturn)}
-                        </td>
-                        <td>
-                          {peerReturn === null
-                            ? "Unavailable"
-                            : signedPct(peerReturn)}
-                        </td>
-                      </tr>
-                      <tr>
-                        <th>Portfolio allocation</th>
-                        <td>{weights[idx]}%</td>
-                        <td>{weights[assets.indexOf(peer)]}%</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              )}
-              <div className="company-thesis">
-                <div>
-                  <span className="eyebrow">EDITORIAL CONTEXT</span>
-                  <h3>What to understand</h3>
-                  <p>{selected.thesis}</p>
-                </div>
-                <div>
-                  <span className="eyebrow">EDITORIAL CONTEXT</span>
-                  <h3>What to watch</h3>
-                  <p>{selected.watch}</p>
-                </div>
+                )}
+                {history.warnings.map((warning) => (
+                  <small key={warning}>{warning}</small>
+                ))}
               </div>
-              <div className="company-action">
-                <button
-                  className="text-button"
-                  onClick={() =>
-                    onAsk(`How does ${selected.symbol} affect my portfolio?`)
-                  }
-                >
-                  <ChatBubbleLeftRight size={16} />
-                  Explain its portfolio impact
-                </button>
-                <a
-                  className="button dark"
-                  href={`#/what-if?asset=${selected.symbol}`}
-                >
-                  Test an allocation
-                  <ArrowUpRight size={15} />
-                </a>
+            )}
+            {peer && (
+              <div className="comparison-table-wrap">
+                <div className="comparison-title">
+                  <strong>
+                    {selected.symbol} vs. {peer.symbol}
+                  </strong>
+                  <button
+                    className="icon-button"
+                    onClick={() => setCompare("")}
+                    aria-label="Remove comparison"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+                <table className="comparison-table">
+                  <thead>
+                    <tr>
+                      <th scope="col">Over the same history</th>
+                      <th scope="col">{selected.symbol}</th>
+                      <th scope="col">{peer.symbol}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <th scope="row">Return</th>
+                      <td>
+                        {sampleReturn === null
+                          ? "Unavailable"
+                          : signedPct(sampleReturn)}
+                      </td>
+                      <td>
+                        {peerReturn === null
+                          ? "Unavailable"
+                          : signedPct(peerReturn)}
+                      </td>
+                    </tr>
+                    <tr>
+                      <th scope="row">Portfolio allocation</th>
+                      <td>{weights[idx]}%</td>
+                      <td>{weights[assets.indexOf(peer)]}%</td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
-            </>
-          ) : (
-            <div className="sources-view">
-              <BookOpen size={26} />
-              <h3>Start with the source.</h3>
-              <p>
-                Use company filings and fund disclosures to check financial
-                results, business risks, and portfolio composition.
-              </p>
+            )}
+            <div className="company-thesis">
+              <div>
+                <span className="eyebrow">EDITORIAL CONTEXT</span>
+                <h3>What to understand</h3>
+                <p>{selected.thesis}</p>
+              </div>
+              <div>
+                <span className="eyebrow">EDITORIAL CONTEXT</span>
+                <h3>What to watch</h3>
+                <p>{selected.watch}</p>
+              </div>
+            </div>
+            <div className="company-action">
+              <button
+                className="text-button"
+                onClick={() =>
+                  onAsk(`How does ${selected.symbol} affect my portfolio?`)
+                }
+              >
+                <ChatBubbleLeftRight size={16} />
+                Explain its portfolio impact
+              </button>
+              <a
+                className="button dark"
+                href={`#/what-if?asset=${selected.symbol}`}
+              >
+                Test an allocation
+                <ArrowUpRight size={15} />
+              </a>
+            </div>
+          </div>
+          <div
+            className="sources-view"
+            role="tabpanel"
+            id={`${sectionId}-sources-panel`}
+            aria-labelledby={`${sectionId}-sources-tab`}
+            hidden={tab !== "sources"}
+            tabIndex={0}
+          >
+            <BookOpen size={26} aria-hidden="true" />
+            <h3>Start with the source.</h3>
+            <p>
+              Use company filings and fund disclosures to check financial
+              results, business risks, and portfolio composition.
+            </p>
+            <article className="research-source-block">
+              <div className="research-source-kind">
+                <span>01</span> OFFICIAL ISSUER SOURCE
+              </div>
               <a
                 href={selected.source}
                 target="_blank"
-                rel="noreferrer"
+                rel="noopener noreferrer"
                 className="source-card"
               >
                 <div>
-                  <strong>{selected.short} · Investor information</strong>
-                  <span>Official issuer website</span>
+                  <strong>{selected.short} · Selected issuer page</strong>
+                  <span className="source-domain">{issuerHost}</span>
+                  <span>
+                    Issuer-published information and disclosures. Review the
+                    date on the original page.
+                  </span>
+                  <span className="source-open">
+                    Open source{" "}
+                    <span className="sr-only">(opens in a new tab)</span>
+                  </span>
                 </div>
-                <ArrowUpRight size={20} />
+                <ExternalLink size={20} aria-hidden="true" />
               </a>
               <button
                 className="button dark source-summary-button"
                 onClick={() => onSummarizeSource(selected.symbol)}
               >
-                Summarize this issuer source
+                Summarize issuer source
                 <ArrowUpRight size={15} />
               </button>
+              <p className="source-summary-note">
+                AI summarizes this selected page. Open the original to check the
+                full context.
+              </p>
+            </article>
+            <article className="research-source-block">
+              <div className="research-source-kind">
+                <span>02</span> PUBLIC FILING DATABASE
+              </div>
               <a
                 href={`https://www.sec.gov/edgar/search/#/q=${encodeURIComponent(selected.name)}`}
                 target="_blank"
-                rel="noreferrer"
+                rel="noopener noreferrer"
                 className="source-card"
               >
                 <div>
                   <strong>SEC EDGAR filings</strong>
-                  <span>Search public disclosures</span>
+                  <span className="source-domain">sec.gov</span>
+                  <span>
+                    Search public disclosures for {selected.name}. This search
+                    is not part of the AI summary.
+                  </span>
+                  <span className="source-open">
+                    Search filings{" "}
+                    <span className="sr-only">(opens in a new tab)</span>
+                  </span>
                 </div>
-                <ArrowUpRight size={20} />
+                <ExternalLink size={20} aria-hidden="true" />
               </a>
-              <p className="small-text muted">
-                AI summaries are available for the selected official issuer
-                source when Gemini is configured. The SEC search link opens
-                separately and is not included in the summary.
-              </p>
-            </div>
-          )}
+            </article>
+            <p className="small-text muted">
+              These are curated research starting points, not a live news feed.
+              Source links open in a new tab. AI summaries may be unavailable
+              while the original sources remain accessible.
+            </p>
+          </div>
         </section>
       </div>
       <section className="research-reading">
