@@ -1,12 +1,12 @@
-# PortfolioLens — High-Level Design
+# PandaSet — High-Level Design
 
 **Status:** MVP design for ShellHacks 2026  
-**Audience:** PortfolioLens team — shared implementation context  
+**Audience:** PandaSet team — shared implementation context
 **Last updated:** September 26, 2026
 
 ## 1. What We Are Building
 
-PortfolioLens is a lightweight investment portfolio analysis terminal. It brings portfolio holdings, market data, quantitative risk metrics, and an AI explanation layer into one dashboard.
+PandaSet is a lightweight investment portfolio analysis terminal. It brings portfolio holdings, market data, quantitative risk metrics, and an AI explanation layer into one dashboard.
 
 The user should be able to answer:
 
@@ -292,7 +292,7 @@ Owns the API layer that connects the frontend, data layer, quant engine, and Gem
 
 ### Frontend — Meirzhan
 
-Owns the user-facing PortfolioLens dashboard and the demo experience.
+Owns the user-facing PandaSet dashboard and the demo experience.
 
 **Deliverables:**
 
