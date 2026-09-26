@@ -6,7 +6,7 @@ MongoDB infrastructure and financial formulas belong to the data/quant teammates
 See [the shared HLD](../PortfolioLens-HLD.md) and [integration design](INTEGRATION.md).
 
 The default provider connects the quant engine to fictional sample prices for an
-offline demo. Real market-data access remains unconnected. Gemini is optional and needs a team API key.
+offline demo. Real market data is optional and uses adjusted daily end-of-day prices from Twelve Data, not intraday quotes; see [setup guide](docs/TWELVE_DATA.md). Gemini is optional and needs a team API key.
 
 ## Run locally
 
@@ -74,7 +74,7 @@ is a sample session-date label, not a live quote or exchange closing timestamp.
 | POST | `/api/v1/portfolios/{id}/analysis` | Validate provider output and save a snapshot |
 | GET | `/api/v1/portfolios/{id}/analyses/{analysis_id}` | Read that snapshot |
 | POST | `/api/v1/portfolios/{id}/ask` | Explain exactly the selected saved snapshot |
-| POST | `/api/v1/portfolios/{id}/what-if` | Compare saved and proposed holdings on common sample prices |
+| POST | `/api/v1/portfolios/{id}/what-if` | Compare saved and proposed holdings on the selected market-data history |
 
 Holdings use `{"symbol":"NVDA","weight":0.3}`. Weights are finite long-only
 decimals and must sum to 1 (tolerance 1e-10). Duplicate symbols are rejected
