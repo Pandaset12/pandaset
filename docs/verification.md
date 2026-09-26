@@ -23,4 +23,9 @@ These checks are targeted functional and visual verification, not a complete ass
 
 ## Integration limits
 
-Market observations and research metrics are illustrative. The analyst is a curated, calculation-aware demo, with no connected language-model service. No brokerage, market-data, or news API is connected. Portfolio edits last for the current browser session and reset on reload. Scenario results model historical sample returns with constant daily weights; they are not forecasts or executed trades.
+Market observations and research metrics are illustrative. In default demo mode,
+AI workflows return labeled offline responses without calling Gemini. Gemini
+mode is optional and does not connect brokerage, live market-data, or news
+services. Portfolio edits last for the current browser session and reset on
+reload. Scenario results model historical sample returns with constant daily
+weights; they are not forecasts or executed trades.

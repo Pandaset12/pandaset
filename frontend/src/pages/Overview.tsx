@@ -24,11 +24,13 @@ export default function Overview({
   analysis,
   onEdit,
   onAsk,
+  onBrief,
   onMethod,
 }: {
   analysis: AnalysisResponse;
   onEdit: () => void;
   onAsk: (q?: string) => void;
+  onBrief: () => void;
   onMethod: () => void;
 }) {
   const [view, setView] = useState<"holdings" | "drivers">("holdings");
@@ -96,6 +98,10 @@ export default function Overview({
           Explore a what-if
           <ArrowUpRight size={17} />
         </a>
+        <button className="button subtle" onClick={onBrief}>
+          <ChatBubbleLeftRight size={16} />
+          Brief this portfolio
+        </button>
       </PageHeading>
       <section className="backend-analysis" aria-label="Saved backend analysis">
         <div>

@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     analyst_mode: Literal["demo", "gemini"] = "demo"
     gemini_api_key: SecretStr | None = None
     gemini_model: str = "gemini-3.8-flash"
+    gemini_fallback_model: str = "gemini-3.5-flash-lite"
     cors_origins: str = "http://localhost:3000,http://localhost:5173"
     storage_path: Path = Path(__file__).parent / "data" / "portfoliolens.sqlite3"
     gemini_timeout_seconds: float = Field(default=45, gt=0, le=120)

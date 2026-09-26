@@ -19,6 +19,12 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 import { EditPortfolio } from "./components/EditPortfolio";
 import { MethodologyModal } from "./components/MethodologyModal";
 import { Analyst } from "./components/Analyst";
+import { AuthScreen } from "./components/AuthScreen";
+import { AuthBoundary } from "./components/AuthBoundary";
+import {
+  AIWorkflowModal,
+  type AIWorkflowAction,
+} from "./components/AIWorkflowModal";
 import Overview from "./pages/Overview";
 import Risk from "./pages/Risk";
 import Research from "./pages/Research";
@@ -32,12 +38,13 @@ function weightsFromAnalysis(analysis: AnalysisResponse) {
   );
 }
 
-function Application() {
+function Application({ onSignOut }: { onSignOut: () => Promise<void> }) {
   const [hash, setHash] = useState(location.hash || "#/");
   const [weights, setWeights] = useState([...initialWeights]);
   const [edit, setEdit] = useState(false);
   const [method, setMethod] = useState(false);
   const [analyst, setAnalyst] = useState<string | null>(null);
+  const [aiWorkflow, setAiWorkflow] = useState<AIWorkflowAction | null>(null);
   const [toast, setToast] = useState("");
   const [active, setActive] = useState<ActiveAnalysis | null>(null);
   const [analysisLoading, setAnalysisLoading] = useState(true);
@@ -163,6 +170,12 @@ function Application() {
             <span>Ask Panda</span>
             <span className="key-hint">↗</span>
           </button>
+          <button
+            className="text-button sign-out-button"
+            onClick={() => void onSignOut()}
+          >
+            Sign out
+          </button>
         </div>
       </header>
       <div className="workspace-bar">
@@ -215,12 +228,19 @@ function Application() {
                 analysis={active.analysis}
                 onEdit={() => setEdit(true)}
                 onAsk={(q) => setAnalyst(q || "")}
+                onBrief={() => setAiWorkflow({ workflow: "analysis_briefing" })}
                 onMethod={() => setMethod(true)}
               />
             ) : route === "/risk" ? (
               <Risk
                 analysis={active.analysis}
-                onAsk={(q) => setAnalyst(q || "")}
+                onExplain={() =>
+                  setAiWorkflow({
+                    workflow: "risk_explanation",
+                    question:
+                      "Explain the main risk contributions and concentrations in this saved analysis.",
+                  })
+                }
                 onMethod={() => setMethod(true)}
               />
             ) : route === "/research" ? (
@@ -228,6 +248,9 @@ function Application() {
                 key={hash}
                 weights={weights}
                 onAsk={(q) => setAnalyst(q || "")}
+                onSummarizeSource={(symbol) =>
+                  setAiWorkflow({ workflow: "research_summary", symbol })
+                }
                 query={query}
               />
             ) : (
@@ -236,7 +259,12 @@ function Application() {
                 analysis={active.analysis}
                 weights={weights}
                 onApply={(w) => apply(w, "scenario")}
-                onAsk={(q) => setAnalyst(q || "")}
+                onExplainScenario={(proposedWeights) =>
+                  setAiWorkflow({
+                    workflow: "scenario_explanation",
+                    proposedWeights,
+                  })
+                }
                 query={query}
               />
             )}
@@ -287,6 +315,14 @@ function Application() {
           onClose={() => setAnalyst(null)}
         />
       )}
+      {aiWorkflow && active && (
+        <AIWorkflowModal
+          action={aiWorkflow}
+          portfolioId={active.portfolio.portfolio_id}
+          analysisId={active.analysis.analysis_id}
+          onClose={() => setAiWorkflow(null)}
+        />
+      )}
       {toast && (
         <div className="toast" role="status">
           <Check size={18} />
@@ -307,7 +343,10 @@ function Application() {
 export default function App() {
   return (
     <ErrorBoundary>
-      <Application />
+      <AuthBoundary
+        renderDashboard={(signOut) => <Application onSignOut={signOut} />}
+        renderSignedOut={(client) => <AuthScreen client={client} />}
+      />
     </ErrorBoundary>
   );
 }
