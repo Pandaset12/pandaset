@@ -24,6 +24,12 @@ npm run dev
 
 Open the local URL printed by Vite. Run all commands from the repository root.
 
+### Phase 1 investor sign-in
+
+Copy the root `.env.example` to root `.env.local` and set `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` from your Supabase project. Enable email/password authentication in Supabase and configure its site URL and confirmation redirect URL for your local or deployed frontend. A publishable key (or legacy anon key) is intended for the browser; never place a service-role or secret key in a `VITE_` variable. Start the existing backend separately as described in its guide.
+
+This phase adds frontend authentication only. Sessions persist through the Supabase browser client. Portfolio changes still live only in browser state, and the backend API does not verify Supabase tokens or enforce per-user portfolio ownership. Backend authorization and investor-owned portfolio storage are future work. The dashboard and backend still use illustrative data and modeled results.
+
 | Command           | Purpose                                                       |
 | ----------------- | ------------------------------------------------------------- |
 | `npm test`        | Run the quant and frontend API contract tests.                |

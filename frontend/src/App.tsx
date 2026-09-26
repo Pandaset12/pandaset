@@ -19,6 +19,8 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 import { EditPortfolio } from "./components/EditPortfolio";
 import { MethodologyModal } from "./components/MethodologyModal";
 import { Analyst } from "./components/Analyst";
+import { AuthScreen } from "./components/AuthScreen";
+import { AuthBoundary } from "./components/AuthBoundary";
 import {
   AIWorkflowModal,
   type AIWorkflowAction,
@@ -36,7 +38,7 @@ function weightsFromAnalysis(analysis: AnalysisResponse) {
   );
 }
 
-function Application() {
+function Application({ onSignOut }: { onSignOut: () => Promise<void> }) {
   const [hash, setHash] = useState(location.hash || "#/");
   const [weights, setWeights] = useState([...initialWeights]);
   const [edit, setEdit] = useState(false);
@@ -167,6 +169,12 @@ function Application() {
             <ChatBubbleLeftRight size={17} />
             <span>Ask Panda</span>
             <span className="key-hint">↗</span>
+          </button>
+          <button
+            className="text-button sign-out-button"
+            onClick={() => void onSignOut()}
+          >
+            Sign out
           </button>
         </div>
       </header>
@@ -335,7 +343,10 @@ function Application() {
 export default function App() {
   return (
     <ErrorBoundary>
-      <Application />
+      <AuthBoundary
+        renderDashboard={(signOut) => <Application onSignOut={signOut} />}
+        renderSignedOut={(client) => <AuthScreen client={client} />}
+      />
     </ErrorBoundary>
   );
 }
