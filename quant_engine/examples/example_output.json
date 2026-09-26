@@ -1,0 +1,130 @@
+{
+  "metadata": {
+    "assets": [
+      "A",
+      "B"
+    ],
+    "start_date": "2026-01-01T00:00:00",
+    "end_date": "2026-01-03T00:00:00",
+    "return_observations": 2,
+    "periods_per_year": 2,
+    "annual_risk_free_rate": 0.0,
+    "annual_target_return": 0.0,
+    "units": "decimal fractions; risk percentages are fractions of total volatility",
+    "assumptions": [
+      "long-only, fully invested",
+      "constant weights, rebalanced each observation",
+      "no transaction costs or taxes",
+      "caller-supplied adjusted prices and common calendar",
+      "sample covariance (ddof=1); annual scaling assumes negligible serial correlation"
+    ]
+  },
+  "weights": {
+    "A": 0.5,
+    "B": 0.5
+  },
+  "series": {
+    "dates": [
+      "2026-01-02T00:00:00",
+      "2026-01-03T00:00:00"
+    ],
+    "asset_returns": {
+      "A": [
+        0.10000000000000009,
+        -0.09999999999999998
+      ],
+      "B": [
+        0.0,
+        0.10000000000000009
+      ]
+    },
+    "portfolio_returns": [
+      0.050000000000000044,
+      5.551115123125783e-17
+    ],
+    "asset_cumulative_returns": {
+      "A": [
+        0.10000000000000009,
+        -0.009999999999999898
+      ],
+      "B": [
+        0.0,
+        0.10000000000000009
+      ]
+    },
+    "portfolio_cumulative_returns": [
+      0.050000000000000044,
+      0.050000000000000044
+    ]
+  },
+  "assets": {
+    "A": {
+      "cumulative_return": -0.009999999999999898,
+      "geometric_annualized_return": -0.009999999999999907,
+      "annualized_arithmetic_mean_return": 1.1102230246251565e-16,
+      "annualized_volatility": 0.20000000000000007,
+      "marginal_risk_contribution": 0.2000000000000001,
+      "component_risk_contribution": 0.10000000000000005,
+      "percentage_risk_contribution": 2.0000000000000013
+    },
+    "B": {
+      "cumulative_return": 0.10000000000000009,
+      "geometric_annualized_return": 0.10000000000000009,
+      "annualized_arithmetic_mean_return": 0.10000000000000009,
+      "annualized_volatility": 0.10000000000000009,
+      "marginal_risk_contribution": -0.10000000000000009,
+      "component_risk_contribution": -0.050000000000000044,
+      "percentage_risk_contribution": -1.000000000000001
+    }
+  },
+  "matrices": {
+    "sample_covariance": {
+      "A": {
+        "A": 0.020000000000000014,
+        "B": -0.010000000000000012
+      },
+      "B": {
+        "A": -0.010000000000000012,
+        "B": 0.005000000000000009
+      }
+    },
+    "annualized_covariance": {
+      "A": {
+        "A": 0.04000000000000003,
+        "B": -0.020000000000000025
+      },
+      "B": {
+        "A": -0.020000000000000025,
+        "B": 0.010000000000000018
+      }
+    },
+    "correlation": {
+      "A": {
+        "A": 1.0,
+        "B": -0.9999999999999998
+      },
+      "B": {
+        "A": -0.9999999999999998,
+        "B": 0.9999999999999998
+      }
+    }
+  },
+  "portfolio": {
+    "cumulative_return": 0.050000000000000044,
+    "geometric_annualized_return": 0.05000000000000009,
+    "annualized_arithmetic_mean_return": 0.0500000000000001,
+    "annualized_volatility": 0.04999999999999999,
+    "sharpe_ratio": 1.0000000000000024,
+    "sortino_ratio": null,
+    "maximum_drawdown": -0.0,
+    "hhi": 0.5,
+    "effective_number_of_holdings": 2.0,
+    "largest_position_weight": 0.5,
+    "top_k": 1,
+    "top_k_position_weight": 0.5,
+    "diversification_ratio": 3.000000000000002
+  },
+  "warnings": [
+    "Sortino ratio undefined: zero downside deviation"
+  ]
+}
