@@ -1,5 +1,10 @@
 import { useState } from "react";
-import { ArrowUpRight, Info, Layers, Sparkles } from "lucide-react";
+import {
+  ArrowUpRight,
+  ChatBubbleLeftRight,
+  InformationCircle as Info,
+  RectangleStack as Layers,
+} from "../components/icons";
 import { assets } from "../data";
 import { analyze, correlationMatrix, pct } from "../analytics";
 import {
@@ -55,7 +60,7 @@ export default function Risk({
           className="button dark"
           onClick={() => onAsk("Explain my risk concentration")}
         >
-          <Sparkles size={16} />
+          <ChatBubbleLeftRight size={16} />
           Explain my risk
         </button>
       </PageHeading>

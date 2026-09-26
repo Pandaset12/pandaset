@@ -1,15 +1,58 @@
 import { useEffect, useRef } from "react";
 import type { ReactNode } from "react";
-import { ArrowUpRight, X, ArrowRight } from "lucide-react";
+import { ArrowRight, ArrowUpRight, XMark } from "./icons";
 import type { Asset } from "../data";
+
+export function PandaMark({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 40 40"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <circle className="panda-dark" cx="9" cy="9" r="6" />
+      <circle className="panda-dark" cx="31" cy="9" r="6" />
+      <path
+        className="panda-face"
+        d="M20 5.5c-8.7 0-14.5 6.4-14.5 15.1 0 8.1 6.4 14.2 14.5 14.2s14.5-6.1 14.5-14.2C34.5 11.9 28.7 5.5 20 5.5Z"
+      />
+      <ellipse
+        className="panda-dark"
+        cx="13.7"
+        cy="19.5"
+        rx="3.2"
+        ry="4.8"
+        transform="rotate(25 13.7 19.5)"
+      />
+      <ellipse
+        className="panda-dark"
+        cx="26.3"
+        cy="19.5"
+        rx="3.2"
+        ry="4.8"
+        transform="rotate(-25 26.3 19.5)"
+      />
+      <circle className="panda-eye" cx="14" cy="19.5" r="1.25" />
+      <circle className="panda-eye" cx="26" cy="19.5" r="1.25" />
+      <path
+        className="panda-dark"
+        d="M17.5 25c0-1.5 5-1.5 5 0s-1.1 2-2.5 2-2.5-.5-2.5-2Z"
+      />
+      <path
+        className="panda-mouth"
+        d="M20 27v1.5m0 0c-1.2 1.2-2.5 1.2-3.5 0m3.5 0c1.2 1.2 2.5 1.2 3.5 0"
+      />
+    </svg>
+  );
+}
+
 export function Brand() {
   return (
-    <a href="#/" className="brand" aria-label="PortfolioLens home">
-      <svg viewBox="0 0 32 32" aria-hidden="true">
-        <path d="M5 26V7h10a7 7 0 0 1 0 14h-4M20 5v22h8" />
-      </svg>
+    <a href="#/" className="brand" aria-label="PandaSet home">
+      <PandaMark className="panda-mark" />
       <span>
-        Portfolio<span className="brand-light">Lens</span>
+        Panda<span className="brand-light">Set</span>
       </span>
     </a>
   );
@@ -153,7 +196,7 @@ export function Modal({
             aria-label="Close dialog"
             onClick={onClose}
           >
-            <X size={20} />
+            <XMark size={20} />
           </button>
         </div>
         {children}

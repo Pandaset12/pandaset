@@ -1,4 +1,4 @@
-# PortfolioLens
+# PandaSet
 
 A responsive investment research interface built with React, TypeScript, and Vite. Four connected workspaces share a portfolio model and a forest-green visual system:
 

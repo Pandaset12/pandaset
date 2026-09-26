@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { Sparkles, ArrowUp, ArrowUpRight, LoaderCircle } from "lucide-react";
-import { Modal } from "./UI";
+import { ArrowPath, ArrowUp, ArrowUpRight, InformationCircle } from "./icons";
+import { Modal, PandaMark } from "./UI";
 import { assets } from "../data";
 import { analyze, pct } from "../analytics";
 export function Analyst({
@@ -79,14 +79,14 @@ export function Analyst({
   return (
     <Modal title="Your portfolio analyst" onClose={onClose}>
       <div className="analyst-mode">
-        <Sparkles size={15} />
+        <InformationCircle size={15} />
         <span>Guided demo · calculated from sample data</span>
       </div>
       <div className="analyst-messages" ref={scroll}>
         {messages.length === 0 && (
           <div className="analyst-welcome">
             <span className="analyst-orb">
-              <Sparkles size={28} />
+              <PandaMark className="analyst-panda-mark" />
             </span>
             <h3>Let’s connect the dots.</h3>
             <p>
@@ -114,7 +114,7 @@ export function Analyst({
         >
           {messages.map((m, i) => (
             <div key={i} className={`message ${m.role}`}>
-              <span>{m.role === "user" ? "YOU" : "PORTFOLIOLENS"}</span>
+              <span>{m.role === "user" ? "YOU" : "PANDASET"}</span>
               <p>{m.text}</p>
               {m.role === "assistant" && (
                 <a href="#/risk" onClick={onClose}>
@@ -127,7 +127,7 @@ export function Analyst({
         </div>
         {busy && (
           <div className="analyst-loading" role="status">
-            <LoaderCircle size={15} className="spin" />
+            <ArrowPath size={15} className="spin" />
             Reading your portfolio…
           </div>
         )}

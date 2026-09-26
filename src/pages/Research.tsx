@@ -1,14 +1,14 @@
 import { useState } from "react";
 import {
-  Search,
   ArrowUpRight,
   ArrowRight,
   BookOpen,
   ChevronDown,
-  X,
-  Sparkles,
-  ExternalLink,
-} from "lucide-react";
+  XMark as X,
+  ChatBubbleLeftRight,
+  ArrowTopRightOnSquare as ExternalLink,
+  MagnifyingGlass as Search,
+} from "../components/icons";
 import { assets, researchNotes, assetBySymbol } from "../data";
 import {
   assetPath,
@@ -293,7 +293,7 @@ export default function Research({
                     onAsk(`How does ${selected.symbol} affect my portfolio?`)
                   }
                 >
-                  <Sparkles size={16} />
+                  <ChatBubbleLeftRight size={16} />
                   Explain its portfolio impact
                 </button>
                 <a
@@ -338,9 +338,9 @@ export default function Research({
                 <ArrowUpRight size={20} />
               </a>
               <p className="small-text muted">
-                PortfolioLens prices and charts are illustrative fixtures. The
-                links above take you to external sources; their live content is
-                not ingested into this demo.
+                PandaSet prices and charts are illustrative fixtures. The links
+                above take you to external sources; their live content is not
+                ingested into this demo.
               </p>
             </div>
           )}

@@ -1,14 +1,14 @@
 import { useEffect, useState, Component } from "react";
 import type { ReactNode, ErrorInfo } from "react";
 import {
+  ArrowPath as RotateCcw,
   ArrowUpRight,
+  ChatBubbleLeftRight,
   Check,
   ChevronDown,
-  Info,
-  RotateCcw,
-  Sparkles,
-  X,
-} from "lucide-react";
+  InformationCircle as Info,
+  XMark as X,
+} from "./components/icons";
 import { assets, initialWeights, asOf } from "./data";
 import { validateWeights } from "./analytics";
 import { Brand, Modal, AssetMark } from "./components/UI";
@@ -26,7 +26,7 @@ class ErrorBoundary extends Component<
     return { error: true };
   }
   componentDidCatch(error: Error, info: ErrorInfo) {
-    console.error("PortfolioLens rendering error", error, info.componentStack);
+    console.error("PandaSet rendering error", error, info.componentStack);
   }
   render() {
     return this.state.error ? (
@@ -34,7 +34,7 @@ class ErrorBoundary extends Component<
         <h1>Something didn’t load.</h1>
         <p>Your sample portfolio can be restored by reloading the page.</p>
         <button className="button dark" onClick={() => location.reload()}>
-          Reload PortfolioLens
+          Reload PandaSet
           <RotateCcw size={16} />
         </button>
       </main>
@@ -145,7 +145,7 @@ function Application() {
     : "/";
   const query = new URLSearchParams(search);
   useEffect(() => {
-    document.title = `${route === "/" ? "Overview" : route === "/risk" ? "Risk & exposure" : route === "/research" ? "Research" : "Scenario lab"} — PortfolioLens`;
+    document.title = `${route === "/" ? "Overview" : route === "/risk" ? "Risk & exposure" : route === "/research" ? "Research" : "Scenario lab"} — PandaSet`;
   }, [route]);
   function apply(w: number[], source: "edit" | "scenario" = "edit") {
     if (!validateWeights(w)) return;
@@ -191,8 +191,8 @@ function Application() {
             ))}
           </nav>
           <button className="analyst-button" onClick={() => setAnalyst("")}>
-            <Sparkles size={17} />
-            <span>Ask Lens</span>
+            <ChatBubbleLeftRight size={17} />
+            <span>Ask Panda</span>
             <span className="key-hint">↗</span>
           </button>
         </div>
@@ -251,8 +251,8 @@ function Application() {
       </main>
       <footer className="site-footer">
         <span>
-          PortfolioLens<span className="footer-slash">/</span>A clearer view of
-          what you own.
+          PandaSet<span className="footer-slash">/</span>A clearer view of what
+          you own.
         </span>
         <button className="text-button" onClick={() => setMethod(true)}>
           Sample data & methodology
@@ -274,8 +274,8 @@ function Application() {
           <div className="method-intro">
             <Info size={20} />
             <p>
-              PortfolioLens is an interactive interface demo. Prices, returns,
-              and portfolio values are illustrative, not live market data.
+              PandaSet is an interactive interface demo. Prices, returns, and
+              portfolio values are illustrative, not live market data.
             </p>
           </div>
           <dl className="method-list">

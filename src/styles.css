@@ -315,12 +315,31 @@ svg {
   font-weight: 700;
   white-space: nowrap;
 }
-.brand svg {
+.brand > .panda-mark {
   width: 29px;
   height: 32px;
+  display: block;
+  flex: none;
+}
+.panda-face {
+  fill: var(--ink);
+}
+.panda-dark {
+  fill: var(--panel-deep);
+}
+.panda-eye {
+  fill: var(--brass);
+}
+.panda-mouth {
   fill: none;
-  stroke: var(--brass);
-  stroke-width: 2.5;
+  stroke: var(--panel-deep);
+  stroke-width: 1.1;
+  stroke-linecap: round;
+}
+.analyst-panda-mark {
+  width: 38px;
+  height: 38px;
+  display: block;
 }
 .brand-light {
   font-weight: 400;
@@ -3634,8 +3653,9 @@ svg {
   .brand {
     font-size: 1.1875rem;
   }
-  .brand svg {
-    width: 25px;
+  .brand > .panda-mark {
+    width: 27px;
+    height: 29px;
   }
   .page-heading h1 {
     font-size: 2.125rem;

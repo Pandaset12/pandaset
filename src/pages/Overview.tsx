@@ -3,13 +3,14 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   ArrowRight,
-  SlidersHorizontal,
-  Sparkles,
+  AdjustmentsHorizontal as SlidersHorizontal,
+  ChatBubbleLeftRight,
+  Eye,
   Plus,
-  Search,
+  MagnifyingGlass as Search,
   ChevronDown,
-  Info,
-} from "lucide-react";
+  InformationCircle as Info,
+} from "../components/icons";
 import { assets, portfolioValue, researchNotes } from "../data";
 import { analyze, assetPath, money, pct, signedPct } from "../analytics";
 import {
@@ -157,7 +158,7 @@ export default function Overview({
         </section>
         <aside className="focus-panel">
           <div className="focus-label">
-            <Sparkles size={16} />
+            <Eye size={16} />
             <span>IN FOCUS</span>
             <span className="edition">01 / RISK</span>
           </div>
@@ -466,7 +467,7 @@ export default function Overview({
               </a>
             ))}
           <div className="analyst-callout">
-            <Sparkles size={20} />
+            <ChatBubbleLeftRight size={20} />
             <div>
               <strong>Make sense of the numbers.</strong>
               <button

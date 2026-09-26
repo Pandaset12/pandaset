@@ -1,5 +1,5 @@
 {
-  "name": "portfoliolens",
+  "name": "pandaset",
   "version": "1.0.0",
   "private": true,
   "type": "module",
@@ -10,7 +10,7 @@
     "test": "tsx --test tests/*.test.ts"
   },
   "dependencies": {
-    "lucide-react": "^0.468.0",
+    "@heroicons/react": "^2.2.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1"
   },

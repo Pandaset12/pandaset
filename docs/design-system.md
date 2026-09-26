@@ -1,4 +1,4 @@
-# PortfolioLens visual system
+# PandaSet visual system
 
 ## Direction
 

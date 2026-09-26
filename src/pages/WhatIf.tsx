@@ -1,15 +1,15 @@
 import { useState, useRef, useEffect } from "react";
 import {
   ArrowRight,
-  RotateCcw,
+  ArrowPath as RotateCcw,
   Plus,
   Minus,
   Check,
-  Sparkles,
-  LoaderCircle,
-  Info,
-  X,
-} from "lucide-react";
+  Scale,
+  ArrowPath,
+  InformationCircle as Info,
+  XMark as X,
+} from "../components/icons";
 import { assets } from "../data";
 import { analyze, validateWeights, pct, pp } from "../analytics";
 import {
@@ -328,7 +328,7 @@ export default function WhatIf({
           >
             {busy ? (
               <>
-                <LoaderCircle size={16} className="spin" />
+                <ArrowPath size={16} className="spin" />
                 Calculating…
               </>
             ) : (
@@ -433,7 +433,7 @@ export default function WhatIf({
                     )
                   }
                 >
-                  <Sparkles size={16} />
+                  <Scale size={16} />
                   Explain the trade-offs
                 </button>
                 <button
@@ -495,7 +495,7 @@ export default function WhatIf({
       {confirm && result && (
         <Modal title="Use this allocation?" onClose={() => setConfirm(false)}>
           <p className="note-body">
-            This applies the scenario throughout PortfolioLens for this browser
+            This applies the scenario throughout PandaSet for this browser
             session. Reloading restores the example portfolio. It does not place
             trades or connect to a brokerage.
           </p>
