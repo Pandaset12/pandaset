@@ -519,3 +519,28 @@
   font-size: 0.75rem;
   color: var(--muted);
 }
+.backend-analysis {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  margin-bottom: 1.5rem;
+  border: 1px solid var(--border, #d9d9d9);
+  border-radius: 8px;
+}
+
+.backend-analysis p {
+  margin: 0.35rem 0 0;
+}
+.backend-analysis-results {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.5rem;
+  width: 100%;
+}
+.backend-analysis-results small {
+  width: 100%;
+  overflow-wrap: anywhere;
+}
