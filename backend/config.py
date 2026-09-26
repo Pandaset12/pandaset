@@ -55,6 +55,8 @@ class Settings(BaseSettings):
             and self.mongo_uri
             and self.twelve_data_api_key
             and self.has_gemini_key
+            and self.has_tavily_key
+            and self.has_deepseek_key
         )
 
     @property
@@ -66,8 +68,6 @@ class Settings(BaseSettings):
             and self.twelve_data_cache_rights_confirmed
             and self.approved_news_domains.strip()
             and self.fred_api_key
-            and self.has_tavily_key
-            and self.has_deepseek_key
         )
 
     @property

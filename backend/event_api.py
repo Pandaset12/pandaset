@@ -292,15 +292,7 @@ async def create_draft(body: DraftRequest, context=Depends(_store),
     record = await _call(store.get_analysis_record, user.user_id, body.portfolio_id, body.analysis_id)
     if record is None:
         raise _not_found()
-    eligible = {item.template_id for item in list_event_templates(
-        [resolve_instrument(symbol) for symbol in portfolio.weights])}
-    if template.template_id not in eligible:
-        raise _error(422, "UNKNOWN_TEMPLATE", "This template does not apply to the saved portfolio.")
-    _validate_target(template, body.target_symbol, portfolio.weights)
-    if template.category == "issuer" and body.target_symbol not in record["metrics"]["weights"]:
-        raise _error(422, "INVALID_TARGET", "The selected stock is not in this saved analysis.")
-    if body.proposed_weights is not None and set(body.proposed_weights) != set(record["metrics"]["weights"]):
-        raise _error(422, "INVALID_WEIGHTS", "Proposed weights must cover the saved holdings.")
+    _validate_draft_portfolio(template, body, portfolio.weights, record["metrics"]["weights"])
     try:
         _check_snapshot_coverage(record, set(record["metrics"]["weights"]))
     except ValueError as exc:
@@ -335,6 +327,19 @@ def _validate_target(template, target_symbol: str | None, portfolio_weights: dic
         raise _error(422, "INVALID_TARGET", "Choose a stock in this portfolio for the issuer event.")
     if template.category != "issuer" and target_symbol:
         raise _error(422, "INVALID_TARGET", "This event does not use a target stock.")
+
+
+def _validate_draft_portfolio(template, body: DraftRequest, portfolio_weights: dict,
+                              analysis_weights: dict) -> None:
+    eligible = {item.template_id for item in list_event_templates(
+        [resolve_instrument(symbol) for symbol in portfolio_weights])}
+    if template.template_id not in eligible:
+        raise _error(422, "UNKNOWN_TEMPLATE", "This template does not apply to the saved portfolio.")
+    _validate_target(template, body.target_symbol, portfolio_weights)
+    if template.category == "issuer" and body.target_symbol not in analysis_weights:
+        raise _error(422, "INVALID_TARGET", "The selected stock is not in this saved analysis.")
+    if body.proposed_weights is not None and set(body.proposed_weights) != set(analysis_weights):
+        raise _error(422, "INVALID_WEIGHTS", "Proposed weights must cover the saved holdings.")
 
 
 def public_draft(item: dict) -> dict:
@@ -542,9 +547,20 @@ async def post_message(run_id: str, body: ChatRequest, context=Depends(_store),
             )
             if revision.portfolio_id != item["portfolio_id"] or revision.analysis_id != item["analysis_id"]:
                 raise _error(422, "INVALID_REVISION", "A run revision must use its saved portfolio and analysis.")
-            template = get_event_template(revision.template_id)
+            try:
+                template = get_event_template(revision.template_id)
+            except EventTemplateNotFound as exc:
+                raise _error(422, "UNKNOWN_TEMPLATE", "Event template is unsupported.") from exc
             situation = _situation_snapshot(template, revision)
-            _validate_target(template, revision.target_symbol, item["result"]["current_weights"])
+            portfolio = await _call(store.get_portfolio, user.user_id, item["portfolio_id"])
+            if portfolio is None:
+                raise _not_found()
+            record = await _call(store.get_analysis_record, user.user_id, item["portfolio_id"],
+                                 item["analysis_id"])
+            if record is None:
+                raise _not_found()
+            _validate_draft_portfolio(template, revision, portfolio.weights,
+                                      record["metrics"]["weights"])
             payload = revision.model_dump(mode="json", exclude_none=True)
             payload["template_version"] = template.version
             if situation:

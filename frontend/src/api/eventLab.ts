@@ -35,6 +35,23 @@ export function validPercentAllocation(weights: readonly number[]): boolean {
   );
 }
 
+export function editablePercentages(weights: readonly number[]): number[] {
+  if (!weights.length) return [];
+  const unitsPerPortfolio = 100_000_000;
+  const unitsPerPercent = 1_000_000;
+  const units = weights.map((weight) => Math.round(weight * unitsPerPortfolio));
+  const difference =
+    unitsPerPortfolio - units.reduce((sum, value) => sum + value, 0);
+  // Put the display-rounding remainder on the largest holding so a valid
+  // saved allocation remains valid when opened in the editor.
+  const largest = units.reduce(
+    (index, value, candidate) => (value > units[index] ? candidate : index),
+    0,
+  );
+  units[largest] += difference;
+  return units.map((value) => value / unitsPerPercent);
+}
+
 type RequestOptions = { signal?: AbortSignal; idempotencyKey?: string };
 
 export async function eventRequest<T>(

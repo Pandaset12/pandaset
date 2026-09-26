@@ -17,6 +17,7 @@ import {
   cancelRun,
   confirmDraft,
   createDraft,
+  editablePercentages,
   getDraft,
   getSavedAnalysis,
   getRun,
@@ -697,7 +698,9 @@ export default function WhatIf({
     results?.proposed_weights &&
     Object.keys(results.proposed_weights).length === assets.length &&
     assets.every((asset) => asset.symbol in results.proposed_weights!)
-      ? assets.map((asset) => results.proposed_weights![asset.symbol] * 100)
+      ? editablePercentages(
+          assets.map((asset) => results.proposed_weights![asset.symbol]),
+        )
       : null;
   const canApply =
     appliedWeights &&

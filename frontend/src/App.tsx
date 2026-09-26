@@ -15,6 +15,7 @@ import {
   analysisMatchesPortfolio,
   createAnalysis,
   createPortfolio,
+  editablePercentages,
   listAnalyses,
   listPortfolios,
   searchInstruments,
@@ -164,6 +165,7 @@ function Application({ onSignOut }: { onSignOut: () => Promise<void> }) {
       !validPercentAllocation(weights)
     )
       return false;
+    analysisGuard.current.invalidate();
     setAnalysisBusy(true);
     setAnalysisError("");
     try {
@@ -231,14 +233,11 @@ function Application({ onSignOut }: { onSignOut: () => Promise<void> }) {
     savedAnalysis.portfolio_id === selected.portfolio_id
       ? asAnalysisResponse(savedAnalysis)
       : null;
-  const weights =
-    selected?.holdings.map((holding) =>
-      Number(
-        ((analysis?.weights[holding.symbol] ?? holding.weight) * 100).toFixed(
-          6,
-        ),
-      ),
-    ) ?? [];
+  const weights = editablePercentages(
+    selected?.holdings.map(
+      (holding) => analysis?.weights[holding.symbol] ?? holding.weight,
+    ) ?? [],
+  );
   const assets = selected ? assetsForPortfolio(selected, instruments) : [];
   const asOf = analysis?.as_of
     ? new Date(analysis.as_of).toLocaleDateString("en-US", {
