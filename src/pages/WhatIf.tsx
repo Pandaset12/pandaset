@@ -145,8 +145,7 @@ export default function WhatIf({
   return (
     <>
       <PageHeading
-        eyebrow="THE SCENARIO LAB"
-        title="A change, before the change."
+        title="Scenario comparison"
         description="Try a different allocation. See how the trade-offs compare."
       >
         <span className="scenario-badge">
@@ -390,7 +389,7 @@ export default function WhatIf({
                   {[
                     ["Modeled return", current.return, proposed.return],
                     [
-                      "Largest drawdown",
+                      "Largest fall from a previous peak",
                       current.maxDrawdown,
                       proposed.maxDrawdown,
                     ],

@@ -162,12 +162,10 @@ export function Modal({
   );
 }
 export function PageHeading({
-  eyebrow,
   title,
   description,
   children,
 }: {
-  eyebrow: string;
   title: string;
   description?: string;
   children?: ReactNode;
@@ -175,7 +173,6 @@ export function PageHeading({
   return (
     <header className="page-heading">
       <div>
-        <div className="eyebrow">{eyebrow}</div>
         <h1 tabIndex={-1}>{title}</h1>
         {description && <p>{description}</p>}
       </div>

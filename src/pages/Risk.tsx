@@ -44,8 +44,7 @@ export default function Risk({
   return (
     <>
       <PageHeading
-        eyebrow="EXPOSURE & DIVERSIFICATION"
-        title="See what’s underneath."
+        title="Risk & exposure"
         description="Understand how your holdings behave together."
       >
         <button className="button subtle" onClick={onMethod}>
@@ -127,8 +126,9 @@ export default function Risk({
             ))}
           </div>
           <p className="muted small-text">
-            Risk contribution uses the covariance of daily returns. Negative
-            values indicate a diversifying contribution in this sample.
+            Risk contribution estimates how much each holding adds to or offsets
+            portfolio risk over this sample year, accounting for how its daily
+            returns move with the rest. Negative values reduced modeled risk.
           </p>
         </section>
       </div>

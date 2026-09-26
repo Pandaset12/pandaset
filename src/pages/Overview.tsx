@@ -66,10 +66,7 @@ export default function Overview({
           : "past year";
   return (
     <>
-      <PageHeading
-        eyebrow="YOUR INVESTMENT WORKSPACE"
-        title="A little more perspective."
-      >
+      <PageHeading title="Portfolio overview">
         <button className="button subtle" onClick={onEdit}>
           <SlidersHorizontal size={16} />
           Edit portfolio
@@ -231,14 +228,14 @@ export default function Overview({
           <span>Largest drawdown</span>
           <strong>
             {pct(annual.maxDrawdown)}
-            <small>Over the past year</small>
+            <small>Peak-to-trough fall · 1 year</small>
           </strong>
         </div>
         <div>
           <span>Direct technology allocation</span>
           <strong>
             {pct(annual.sectors.find(([s]) => s === "Technology")?.[1] || 0, 0)}
-            <small>Excludes fund look-through</small>
+            <small>Excludes stocks held in funds</small>
           </strong>
         </div>
         <div>

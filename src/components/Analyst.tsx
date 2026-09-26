@@ -105,18 +105,26 @@ export function Analyst({
             ))}
           </div>
         )}
-        {messages.map((m, i) => (
-          <div key={i} className={`message ${m.role}`}>
-            <span>{m.role === "user" ? "YOU" : "PORTFOLIOLENS"}</span>
-            <p>{m.text}</p>
-            {m.role === "assistant" && (
-              <a href="#/risk" onClick={onClose}>
-                Explore the calculations
-                <ArrowUpRight size={13} />
-              </a>
-            )}
-          </div>
-        ))}
+        <div
+          className="analyst-conversation"
+          role="log"
+          aria-label="Portfolio analyst conversation"
+          aria-live="polite"
+          aria-relevant="additions"
+        >
+          {messages.map((m, i) => (
+            <div key={i} className={`message ${m.role}`}>
+              <span>{m.role === "user" ? "YOU" : "PORTFOLIOLENS"}</span>
+              <p>{m.text}</p>
+              {m.role === "assistant" && (
+                <a href="#/risk" onClick={onClose}>
+                  Explore the calculations
+                  <ArrowUpRight size={13} />
+                </a>
+              )}
+            </div>
+          ))}
+        </div>
         {busy && (
           <div className="analyst-loading" role="status">
             <LoaderCircle size={15} className="spin" />

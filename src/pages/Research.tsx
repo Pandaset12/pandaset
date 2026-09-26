@@ -57,15 +57,9 @@ export default function Research({
   return (
     <>
       <PageHeading
-        eyebrow="COMPANIES, CONTEXT & CONNECTIONS"
-        title="Follow your curiosity."
+        title="Research library"
         description="Explore a holding. Understand its place in your portfolio."
-      >
-        <span className="sample-label">
-          <BookOpen size={15} />
-          Research library
-        </span>
-      </PageHeading>
+      />
       <div className="research-workspace">
         <aside className="research-index">
           <label className="search-field large">
