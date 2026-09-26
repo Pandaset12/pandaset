@@ -1,5 +1,44 @@
 # API and Gemini integration update
 
+## Quant integration on quant-backend-integration
+
+The default `EngineQuantProvider` now calls `analyze_portfolio()` and
+`compare_portfolios()`. It reads the existing
+`drafts/data_pipeline/sample_prices.json` fixture: seven fictional daily price
+rows for NVDA, SPY, JPM and TLT. All results carry `data_mode=demo`,
+`data_source=synthetic_fixture`, unknown freshness, and an explicit fictional-price
+warning. UTC midnight represents the sample session date, not a market close.
+No live data service is called.
+
+The adapter explicitly maps cumulative return, annualized portfolio/asset
+volatility, signed risk shares, correlations, observation count and end date.
+Quant warnings and assumptions survive snapshot persistence. Null risk shares
+and correlations remain null; numeric citations exclude nulls. Weight tolerance
+is 1e-10 with no renormalization. Correlation validation allows 1e-10 roundoff
+without clipping values.
+
+What-if resolves the saved portfolio, fetches the union of symbols once, and
+zero-fills absent weights only. Both reports use identical prices. It returns
+`current_analysis` and `proposed_analysis` as AnalyticsSnapshot payloads, with
+`delta.portfolio_return` and `delta.portfolio_volatility` taken from the engine's
+proposed-minus-baseline differences. Comparisons do not change or save holdings.
+Unsupported sample symbols fail as provider errors (502).
+
+To switch to real history, replace the sample loader and its demo-specific
+provenance mapping with a verified adjusted-close adapter supplying complete,
+aligned history for every requested symbol, source/freshness and agreed session
+timestamp semantics. The draft market provider is not activated or verified;
+credentials, plan coverage and an end-to-end real-history acceptance run remain
+outstanding. Changing the data-mode label alone is insufficient.
+
+Install dependencies from the repository root with `pip install -r
+backend/requirements-dev.txt`; this also installs the local quant package.
+Run `python -m pytest backend/tests -q` and
+`python -m pytest quant_engine/tests -q` using that environment.
+
+The design and review notes below describe the pre-integration baseline; the
+status above supersedes their pending-quant statements.
+
 ## HLD
 
 Goal: implement the API contract in PortfolioLens-HLD.md with a reproducible

@@ -32,7 +32,8 @@ def metric_catalog(metrics: AnalyticsSnapshot) -> dict[str, float]:
         values["portfolio_return"] = metrics.portfolio_return
     for field in ("weights", "risk_contribution", "asset_volatility"):
         values.update(
-            {f"{field}.{symbol}": value for symbol, value in (getattr(metrics, field) or {}).items()}
+            {f"{field}.{symbol}": value for symbol, value in (getattr(metrics, field) or {}).items()
+             if value is not None}
         )
     return values
 

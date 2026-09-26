@@ -32,6 +32,7 @@ def test_forged_number_in_model_prose_is_not_returned_by_v1(tmp_path, monkeypatc
     monkeypatch.setattr(gemini_service.genai, "Client", lambda **_: client)
     app = create_app(Settings(_env_file=None, analyst_mode="gemini", gemini_api_key="test-only",
                               storage_path=tmp_path / "test.sqlite3"))
+    app.dependency_overrides[get_provider] = DemoQuantProvider
     with TestClient(app) as api:
         snapshot = api.post("/api/v1/portfolios/demo/analysis").json()
         response = api.post("/api/v1/portfolios/demo/ask", json={
@@ -52,6 +53,7 @@ def test_valid_prose_uses_backend_rendered_numbers_and_no_web_tools_by_default(t
     monkeypatch.setattr(gemini_service.genai, "Client", lambda **_: client)
     app = create_app(Settings(_env_file=None, analyst_mode="gemini", gemini_api_key="test-only",
                               storage_path=tmp_path / "test.sqlite3"))
+    app.dependency_overrides[get_provider] = DemoQuantProvider
     with TestClient(app) as api:
         snapshot = api.post("/api/v1/portfolios/demo/analysis").json()
         response = api.post("/api/v1/portfolios/demo/ask", json={

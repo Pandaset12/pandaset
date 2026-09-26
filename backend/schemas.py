@@ -18,7 +18,7 @@ def check_weights(weights: dict[str, float]) -> dict[str, float]:
         if not math.isfinite(weight) or not 0 <= weight <= 1:
             raise ValueError("This MVP uses finite long-only weights between 0 and 1.")
         normalized[symbol] = weight
-    if not math.isclose(math.fsum(normalized.values()), 1.0, rel_tol=0, abs_tol=1e-6):
+    if not math.isclose(math.fsum(normalized.values()), 1.0, rel_tol=0, abs_tol=1e-10):
         raise ValueError("Weights must sum to 1.0; they are never silently renormalized.")
     return normalized
 
@@ -33,11 +33,11 @@ class AnalyticsSnapshot(BaseModel):
     volatility_unit: Literal["annualized_decimal"] = "annualized_decimal"
     portfolio_volatility: float = Field(ge=0)
     weights: dict[str, float] = Field(min_length=1, max_length=100)
-    risk_contribution: dict[str, float]
+    risk_contribution: dict[str, float | None]
     notes: list[str] = Field(default_factory=list)
     portfolio_return: float | None = None
     asset_volatility: dict[str, float] | None = None
-    correlation_matrix: dict[str, dict[str, float]] | None = None
+    correlation_matrix: dict[str, dict[str, float | None]] | None = None
     observation_count: int | None = Field(default=None, ge=2)
     return_frequency: Literal["daily"] = "daily"
     data_source: str = "unspecified"
@@ -63,17 +63,23 @@ class AnalyticsSnapshot(BaseModel):
             if set(matrix) != symbols or any(set(row) != symbols for row in matrix.values()):
                 raise ValueError("The correlation matrix must cover all holdings.")
             for symbol, row in matrix.items():
-                if not math.isclose(row[symbol], 1.0, abs_tol=1e-6):
+                if row[symbol] is not None and not math.isclose(row[symbol], 1.0, rel_tol=0, abs_tol=1e-10):
                     raise ValueError("Correlation diagonals must equal one.")
                 for other, value in row.items():
-                    if not -1 <= value <= 1 or not math.isclose(value, matrix[other][symbol], abs_tol=1e-6):
+                    if value is None or matrix[other][symbol] is None:
+                        if value is not matrix[other][symbol]:
+                            raise ValueError("Undefined correlations must be symmetric.")
+                        continue
+                    if not -1 - 1e-10 <= value <= 1 + 1e-10 or not math.isclose(value, matrix[other][symbol], rel_tol=0, abs_tol=1e-10):
                         raise ValueError("Correlations must be symmetric and between -1 and 1.")
         if self.portfolio_volatility == 0 and not self.risk_contribution:
             return self
         if set(self.risk_contribution) != set(self.weights):
             raise ValueError("Risk contributions must cover exactly the portfolio symbols.")
-        total = math.fsum(self.risk_contribution.values())
         if self.portfolio_volatility > 0:
+            if any(value is None for value in self.risk_contribution.values()):
+                raise ValueError("Risk shares must be defined at positive volatility.")
+            total = math.fsum(self.risk_contribution.values())
             if not math.isclose(total, 1.0, rel_tol=0, abs_tol=1e-6):
                 raise ValueError("Relative volatility risk contributions must sum to 1.")
         elif any(self.risk_contribution.values()):
@@ -227,8 +233,8 @@ class AnalysisResponse(BaseModel):
     portfolio_return: float | None
     portfolio_volatility: float
     asset_volatility: dict[str, float] | None
-    correlation_matrix: dict[str, dict[str, float]] | None
-    risk_contribution: dict[str, float]
+    correlation_matrix: dict[str, dict[str, float | None]] | None
+    risk_contribution: dict[str, float | None]
     concentration: Concentration
     data_quality: DataQuality
     weights: dict[str, float]

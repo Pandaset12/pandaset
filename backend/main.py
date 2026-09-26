@@ -18,6 +18,7 @@ from .storage import PortfolioStore
 from .providers import (
     IntegrationPending,
     PortfolioNotFound,
+    ProviderUnavailable,
     QuantProvider,
     get_provider,
     demo_metrics,
@@ -117,7 +118,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "status": "ok",
             "analyst_mode": settings.analyst_mode,
             "gemini_configured": settings.has_gemini_key,
-            "quant_integration": "demo_fixture",
+            "quant_integration": "quant_engine_sample_prices",
             "data_mode": "demo",
             "storage_backend": "sqlite",
             "authentication_enabled": False,
@@ -126,6 +127,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def read_metrics(portfolio_id: str, provider: QuantProvider) -> AnalyticsSnapshot:
         try:
             return provider.get_analytics(portfolio_id)
+        except ProviderUnavailable as exc:
+            raise HTTPException(status_code=502, detail={
+                "code": "provider_unavailable", "message": "Sample price data is unavailable."
+            }) from exc
         except PortfolioNotFound:
             raise HTTPException(
                 status_code=404,
@@ -177,6 +182,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         read_metrics(request.portfolio_id, provider)
         try:
             return provider.simulate(request)
+        except ProviderUnavailable as exc:
+            raise HTTPException(status_code=502, detail={
+                "code": "provider_unavailable", "message": "Sample price data is unavailable."
+            }) from exc
         except IntegrationPending as exc:
             raise HTTPException(
                 status_code=501,

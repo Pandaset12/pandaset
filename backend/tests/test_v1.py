@@ -17,7 +17,10 @@ def settings(tmp_path):
 
 @pytest.fixture
 def client(settings):
-    with TestClient(create_app(settings)) as value:
+    app = create_app(settings)
+    # Retain regression coverage of the precomputed fixture provider.
+    app.dependency_overrides[get_provider] = DemoQuantProvider
+    with TestClient(app) as value:
         yield value
 
 
