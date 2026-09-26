@@ -44,6 +44,7 @@ export default function Overview({
       asset,
       weight: analysis.weights[asset.symbol] ?? 0,
       symbol: asset.symbol,
+      returnImpact: analysis.return_contribution?.[asset.symbol] ?? null,
     }))
     .filter(
       ({ asset, weight }) =>
@@ -52,12 +53,16 @@ export default function Overview({
           .toLowerCase()
           .includes(search.toLowerCase()),
     )
-    .sort((a, b) =>
-      sort === "weight"
-        ? b.weight - a.weight
-        : (analysis.return_contribution?.[b.symbol] ?? -Infinity) -
-          (analysis.return_contribution?.[a.symbol] ?? -Infinity),
-    );
+    .sort((a, b) => {
+      if (sort === "weight")
+        return b.weight - a.weight || a.symbol.localeCompare(b.symbol);
+      if (a.returnImpact === null)
+        return b.returnImpact === null ? a.symbol.localeCompare(b.symbol) : 1;
+      if (b.returnImpact === null) return -1;
+      return (
+        b.returnImpact - a.returnImpact || a.symbol.localeCompare(b.symbol)
+      );
+    });
   const topRisk = Object.entries(analysis.risk_contribution)
     .filter(([, value]) => value !== null)
     .sort((a, b) => (b[1] ?? 0) - (a[1] ?? 0))[0];
@@ -346,9 +351,11 @@ export default function Overview({
                           className="table-asset"
                         >
                           <AssetMark asset={asset} />
-                          <span>
+                          <span className="holding-identity">
                             <strong>{asset.symbol}</strong>
-                            <small>{asset.short}</small>
+                            {asset.name !== asset.symbol && (
+                              <small>{asset.name}</small>
+                            )}
                           </span>
                         </a>
                       </th>

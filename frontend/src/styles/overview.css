@@ -332,6 +332,25 @@
   width: 23px;
   color: var(--muted);
 }
+.holdings-table .table-asset {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+.holding-identity {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: left;
+}
+.holding-identity strong {
+  color: var(--ink);
+}
+.holding-identity small {
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 400;
+}
 .sub-label {
   font-size: 0.75rem;
   display: block;
