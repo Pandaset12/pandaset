@@ -117,7 +117,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         live_data = settings.market_data_provider == "twelvedata"
         market_data_ready = not live_data or settings.has_twelve_data_key
         return {
-            "status": "ok",
+            "status": "ok" if market_data_ready else "degraded",
             "analyst_mode": settings.analyst_mode,
             "gemini_configured": settings.has_gemini_key,
             "quant_integration": (

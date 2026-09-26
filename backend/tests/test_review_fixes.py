@@ -122,7 +122,7 @@ def test_live_health_reports_missing_twelve_data_key(tmp_path):
                               storage_path=tmp_path / "test.sqlite3"))
     with TestClient(app) as api:
         health = api.get("/health").json()
-    assert health["status"] == "ok"  # The process is live; the provider is not ready.
+    assert health["status"] == "degraded"
     assert health["quant_integration"] == "quant_engine_twelvedata"
     assert health["market_data_provider"] == "twelvedata"
     assert health["market_data_ready"] is False
