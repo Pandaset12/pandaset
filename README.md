@@ -32,21 +32,22 @@ All navigation uses hash routes, so `frontend/dist/` can be served by a static h
 
 This is a complete frontend implementation using **illustrative data**. It is not connected to market data, brokerage accounts, a news feed, or Gemini. Research links point to external issuer and public-disclosure sources; their contents are not ingested. The UI discloses these boundaries in the sample-data badge, methodology dialog, research labels, and analyst.
 
-`frontend/src/data.ts` defines assets, initial allocations, research primers, and a deterministic 252-day sample. It generates correlated daily observations calibrated to the disclosed sample annual returns. The portfolio uses constant daily weights, excluding fees, taxes, deposits, and withdrawals. Editing a portfolio updates application state for the current session; reloading restores the sample.
+`quant/data.ts` defines assets, initial allocations, research primers, and a deterministic 252-day sample. It generates correlated daily observations calibrated to the disclosed sample annual returns. The portfolio uses constant daily weights, excluding fees, taxes, deposits, and withdrawals. Editing a portfolio updates application state for the current session; reloading restores the sample.
 
-`frontend/src/analytics.ts` contains the portfolio calculations. Return contributions are geometrically linked to reconcile to the total compounded return. Risk contributions use the sample covariance matrix and sum to one, including possible negative contributions. Volatility is annualized using 252 trading days. Drawdown is computed from the modeled portfolio path.
+`quant/analytics.ts` contains the portfolio calculations. Return contributions are geometrically linked to reconcile to the total compounded return. Risk contributions use the sample covariance matrix and sum to one, including possible negative contributions. Volatility is annualized using 252 trading days. Drawdown is computed from the modeled portfolio path.
 
 To integrate a backend, replace the fixture data adapter while keeping aligned return arrays and the asset ordering contract. Replace the analyst response function with the desired service and preserve visible loading, error, and source-attribution states. Do not put API keys in the browser bundle.
 
 ## Structure
 
-- `frontend/` — Vite application, public assets, and frontend tests.
+- `frontend/` — Vite application and public assets.
+- `quant/` — illustrative data, portfolio calculations, and tests.
 - `backend/` — reserved for a future service; no backend is implemented yet.
 - `frontend/src/App.tsx` — navigation, portfolio state, editing, and methodology.
 - `frontend/src/pages/` — four workflow-specific pages.
 - `frontend/src/components/` — shared UI, responsive chart, and contextual analyst.
 - `frontend/src/styles.css` — stylesheet entry point; feature styles live in `frontend/src/styles/`.
-- `frontend/tests/analytics.test.ts` — seven financial consistency checks.
+- `quant/tests/analytics.test.ts` — seven financial consistency checks.
 - `docs/design-system.md` — visual direction and component conventions.
 - `docs/verification.md` — verification evidence and limitations.
 

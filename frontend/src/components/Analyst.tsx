@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { ArrowPath, ArrowUp, ArrowUpRight, InformationCircle } from "./icons";
 import { Modal, PandaMark } from "./UI";
-import { assets } from "../data";
-import { analyze, pct } from "../analytics";
+import { assets } from "../../../quant/data";
+import { analyze, pct } from "../../../quant/analytics";
 export function Analyst({
   weights,
   question,

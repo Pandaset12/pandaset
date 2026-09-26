@@ -10,8 +10,8 @@ import {
   InformationCircle as Info,
   XMark as X,
 } from "../components/icons";
-import { assets } from "../data";
-import { analyze, validateWeights, pct, pp } from "../analytics";
+import { assets } from "../../../quant/data";
+import { analyze, validateWeights, pct, pp } from "../../../quant/analytics";
 import {
   AssetMark,
   PageHeading,

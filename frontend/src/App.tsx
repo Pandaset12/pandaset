@@ -9,8 +9,8 @@ import {
   InformationCircle as Info,
   XMark as X,
 } from "./components/icons";
-import { assets, initialWeights, asOf } from "./data";
-import { validateWeights } from "./analytics";
+import { assets, initialWeights, asOf } from "../../quant/data";
+import { validateWeights } from "../../quant/analytics";
 import { Brand, Modal, AssetMark } from "./components/UI";
 import { Analyst } from "./components/Analyst";
 import Overview from "./pages/Overview";

@@ -11,8 +11,14 @@ import {
   ChevronDown,
   InformationCircle as Info,
 } from "../components/icons";
-import { assets, portfolioValue, researchNotes } from "../data";
-import { analyze, assetPath, money, pct, signedPct } from "../analytics";
+import { assets, portfolioValue, researchNotes } from "../../../quant/data";
+import {
+  analyze,
+  assetPath,
+  money,
+  pct,
+  signedPct,
+} from "../../../quant/analytics";
 import {
   AssetMark,
   PageHeading,
