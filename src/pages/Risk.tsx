@@ -171,14 +171,14 @@ export default function Risk({
                       const value = correlationMatrix[i][j];
                       const background =
                         i === j
-                          ? "#edf0e8"
+                          ? "#22313b"
                           : value < 0
-                            ? `rgba(170,110,61,${Math.abs(value) * 0.6 + 0.06})`
+                            ? `rgba(115,72,78,${Math.abs(value) * 0.6 + 0.06})`
                             : value > 0.55
-                              ? `rgba(33,88,64,${0.83 + value * 0.15})`
-                              : `rgba(33,88,64,${value * 0.5 + 0.06})`;
+                              ? `rgba(60,89,104,${0.83 + value * 0.15})`
+                              : `rgba(60,89,104,${value * 0.5 + 0.06})`;
                       const color =
-                        value > 0.55 && i !== j ? "#fff" : "#23483b";
+                        value > 0.55 && i !== j ? "#fff" : "#e4eaee";
                       const isDiagonal = rowIndex === columnIndex;
                       const isSelectable = rowIndex < columnIndex;
 
