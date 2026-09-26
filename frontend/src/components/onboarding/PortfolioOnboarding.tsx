@@ -57,7 +57,7 @@ export function PortfolioOnboarding({
   const [showNameError, setShowNameError] = useState(false);
   const [showHoldingErrors, setShowHoldingErrors] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [saveError, setSaveError] = useState(false);
+  const [saveError, setSaveError] = useState("");
   const [created, setCreated] = useState<Portfolio | null>(null);
   const [focusTarget, setFocusTarget] = useState("");
   const title = useRef<HTMLHeadingElement>(null);
@@ -124,7 +124,7 @@ export function PortfolioOnboarding({
     if (step === "holdings") {
       setShowHoldingErrors(true);
       if (validation.payload) {
-        setSaveError(false);
+        setSaveError("");
         setStep("review");
       } else {
         const firstInvalid = holdings.find(
@@ -144,7 +144,7 @@ export function PortfolioOnboarding({
     const controller = new AbortController();
     pending.current = controller;
     setSaving(true);
-    setSaveError(false);
+    setSaveError("");
     try {
       const portfolio = await createPortfolio(validation.payload, {
         signal: controller.signal,
@@ -157,8 +157,13 @@ export function PortfolioOnboarding({
       )
         throw new Error("Invalid saved portfolio response.");
       setCreated(portfolio);
-    } catch {
-      if (!controller.signal.aborted) setSaveError(true);
+    } catch (reason) {
+      if (!controller.signal.aborted)
+        setSaveError(
+          reason instanceof Error
+            ? reason.message
+            : "Portfolio creation failed. Try again.",
+        );
     } finally {
       if (pending.current === controller) {
         pending.current = null;
@@ -414,7 +419,7 @@ export function PortfolioOnboarding({
             />
             {holdings.length >= MAX_HOLDINGS && (
               <p className="po-help" role="status">
-                You’ve reached the limit of 100 holdings.
+                You’ve reached the limit of 25 holdings.
               </p>
             )}
             <div className="po-holdings-heading">
@@ -609,10 +614,7 @@ export function PortfolioOnboarding({
             {saveError && (
               <div className="po-save-error" role="alert">
                 <strong>We couldn’t create your portfolio.</strong>
-                <p>
-                  Your entries are still here. Try again, or go back to make
-                  changes.
-                </p>
+                <p>{saveError}</p>
               </div>
             )}
             {saving && (
@@ -628,7 +630,7 @@ export function PortfolioOnboarding({
             type="button"
             disabled={saving}
             onClick={() => {
-              setSaveError(false);
+              setSaveError("");
               setStep(
                 step === "name"
                   ? "welcome"

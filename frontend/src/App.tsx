@@ -1,113 +1,202 @@
-import { useEffect, useRef, useState } from "react";
-import {
-  ArrowUpRight,
-  ChatBubbleLeftRight,
-  Check,
-  ChevronDown,
-  InformationCircle as Info,
-  XMark as X,
-} from "./components/icons";
-import { assets, initialWeights } from "../../quant/data";
-import {
-  analyzePortfolio,
-  createRequestGuard,
-  type AnalysisResponse,
-  type Portfolio,
-} from "./api/portfolio";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { ArrowUpRight, Check, XMark as X } from "./components/icons";
 import { Brand } from "./components/UI";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { EditPortfolio } from "./components/EditPortfolio";
-import { MethodologyModal } from "./components/MethodologyModal";
-import { Analyst } from "./components/Analyst";
 import { AuthScreen } from "./components/AuthScreen";
 import { AuthBoundary } from "./components/AuthBoundary";
+import { PortfolioOnboarding } from "./components/onboarding/PortfolioOnboarding";
 import {
-  AIWorkflowModal,
-  type AIWorkflowAction,
-} from "./components/AIWorkflowModal";
+  asAnalysisResponse,
+  analysisMatchesPortfolio,
+  createAnalysis,
+  createPortfolio,
+  listAnalyses,
+  listPortfolios,
+  searchInstruments,
+  updatePortfolio,
+  validPercentAllocation,
+  type SavedAnalysis,
+} from "./api/eventLab";
+import { createRequestGuard, type Portfolio } from "./api/portfolio";
+import { assetsForPortfolio, type Instrument } from "./types/portfolioAsset";
 import Overview from "./pages/Overview";
 import Risk from "./pages/Risk";
 import Research from "./pages/Research";
 import WhatIf from "./pages/WhatIf";
 
-type ActiveAnalysis = { portfolio: Portfolio; analysis: AnalysisResponse };
-
-function weightsFromAnalysis(analysis: AnalysisResponse) {
-  return assets.map((asset) =>
-    Math.round((analysis.weights[asset.symbol] ?? 0) * 100),
-  );
-}
-
 function Application({ onSignOut }: { onSignOut: () => Promise<void> }) {
   const [hash, setHash] = useState(location.hash || "#/");
-  const [weights, setWeights] = useState([...initialWeights]);
-  const [edit, setEdit] = useState(false);
-  const [method, setMethod] = useState(false);
-  const [analyst, setAnalyst] = useState<string | null>(null);
-  const [aiWorkflow, setAiWorkflow] = useState<AIWorkflowAction | null>(null);
-  const [toast, setToast] = useState("");
-  const [active, setActive] = useState<ActiveAnalysis | null>(null);
-  const [analysisLoading, setAnalysisLoading] = useState(true);
+  const [portfolios, setPortfolios] = useState<Portfolio[]>([]);
+  const [listState, setListState] = useState<"loading" | "ready" | "error">(
+    "loading",
+  );
+  const [listError, setListError] = useState("");
+  const [selectedId, setSelectedId] = useState("");
+  const [savedAnalysis, setSavedAnalysis] = useState<SavedAnalysis | null>(
+    null,
+  );
+  const [analysisBusy, setAnalysisBusy] = useState(false);
   const [analysisError, setAnalysisError] = useState("");
-  const analysisRequest = useRef(createRequestGuard());
+  const [instruments, setInstruments] = useState<Instrument[]>([]);
+  const [onboarding, setOnboarding] = useState(false);
+  const [edit, setEdit] = useState(false);
+  const [toast, setToast] = useState("");
+  const listGuard = useRef(createRequestGuard());
+  const analysisGuard = useRef(createRequestGuard());
 
   useEffect(() => {
-    const fn = () => {
+    const update = () => {
       setHash(location.hash || "#/");
       window.scrollTo({ top: 0 });
     };
-    window.addEventListener("hashchange", fn);
-    return () => window.removeEventListener("hashchange", fn);
+    window.addEventListener("hashchange", update);
+    return () => window.removeEventListener("hashchange", update);
   }, []);
   useEffect(() => {
     if (!toast) return;
-    const id = setTimeout(() => setToast(""), 4500);
-    return () => clearTimeout(id);
+    const timer = setTimeout(() => setToast(""), 4500);
+    return () => clearTimeout(timer);
   }, [toast]);
 
-  async function loadAnalysis(nextWeights: number[]) {
-    const request = analysisRequest.current.begin();
-    setAnalysisLoading(true);
+  const loadPortfolios = useCallback(async () => {
+    const request = listGuard.current.begin();
+    setListState("loading");
+    setListError("");
+    try {
+      const result = await listPortfolios();
+      if (!listGuard.current.isCurrent(request)) return;
+      setPortfolios(result);
+      setSelectedId((old) =>
+        result.some((p) => p.portfolio_id === old)
+          ? old
+          : (result[0]?.portfolio_id ?? ""),
+      );
+      setListState("ready");
+    } catch (cause) {
+      if (!listGuard.current.isCurrent(request)) return;
+      setListError(
+        cause instanceof Error
+          ? cause.message
+          : "Your portfolios are unavailable.",
+      );
+      setListState("error");
+    }
+  }, []);
+  useEffect(() => {
+    void loadPortfolios();
+    return () => {
+      listGuard.current.invalidate();
+      analysisGuard.current.invalidate();
+    };
+  }, [loadPortfolios]);
+
+  const selected =
+    portfolios.find((p) => p.portfolio_id === selectedId) ?? null;
+  const loadAnalysis = useCallback(
+    async (portfolioId: string, refresh = false) => {
+      const request = analysisGuard.current.begin();
+      setSavedAnalysis((old) =>
+        refresh && old?.portfolio_id === portfolioId ? old : null,
+      );
+      setAnalysisBusy(true);
+      setAnalysisError("");
+      try {
+        const result = refresh
+          ? await createAnalysis(portfolioId)
+          : ((await listAnalyses(portfolioId))[0] ??
+            (await createAnalysis(portfolioId)));
+        if (analysisGuard.current.isCurrent(request)) setSavedAnalysis(result);
+        return analysisGuard.current.isCurrent(request);
+      } catch (cause) {
+        if (analysisGuard.current.isCurrent(request))
+          setAnalysisError(
+            cause instanceof Error
+              ? cause.message
+              : "The analysis is unavailable.",
+          );
+        return false;
+      } finally {
+        if (analysisGuard.current.isCurrent(request)) setAnalysisBusy(false);
+      }
+    },
+    [],
+  );
+  useEffect(() => {
+    if (selectedId && listState === "ready") void loadAnalysis(selectedId);
+    return () => analysisGuard.current.invalidate();
+  }, [selectedId, listState, loadAnalysis]);
+
+  useEffect(() => {
+    if (!selected) {
+      setInstruments([]);
+      return;
+    }
+    let cancelled = false;
+    void Promise.all(
+      selected.holdings.map(({ symbol }) =>
+        searchInstruments(symbol)
+          .then((items) => items.find((item) => item.symbol === symbol))
+          .catch(() => undefined),
+      ),
+    ).then((items) => {
+      if (!cancelled)
+        setInstruments(
+          items.filter((item): item is Instrument => Boolean(item)),
+        );
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [selected]);
+
+  async function apply(weights: number[]) {
+    if (
+      !selected ||
+      weights.length !== selected.holdings.length ||
+      !validPercentAllocation(weights)
+    )
+      return false;
+    setAnalysisBusy(true);
     setAnalysisError("");
     try {
-      const result = await analyzePortfolio(nextWeights);
-      if (!analysisRequest.current.isCurrent(request)) return false;
-      setActive(result);
-      setWeights(weightsFromAnalysis(result.analysis));
+      const updated = await updatePortfolio(selected.portfolio_id, {
+        name: selected.name,
+        holdings: selected.holdings
+          .map((holding, index) => ({
+            symbol: holding.symbol,
+            weight: weights[index] / 100,
+          }))
+          .filter((holding) => holding.weight > 0),
+      });
+      setSavedAnalysis(null);
+      setPortfolios((old) =>
+        old.map((p) => (p.portfolio_id === updated.portfolio_id ? updated : p)),
+      );
+      const created = await createAnalysis(updated.portfolio_id);
+      setSavedAnalysis(created);
+      setEdit(false);
+      setToast("Allocation applied. A new analysis snapshot was saved.");
       return true;
-    } catch (error) {
-      if (analysisRequest.current.isCurrent(request)) {
-        setAnalysisError(
-          error instanceof Error
-            ? error.message
-            : "The analysis service is unavailable.",
-        );
-      }
+    } catch (cause) {
+      setAnalysisError(
+        cause instanceof Error
+          ? cause.message
+          : "The allocation could not be saved.",
+      );
       return false;
     } finally {
-      if (analysisRequest.current.isCurrent(request)) setAnalysisLoading(false);
+      setAnalysisBusy(false);
     }
   }
 
-  useEffect(() => {
-    void loadAnalysis(initialWeights);
-    return () => {
-      analysisRequest.current.invalidate();
-    };
-  }, []);
-
-  async function apply(
-    nextWeights: number[],
-    source: "edit" | "scenario" = "edit",
-  ) {
-    if (!(await loadAnalysis(nextWeights))) return false;
-    setEdit(false);
-    setToast(
-      source === "scenario"
-        ? "Scenario saved as the active sample portfolio."
-        : "Sample portfolio updated.",
-    );
-    return true;
+  function openPortfolio(portfolio: Portfolio) {
+    setPortfolios((old) => [
+      portfolio,
+      ...old.filter((p) => p.portfolio_id !== portfolio.portfolio_id),
+    ]);
+    setSelectedId(portfolio.portfolio_id);
+    setOnboarding(false);
   }
 
   const [path, search = ""] = hash.replace(/^#/, "").split("?");
@@ -116,23 +205,48 @@ function Application({ onSignOut }: { onSignOut: () => Promise<void> }) {
     : "/";
   const query = new URLSearchParams(search);
   useEffect(() => {
-    document.title = `${route === "/" ? "Overview" : route === "/risk" ? "Risk & exposure" : route === "/research" ? "Research" : "Scenario lab"} — PandaSet`;
+    document.title = `${route === "/" ? "Overview" : route === "/risk" ? "Risk & exposure" : route === "/research" ? "Research" : "What-if lab"} — PandaSet`;
   }, [route]);
-
-  const nav = [
-    ["/", "Overview"],
-    ["/risk", "Risk & exposure"],
-    ["/research", "Research"],
-    ["/what-if", "What-if lab"],
-  ];
-  const asOf = active?.analysis.as_of
-    ? new Date(active.analysis.as_of).toLocaleDateString("en-US", {
+  const analysisMismatch = Boolean(
+    savedAnalysis &&
+    selected &&
+    !analysisMatchesPortfolio(savedAnalysis, selected),
+  );
+  const visibleAnalysisError =
+    analysisError ||
+    (analysisMismatch
+      ? "The saved analysis uses a different allocation. Refresh it before starting a new scenario."
+      : "");
+  const analysis =
+    savedAnalysis &&
+    selected &&
+    !analysisMismatch &&
+    savedAnalysis.portfolio_id === selected.portfolio_id
+      ? asAnalysisResponse(savedAnalysis)
+      : null;
+  const weights =
+    selected?.holdings.map((holding) =>
+      Number(
+        ((analysis?.weights[holding.symbol] ?? holding.weight) * 100).toFixed(
+          6,
+        ),
+      ),
+    ) ?? [];
+  const assets = selected ? assetsForPortfolio(selected, instruments) : [];
+  const asOf = analysis?.as_of
+    ? new Date(analysis.as_of).toLocaleDateString("en-US", {
         month: "short",
         day: "numeric",
         year: "numeric",
         timeZone: "UTC",
       })
     : "Unavailable";
+  const nav = [
+    ["/", "Overview"],
+    ["/risk", "Risk & exposure"],
+    ["/research", "Research"],
+    ["/what-if", "What-if lab"],
+  ];
 
   return (
     <>
@@ -162,15 +276,6 @@ function Application({ onSignOut }: { onSignOut: () => Promise<void> }) {
             ))}
           </nav>
           <button
-            className="analyst-button"
-            onClick={() => setAnalyst("")}
-            disabled={!active}
-          >
-            <ChatBubbleLeftRight size={17} />
-            <span>Ask Panda</span>
-            <span className="key-hint">↗</span>
-          </button>
-          <button
             className="text-button sign-out-button"
             onClick={() => void onSignOut()}
           >
@@ -179,22 +284,46 @@ function Application({ onSignOut }: { onSignOut: () => Promise<void> }) {
         </div>
       </header>
       <div className="workspace-bar">
-        <div>
-          <button
-            className="portfolio-selector"
-            onClick={() => setEdit(true)}
-            disabled={!active || analysisLoading}
-          >
-            <span className="portfolio-initial">L</span>
-            {active?.portfolio.name ?? "Long-term portfolio"}
-            <ChevronDown size={14} />
-          </button>
-          <button className="demo-badge" onClick={() => setMethod(true)}>
-            {active?.analysis.data_mode === "live"
-              ? "LIVE DATA"
-              : "SAMPLE DATA"}
-            <Info size={12} />
-          </button>
+        <div className="workspace-portfolio-controls">
+          {portfolios.length > 0 && (
+            <label className="portfolio-select-label">
+              Portfolio{" "}
+              <select
+                aria-label="Select portfolio"
+                value={selectedId}
+                onChange={(e) => {
+                  setSelectedId(e.target.value);
+                  setOnboarding(false);
+                }}
+                disabled={listState !== "ready" || analysisBusy}
+              >
+                {portfolios.map((p) => (
+                  <option key={p.portfolio_id} value={p.portfolio_id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          {listState === "ready" && portfolios.length > 0 && (
+            <button className="text-button" onClick={() => setOnboarding(true)}>
+              New portfolio
+            </button>
+          )}
+          {selected && (
+            <button
+              className="text-button"
+              disabled={analysisBusy}
+              onClick={() => void loadAnalysis(selected.portfolio_id, true)}
+            >
+              {analysisBusy
+                ? "Loading analysis…"
+                : analysis
+                  ? "Refresh analysis"
+                  : "Create analysis"}
+            </button>
+          )}
+          {analysis && <span className="demo-badge">LIVE DATA</span>}
         </div>
         <span className="as-of">
           As of {asOf}
@@ -202,86 +331,124 @@ function Application({ onSignOut }: { onSignOut: () => Promise<void> }) {
         </span>
       </div>
       <main id="main-content" className="main-content" tabIndex={-1}>
-        {analysisLoading && !active ? (
+        {listState === "loading" ? (
           <section className="api-state" role="status">
-            <strong>Loading portfolio analysis…</strong>
-            <p>
-              Connecting to the backend and calculating the sample portfolio.
-            </p>
+            <strong>Loading your portfolios…</strong>
           </section>
-        ) : analysisError && !active ? (
+        ) : listState === "error" ? (
           <section className="api-state" role="alert">
-            <strong>Portfolio analysis is unavailable.</strong>
-            <p>{analysisError}</p>
+            <strong>Portfolios are unavailable.</strong>
+            <p>{listError}</p>
             <button
               className="button dark"
-              onClick={() => void loadAnalysis(initialWeights)}
-              disabled={analysisLoading}
+              onClick={() => void loadPortfolios()}
+            >
+              Retry
+            </button>
+          </section>
+        ) : onboarding || portfolios.length === 0 ? (
+          <PortfolioOnboarding
+            key={onboarding ? "new" : "first"}
+            searchTickers={(q, options) => searchInstruments(q, options.signal)}
+            createPortfolio={(input, options) =>
+              createPortfolio(input, options.signal)
+            }
+            onOpenPortfolio={openPortfolio}
+            onCancel={
+              portfolios.length ? () => setOnboarding(false) : undefined
+            }
+          />
+        ) : route === "/what-if" && selected ? (
+          <ErrorBoundary>
+            <WhatIf
+              key={selected.portfolio_id}
+              portfolio={selected}
+              analysis={analysis}
+              analysisBusy={analysisBusy}
+              analysisError={visibleAnalysisError}
+              onRefreshAnalysis={() =>
+                void loadAnalysis(selected.portfolio_id, true)
+              }
+              assets={assets}
+              weights={weights}
+              onApply={apply}
+              query={query}
+            />
+          </ErrorBoundary>
+        ) : analysisBusy && !analysis ? (
+          <section className="api-state" role="status">
+            <strong>Analyzing {selected?.name}…</strong>
+            <p>Retrieving adjusted price history for the saved allocation.</p>
+          </section>
+        ) : visibleAnalysisError && !analysis ? (
+          <section className="api-state" role="alert">
+            <strong>Analysis is unavailable.</strong>
+            <p>{visibleAnalysisError}</p>
+            <button
+              className="button dark"
+              onClick={() => selectedId && void loadAnalysis(selectedId, true)}
             >
               Retry analysis
             </button>
           </section>
-        ) : active ? (
+        ) : analysis && selected ? (
           <ErrorBoundary>
             {route === "/" ? (
               <Overview
-                analysis={active.analysis}
+                analysis={analysis}
+                assets={assets}
                 onEdit={() => setEdit(true)}
-                onAsk={(q) => setAnalyst(q || "")}
-                onBrief={() => setAiWorkflow({ workflow: "analysis_briefing" })}
-                onMethod={() => setMethod(true)}
+                onAsk={() =>
+                  setToast(
+                    "Portfolio chat is available in a completed event run.",
+                  )
+                }
+                onBrief={() =>
+                  setToast("Briefing is unavailable for this saved analysis.")
+                }
+                onMethod={() =>
+                  setToast(
+                    "This analysis uses saved adjusted-price history and the displayed data source.",
+                  )
+                }
               />
             ) : route === "/risk" ? (
               <Risk
-                analysis={active.analysis}
+                analysis={analysis}
+                assets={assets}
                 onExplain={() =>
-                  setAiWorkflow({
-                    workflow: "risk_explanation",
-                    question:
-                      "Explain the main risk contributions and concentrations in this saved analysis.",
-                  })
+                  setToast(
+                    "Risk explanation is unavailable for this saved analysis.",
+                  )
                 }
-                onMethod={() => setMethod(true)}
+                onMethod={() =>
+                  setToast(
+                    "Risk estimates use the saved adjusted-price history.",
+                  )
+                }
               />
             ) : route === "/research" ? (
               <Research
                 key={hash}
+                analysis={analysis}
+                assets={assets}
                 weights={weights}
-                onAsk={(q) => setAnalyst(q || "")}
-                onSummarizeSource={(symbol) =>
-                  setAiWorkflow({ workflow: "research_summary", symbol })
+                onAsk={() =>
+                  setToast(
+                    "Portfolio chat is available in a completed event run.",
+                  )
+                }
+                onSummarizeSource={() =>
+                  setToast(
+                    "Issuer source summaries are unavailable for this saved analysis.",
+                  )
                 }
                 query={query}
               />
-            ) : (
-              <WhatIf
-                key={hash}
-                analysis={active.analysis}
-                weights={weights}
-                onApply={(w) => apply(w, "scenario")}
-                onExplainScenario={(proposedWeights) =>
-                  setAiWorkflow({
-                    workflow: "scenario_explanation",
-                    proposedWeights,
-                  })
-                }
-                query={query}
-              />
-            )}
-            {analysisLoading && (
-              <p className="analysis-saving" role="status">
-                Saving the new allocation and calculating its analysis…
-              </p>
-            )}
+            ) : null}
             {analysisError && (
               <p className="analysis-saving error" role="alert">
-                The active analysis is unchanged. {analysisError}{" "}
-                <button
-                  className="text-button"
-                  onClick={() => void loadAnalysis(weights)}
-                >
-                  Retry
-                </button>
+                {analysisError}
               </p>
             )}
           </ErrorBoundary>
@@ -292,35 +459,19 @@ function Application({ onSignOut }: { onSignOut: () => Promise<void> }) {
           PandaSet<span className="footer-slash">/</span>A clearer view of what
           you own.
         </span>
-        <button className="text-button" onClick={() => setMethod(true)}>
-          Sample data & methodology
+        <span>
+          Hypothetical analysis. No brokerage connection or trades.
           <ArrowUpRight size={13} />
-        </button>
+        </span>
       </footer>
-      {edit && active && (
+      {edit && selected && (
         <EditPortfolio
+          assets={assets}
           weights={weights}
-          busy={analysisLoading}
+          busy={analysisBusy}
           error={analysisError}
           onClose={() => setEdit(false)}
-          onSave={(w) => apply(w)}
-        />
-      )}
-      {method && <MethodologyModal onClose={() => setMethod(false)} />}
-      {analyst !== null && active && (
-        <Analyst
-          portfolioId={active.portfolio.portfolio_id}
-          analysis={active.analysis}
-          question={analyst}
-          onClose={() => setAnalyst(null)}
-        />
-      )}
-      {aiWorkflow && active && (
-        <AIWorkflowModal
-          action={aiWorkflow}
-          portfolioId={active.portfolio.portfolio_id}
-          analysisId={active.analysis.analysis_id}
-          onClose={() => setAiWorkflow(null)}
+          onSave={apply}
         />
       )}
       {toast && (

@@ -5,8 +5,35 @@ saved snapshots, Gemini prompts, and error handling. Market ingestion, Tiger Dat
 MongoDB infrastructure and financial formulas belong to the data/quant teammates.
 See [the shared HLD](../PortfolioLens-HLD.md) and [integration design](INTEGRATION.md).
 
-The default provider connects the quant engine to fictional sample prices for an
-offline demo. Real market-data access remains unconnected. Gemini is optional and needs a team API key.
+The default v1 provider connects the quant engine to fictional sample prices for
+an offline demo. The gated v2 event lab uses adjusted Twelve Data history.
+Gemini is optional for v1 and required for event research in v2.
+
+## Authenticated event lab (`/api/v2`)
+
+The event lab is disabled by default. Copy `backend/.env.example` to the ignored
+`backend/.env`, then set `EVENT_LAB_ENABLED=true`, the Supabase project origin and
+publishable key, `SUPABASE_SIGNING_MODE`, Mongo URI, Twelve Data key, and Gemini
+key. All v2 routes verify a bearer access token and derive the Mongo owner from
+its verified subject. The v1 sample API remains separate. V2 analyses request
+adjusted daily history from Twelve Data and never substitute demo prices.
+
+For an internal release, keep `EVENT_LAB_PUBLIC_ENABLED=false` and populate
+`EVENT_LAB_ALLOWED_USER_IDS` with a comma-separated list of invited Supabase
+user UUIDs. An empty list denies every account. Public enablement additionally
+requires the explicit rights and source flags in `backend/.env.example` and the
+recorded checks in `docs/event-lab-release-gates.md`. `EVENT_LAB_PROBABILITY_ENABLED`
+does not by itself release probabilities; the quant engine also needs accepted
+held-out calibration evidence. Current v2 runs omit conditional ranges and show
+the reason while returning deterministic cases.
+
+The scenario workflow is: save a portfolio, create an immutable analysis, choose
+a template, create a draft, review cited facts and proposed shocks, confirm the
+shocks, then poll the run. Mongo stores queued jobs, leases, attempts, pinned
+snapshots, and run chat so work can resume after a process restart. The `rates`
+factor means **TLT adjusted return**, not a yield change. FRED yield observations
+are contextual evidence. V2 error responses use
+`{"error":{"code":"...","message":"...","request_id":"..."}}`.
 
 ## Run locally
 
@@ -33,10 +60,10 @@ Open [interactive API docs](http://127.0.0.1:8000/docs) or
 [health](http://127.0.0.1:8000/health). Health confirms the API process/configuration,
 not connectivity to Gemini, databases, or real quant services.
 
-No environment file or API key is needed in default demo mode. Portfolios and
-immutable analysis snapshots are stored in ignored `backend/data/portfoliolens.sqlite3`.
-This local store is permitted by the HLD for the first demo; MongoDB integration
-is still pending. There is no login or multi-user authorization in this starter.
+No environment file or API key is needed in default v1 demo mode. Its portfolios
+and analysis snapshots are stored in ignored `backend/data/portfoliolens.sqlite3`.
+The v1 compatibility routes have no login or multi-user authorization; the gated
+v2 routes use verified Supabase identity and owner-scoped MongoDB records.
 
 ## First frontend flow
 

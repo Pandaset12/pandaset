@@ -8,6 +8,7 @@ import pandas as pd
 from quant_engine import analyze_portfolio, compare_portfolios
 
 from .schemas import AnalysisSeries, AnalyticsSnapshot, MarketHistoryResponse, Portfolio, WhatIfRequest
+from .twelve_data import ProviderUnavailable, TwelveDataPriceProvider
 
 
 class PortfolioNotFound(Exception):
@@ -16,10 +17,6 @@ class PortfolioNotFound(Exception):
 
 class IntegrationPending(Exception):
     pass
-
-
-class ProviderUnavailable(Exception):
-    """Data adapters should wrap network/database failures in this exception."""
 
 
 @lru_cache(maxsize=1)
@@ -74,6 +71,9 @@ class DemoQuantProvider:
 
 class SamplePriceProvider:
     """Existing fictional daily-price fixture; never live market data."""
+    data_mode = "demo"
+    data_source = "synthetic_fixture"
+    freshness = "unknown"
 
     def prices(self, symbols: list[str]) -> pd.DataFrame:
         path = Path(__file__).parent / "drafts" / "data_pipeline" / "sample_prices.json"
@@ -88,28 +88,35 @@ class SamplePriceProvider:
 
 
 def build_market_history(prices_provider, symbols: list[str], lookback_days: int) -> MarketHistoryResponse:
-    frame = prices_provider.prices(symbols).tail(lookback_days + 1)
+    frame = (
+        prices_provider.prices(symbols, lookback_days=lookback_days)
+        if isinstance(prices_provider, TwelveDataPriceProvider)
+        else prices_provider.prices(symbols)
+    ).tail(lookback_days + 1)
     if len(frame) < 2:
         raise ProviderUnavailable("At least two dated prices are required for market history.")
     series = {
         symbol: [float(value / frame[symbol].iloc[0]) for value in frame[symbol].tolist()]
         for symbol in symbols
     }
+    provenance = frame.attrs.get("provenance", {})
+    data_mode = provenance.get("data_mode", getattr(prices_provider, "data_mode", "demo"))
     return MarketHistoryResponse(
         symbols=symbols,
         dates=[stamp.strftime("%Y-%m-%d") for stamp in frame.index],
         asset_index=series,
-        data_mode="demo",
-        data_source="synthetic_fixture",
-        freshness="unknown",
+        data_mode=data_mode,
+        data_source=provenance.get("data_source", getattr(prices_provider, "data_source", "synthetic_fixture")),
+        freshness=provenance.get("freshness", getattr(prices_provider, "freshness", "unknown")),
         requested_lookback_days=lookback_days,
         observation_count=len(frame) - 1,
-        warnings=["FICTIONAL sample prices; not live market observations."],
+        warnings=provenance.get("warnings", ["FICTIONAL sample prices; not live market observations."]),
     )
 
 
-def map_quant_report(report: dict, portfolio_id: str) -> AnalyticsSnapshot:
-    """Map the sample-price report explicitly, without normalizing weights or metrics."""
+def map_quant_report(report: dict, portfolio_id: str, provenance: dict | None = None) -> AnalyticsSnapshot:
+    """Map quant output explicitly and carry source provenance from its price frame."""
+    provenance = provenance or {}
     metadata = report["metadata"]
     symbols = list(report["weights"])
     dates = [metadata["start_date"][:10], *[date[:10] for date in report["series"]["dates"]]]
@@ -126,7 +133,7 @@ def map_quant_report(report: dict, portfolio_id: str) -> AnalyticsSnapshot:
         return_contribution=return_contribution,
     )
     return AnalyticsSnapshot(
-        portfolio_id=portfolio_id, data_mode="demo",
+        portfolio_id=portfolio_id, data_mode=provenance.get("data_mode", "demo"),
         data_as_of=metadata["end_date"],
         lookback_trading_days=metadata["return_observations"],
         observation_count=metadata["return_observations"],
@@ -142,18 +149,21 @@ def map_quant_report(report: dict, portfolio_id: str) -> AnalyticsSnapshot:
         risk_contribution={symbol: asset["percentage_risk_contribution"]
                            for symbol, asset in report["assets"].items()},
         correlation_matrix=report["matrices"]["correlation"],
-        data_source="synthetic_fixture", freshness="unknown",
-        notes=[*report["warnings"], "FICTIONAL sample prices; not live market observations."],
+        data_source=provenance.get("data_source", "synthetic_fixture"),
+        freshness=provenance.get("freshness", "unknown"),
+        notes=[*report["warnings"], *provenance.get("warnings", ["FICTIONAL sample prices; not live market observations."])],
         assumptions=[*metadata["assumptions"],
                      "UTC midnight labels a session date, not an exchange closing instant.",
-                     "Fictional prices are treated as adjusted daily prices for this demo.",
+                     ("Vendor adjusted daily closes are used; historical values may be revised."
+                      if provenance.get("data_mode") == "live"
+                      else "Fictional prices are treated as adjusted daily prices for this demo."),
                      f"Price window: {metadata['start_date']} through {metadata['end_date']}; "
                      f"annualization: {metadata['periods_per_year']} observations per year."],
     )
 
 
 class EngineQuantProvider:
-    """Quant integration using the saved allocation and demo price history."""
+    """Quant integration using the saved allocation and selected price source."""
 
     def __init__(self, store, prices=None):
         self.store = store
@@ -170,7 +180,8 @@ class EngineQuantProvider:
 
     def analyze(self, portfolio: Portfolio) -> AnalyticsSnapshot:
         prices = self.prices.prices(sorted(portfolio.weights))
-        return map_quant_report(analyze_portfolio(prices, portfolio.weights), portfolio.portfolio_id)
+        return map_quant_report(analyze_portfolio(prices, portfolio.weights),
+                                portfolio.portfolio_id, prices.attrs.get("provenance"))
 
     def simulate(self, request: WhatIfRequest) -> dict:
         baseline = self._portfolio(request.portfolio_id).weights
@@ -182,8 +193,8 @@ class EngineQuantProvider:
         )
         differences = result["portfolio_metric_differences"]
         return {
-            "current_analysis": map_quant_report(result["baseline"], request.portfolio_id).model_dump(mode="json"),
-            "proposed_analysis": map_quant_report(result["proposed"], request.portfolio_id).model_dump(mode="json"),
+            "current_analysis": map_quant_report(result["baseline"], request.portfolio_id, prices.attrs.get("provenance")).model_dump(mode="json"),
+            "proposed_analysis": map_quant_report(result["proposed"], request.portfolio_id, prices.attrs.get("provenance")).model_dump(mode="json"),
             "delta": {"portfolio_return": differences["cumulative_return"],
                       "portfolio_volatility": differences["annualized_volatility"],
                       "annualized_return": differences["geometric_annualized_return"],

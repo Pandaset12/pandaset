@@ -1,10 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { ArrowPath, MagnifyingGlass, Plus } from "../icons";
-import {
-  isValidSymbol,
-  normalizeSymbol,
-  normalizeTickerResults,
-} from "./portfolioDraft";
+import { normalizeTickerResults } from "./portfolioDraft";
 import type { TickerResult } from "./portfolioDraft";
 
 export type SearchTickers = (
@@ -66,13 +62,7 @@ export function TickerSearch({
     };
   }, [query, searchTickers, disabled]);
 
-  const manualSymbol = normalizeSymbol(query);
-  const options = [...results];
-  const canAddManual =
-    status !== "loading" &&
-    isValidSymbol(manualSymbol) &&
-    !results.some((result) => result.symbol === manualSymbol);
-  if (canAddManual) options.push({ symbol: manualSymbol });
+  const options = results;
   const expanded = open && Boolean(query.trim()) && !disabled;
 
   useEffect(() => {
@@ -165,8 +155,7 @@ export function TickerSearch({
         )}
       </div>
       <p id={inputId + "-help"} className="po-help">
-        Search by name, or add a ticker directly. Use arrows and Enter to
-        select.
+        Search supported instruments. Use arrows and Enter to select.
       </p>
       {expanded && (
         <div className="po-search-menu">
@@ -174,16 +163,15 @@ export function TickerSearch({
             {status === "loading"
               ? "Searching tickers…"
               : status === "error"
-                ? "Search is unavailable. You can still add a ticker directly."
+                ? "Search is unavailable. Try again in a moment."
                 : !results.length
-                  ? "No matching companies found. Check the ticker before adding it."
+                  ? "No supported instruments match this search."
                   : results.length +
                     (results.length === 1 ? " match" : " matches")}
           </div>
           <ul id={listId} role="listbox" aria-label="Ticker results">
             {options.map((option, index) => {
               const exists = selectedSymbols.includes(option.symbol);
-              const manual = canAddManual && index === options.length - 1;
               return (
                 <li
                   id={listId + "-" + index}
@@ -200,7 +188,7 @@ export function TickerSearch({
                 >
                   <span className="po-result-symbol">{option.symbol}</span>
                   <span className="po-result-name">
-                    {manual ? "Add ticker directly" : option.name || "Ticker"}
+                    {option.name || "Ticker"}
                   </span>
                   {exists ? (
                     <small>Added</small>

@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+from pathlib import Path
 import sqlite3
 from uuid import uuid4
 
@@ -11,6 +12,12 @@ from starlette.concurrency import run_in_threadpool
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from .config import Settings, get_settings
+from .auth import SupabaseTokenVerifier
+from .event_api import router as v2_router
+from .event_jobs import EventWorker
+from .instruments import SUPPORTED_INSTRUMENTS
+from .mongo_store import MongoPortfolioStore
+from .twelve_data import TwelveDataPriceProvider
 from .gemini_service import GeminiNotConfigured, GeminiUnavailable, generate_answer, metric_summary
 from .api_v1 import router as v1_router
 from .observability import log_failure, request_id_context
@@ -39,7 +46,34 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         store = await run_in_threadpool(PortfolioStore, settings.storage_path)
         await run_in_threadpool(store.seed_demo, demo_metrics())
         app.state.store = store
-        yield
+        worker = None
+        if settings.event_lab_ready:
+            app.state.auth_verifier = SupabaseTokenVerifier(
+                settings.supabase_url, settings.supabase_publishable_key,
+                signing_mode=settings.supabase_signing_mode,
+            )
+            app.state.event_store = await run_in_threadpool(
+                MongoPortfolioStore, settings.mongo_uri.get_secret_value(),
+                settings.mongo_database, supported_symbol=lambda symbol: symbol in SUPPORTED_INSTRUMENTS,
+                max_active_jobs_per_owner=settings.event_max_active_jobs_per_user,
+                max_messages_per_run=settings.event_max_messages_per_run,
+            )
+            app.state.event_price_provider = TwelveDataPriceProvider(
+                settings.twelve_data_api_key.get_secret_value(),
+                cache_allowed=settings.twelve_data_cache_rights_confirmed,
+                cache_path=(Path(__file__).parent / "data" / "twelve_data_adjusted.sqlite3"
+                            if settings.twelve_data_cache_rights_confirmed else None),
+            )
+            worker = EventWorker(app.state.event_store, settings)
+            worker.start()
+            app.state.event_worker = worker
+        try:
+            yield
+        finally:
+            if worker is not None:
+                await worker.stop()
+                app.state.event_store.client.close()
+                app.state.auth_verifier.http_client.close()
 
     application = FastAPI(
         title="PortfolioLens API",
@@ -49,6 +83,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     application.dependency_overrides[get_settings] = lambda: settings
     application.include_router(v1_router)
+    application.include_router(v2_router)
 
     @application.middleware("http")
     async def correlate_request(request: Request, call_next):
@@ -63,7 +98,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 error = {"code": "INTERNAL_ERROR", "message": "An internal error occurred.",
                          "request_id": request_id}
                 response = JSONResponse(
-                    {"error" if request.url.path.startswith("/api/v1/") else "detail": error},
+                    {"error" if request.url.path.startswith(("/api/v1/", "/api/v2/")) else "detail": error},
                     status_code=500,
                 )
             response.headers["X-Request-ID"] = request_id
@@ -75,14 +110,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         CORSMiddleware,
         allow_origins=[item.strip() for item in settings.cors_origins.split(",") if item.strip()],
         allow_credentials=False,
-        allow_methods=["GET", "POST"],
-        allow_headers=["Content-Type"],
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
+        allow_headers=["Content-Type", "Authorization", "Idempotency-Key"],
         expose_headers=["X-Request-ID"],
     )
 
     @application.exception_handler(StarletteHTTPException)
     async def http_error(request: Request, exc: StarletteHTTPException):
-        if request.url.path.startswith("/api/v1/"):
+        if request.url.path.startswith(("/api/v1/", "/api/v2/")):
             error = exc.detail if isinstance(exc.detail, dict) else {
                 "code": f"HTTP_{exc.status_code}", "message": str(exc.detail)
             }
@@ -95,7 +130,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         # Never echo raw input: it may contain secrets or non-JSON values such as NaN.
         details = [{"field": ".".join(map(str, error["loc"])), "message": error["msg"]}
                    for error in exc.errors()]
-        if request.url.path.startswith("/api/v1/"):
+        if request.url.path.startswith(("/api/v1/", "/api/v2/")):
             return JSONResponse(
                 {"error": {"code": "INVALID_INPUT", "message": "Request validation failed.",
                            "details": details, "request_id": request.state.request_id}},
@@ -109,19 +144,28 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         error = {"code": "STORAGE_UNAVAILABLE", "message": "Local portfolio storage is unavailable.",
                  "request_id": request.state.request_id}
         return JSONResponse(
-            {"error" if request.url.path.startswith("/api/v1/") else "detail": error}, status_code=503
+            {"error" if request.url.path.startswith(("/api/v1/", "/api/v2/")) else "detail": error}, status_code=503
         )
 
     @application.get("/health")
-    def health(settings: Settings = Depends(get_settings)):
+    def health(request: Request, settings: Settings = Depends(get_settings)):
         return {
             "status": "ok",
             "analyst_mode": settings.analyst_mode,
             "gemini_configured": settings.has_gemini_key,
+            "legacy_quant_integration": "quant_engine_sample_prices",
+            "legacy_data_mode": "demo",
+            "legacy_storage_backend": "sqlite",
             "quant_integration": "quant_engine_sample_prices",
             "data_mode": "demo",
             "storage_backend": "sqlite",
-            "authentication_enabled": False,
+            "event_data_mode": "live" if getattr(request.app.state, "event_store", None) is not None else "disabled",
+            "event_storage_backend": "mongo" if getattr(request.app.state, "event_store", None) is not None else "disabled",
+            "authentication_enabled": getattr(request.app.state, "auth_verifier", None) is not None,
+            "event_lab_enabled": settings.event_lab_enabled,
+            "event_lab_ready": settings.event_lab_ready and getattr(request.app.state, "event_store", None) is not None,
+            "event_lab_public_ready": settings.event_lab_public_ready,
+            "event_lab_probability_enabled": settings.event_lab_probability_enabled,
         }
 
     def read_metrics(portfolio_id: str, provider: QuantProvider) -> AnalyticsSnapshot:

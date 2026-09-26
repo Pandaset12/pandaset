@@ -5,7 +5,6 @@ import {
   InformationCircle as Info,
   RectangleStack as Layers,
 } from "../components/icons";
-import { assets } from "../../../quant/data";
 import { pct } from "../../../quant/analytics";
 import {
   AssetMark,
@@ -14,13 +13,16 @@ import {
   NextStep,
 } from "../components/UI";
 import type { AnalysisResponse } from "../api/portfolio";
+import type { PortfolioAsset } from "../types/portfolioAsset";
 
 export default function Risk({
   analysis,
+  assets,
   onExplain,
   onMethod,
 }: {
   analysis: AnalysisResponse;
+  assets: PortfolioAsset[];
   onExplain: () => void;
   onMethod: () => void;
 }) {
@@ -55,7 +57,8 @@ export default function Risk({
     ) * 1.12;
   const categories = Object.entries(
     active.reduce<Record<string, number>>((grouped, { asset, weight }) => {
-      grouped[asset.sector] = (grouped[asset.sector] ?? 0) + weight;
+      const category = asset.sector ?? "Unclassified";
+      grouped[category] = (grouped[category] ?? 0) + weight;
       return grouped;
     }, {}),
   ).sort((a, b) => b[1] - a[1]);
@@ -175,6 +178,11 @@ export default function Risk({
                 <ArrowUpRight size={15} />
               </a>
             ))}
+            {active.length === 0 && (
+              <p className="api-state" role="status">
+                No saved holdings are available for this analysis.
+              </p>
+            )}
           </div>
           <p className="muted small-text">
             Risk contribution is an estimate based on the backend’s daily return
@@ -196,7 +204,7 @@ export default function Risk({
               <Info size={17} />
             </button>
           </SectionTitle>
-          {!analysis.correlation_matrix ? (
+          {!analysis.correlation_matrix || active.length === 0 ? (
             <p className="api-state" role="status">
               Correlation matrix unavailable for this analysis.
             </p>
@@ -379,8 +387,9 @@ export default function Risk({
           <div className="note-panel">
             <Info size={18} />
             <p>
-              <strong>Look beyond the label.</strong> Funds are grouped as their
-              own category; this view does not look through underlying holdings.
+              <strong>Look beyond the label.</strong> Categories come from the
+              available instrument classification. This view does not look
+              through fund holdings.
             </p>
           </div>
         </section>

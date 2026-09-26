@@ -33,6 +33,9 @@ export type MetricSnapshot = {
   freshness: Freshness;
   notes: string[];
   assumptions: string[];
+  observation_count: number | null;
+  return_frequency: "daily";
+  volatility_unit: "annualized_decimal";
 };
 export type AnalysisResponse = Omit<
   MetricSnapshot,

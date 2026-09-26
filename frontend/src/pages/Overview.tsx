@@ -8,7 +8,6 @@ import {
   MagnifyingGlass as Search,
   InformationCircle as Info,
 } from "../components/icons";
-import { assets, researchNotes } from "../../../quant/data";
 import { pct, signedPct } from "../../../quant/analytics";
 import {
   AssetMark,
@@ -19,15 +18,18 @@ import {
 } from "../components/UI";
 import { LineChart } from "../components/LineChart";
 import type { AnalysisResponse } from "../api/portfolio";
+import type { PortfolioAsset } from "../types/portfolioAsset";
 
 export default function Overview({
   analysis,
+  assets,
   onEdit,
   onAsk,
   onBrief,
   onMethod,
 }: {
   analysis: AnalysisResponse;
+  assets: PortfolioAsset[];
   onEdit: () => void;
   onAsk: (q?: string) => void;
   onBrief: () => void;
@@ -66,19 +68,21 @@ export default function Overview({
   )
     ? chartValues
     : null;
-  const benchmark = analysis.series?.asset_index.VTI;
-  const benchmarkSeries = benchmark?.every(
-    (value): value is number => value !== null,
-  )
-    ? benchmark
-    : undefined;
   const sectors = Object.entries(
     assets.reduce<Record<string, number>>((grouped, asset) => {
-      grouped[asset.sector] =
-        (grouped[asset.sector] ?? 0) + (analysis.weights[asset.symbol] ?? 0);
+      const category = asset.sector ?? "Unclassified";
+      grouped[category] =
+        (grouped[category] ?? 0) + (analysis.weights[asset.symbol] ?? 0);
       return grouped;
     }, {}),
   ).filter(([, value]) => value > 0);
+  const largestAllocation = assets
+    .filter((asset) => (analysis.weights[asset.symbol] ?? 0) > 0)
+    .sort(
+      (left, right) =>
+        (analysis.weights[right.symbol] ?? 0) -
+        (analysis.weights[left.symbol] ?? 0),
+    )[0];
   const returnContributions = Object.values(analysis.return_contribution ?? {});
   const contributionRange = Math.max(
     0.0001,
@@ -145,9 +149,10 @@ export default function Overview({
                   : signedPct(analysis.portfolio_return)}
               </div>
               <div
-                className={`return-caption ${(analysis.portfolio_return ?? 0) >= 0 ? "positive" : "negative"}`}
+                className={`return-caption ${analysis.portfolio_return === null ? "" : analysis.portfolio_return >= 0 ? "positive" : "negative"}`}
               >
-                {(analysis.portfolio_return ?? 0) >= 0 ? (
+                {analysis.portfolio_return ===
+                null ? null : analysis.portfolio_return >= 0 ? (
                   <ArrowUpRight size={17} />
                 ) : (
                   <ArrowDownRight size={17} />
@@ -155,19 +160,19 @@ export default function Overview({
                 {analysis.annualized_return === null
                   ? "Annualized return unavailable"
                   : `${signedPct(analysis.annualized_return)} annualized`}
-                <span className="muted"> over the available sample</span>
+                <span className="muted"> over the saved analysis period</span>
               </div>
             </div>
             <span className="label-chip">
-              {analysis.lookback_days} return observations
+              {analysis.observation_count === null
+                ? "Observation count unavailable"
+                : `${analysis.observation_count} return observations`}
             </span>
           </div>
           {portfolioSeries && portfolioSeries.length > 1 ? (
             <LineChart
               dates={chartDates}
               series={portfolioSeries}
-              secondary={benchmarkSeries}
-              secondaryLabel="VTI sample history"
               label="Portfolio index"
               compact
             />
@@ -177,10 +182,7 @@ export default function Overview({
             </p>
           )}
           <div className="performance-bottom">
-            <span>
-              Normalized portfolio value · based on the backend’s available
-              dates
-            </span>
+            <span>Normalized portfolio value · saved analysis dates</span>
             <button className="text-button" onClick={onMethod}>
               Data & methodology
               <ArrowUpRight size={13} />
@@ -261,22 +263,21 @@ export default function Overview({
           </strong>
         </div>
         <div>
-          <span>Direct technology allocation</span>
+          <span>Largest allocation</span>
           <strong>
-            {pct(
-              (analysis.weights.NVDA ?? 0) +
-                (analysis.weights.MSFT ?? 0) +
-                (analysis.weights.AAPL ?? 0) +
-                (analysis.weights.AMD ?? 0),
-              0,
-            )}
-            <small>Direct holdings only</small>
+            {largestAllocation
+              ? pct(analysis.weights[largestAllocation.symbol], 0)
+              : "Unavailable"}
+            <small>{largestAllocation?.symbol ?? "No saved holding"}</small>
           </strong>
         </div>
         <div>
           <span>Holdings</span>
           <strong>
-            {Object.keys(analysis.weights).length.toString().padStart(2, "0")}
+            {assets
+              .filter((asset) => (analysis.weights[asset.symbol] ?? 0) > 0)
+              .length.toString()
+              .padStart(2, "0")}
             <small>Across {sectors.length} categories</small>
           </strong>
         </div>
@@ -429,35 +430,43 @@ export default function Overview({
           </p>
         </section>
         <section className="briefing">
-          <SectionTitle eyebrow="CONNECT THE DOTS" title="On your radar">
+          <SectionTitle title="Explore your holdings">
             <TextLink to="#/research">Research</TextLink>
           </SectionTitle>
-          {researchNotes
-            .filter((note) =>
-              note.symbols.some(
-                (symbol) => (analysis.weights[symbol] ?? 0) > 0,
-              ),
+          {assets
+            .filter((asset) => (analysis.weights[asset.symbol] ?? 0) > 0)
+            .sort(
+              (left, right) =>
+                (analysis.weights[right.symbol] ?? 0) -
+                (analysis.weights[left.symbol] ?? 0),
             )
             .slice(0, 3)
-            .map((note, index) => (
+            .map((asset, index) => (
               <a
                 className="briefing-item"
-                key={note.id}
-                href={`#/research?note=${note.id}`}
+                key={asset.symbol}
+                href={`#/research?symbol=${asset.symbol}`}
               >
                 <span className="note-index">0{index + 1}</span>
                 <div>
-                  <div className="eyebrow">EDITORIAL PRIMER</div>
-                  <h3>{note.title}</h3>
+                  <h3>{asset.name}</h3>
                   <div className="briefing-meta">
-                    {note.symbols.slice(0, 3).map((symbol) => (
-                      <span key={symbol}>{symbol}</span>
-                    ))}
+                    <span>{asset.symbol}</span>
+                    <span>
+                      {pct(analysis.weights[asset.symbol] ?? 0, 0)} allocated
+                    </span>
                     <ArrowUpRight size={16} />
                   </div>
                 </div>
               </a>
             ))}
+          {assets.every(
+            (asset) => (analysis.weights[asset.symbol] ?? 0) <= 0,
+          ) && (
+            <p className="api-state" role="status">
+              No saved holdings are available for research.
+            </p>
+          )}
           <div className="analyst-callout">
             <ChatBubbleLeftRight size={20} />
             <div>

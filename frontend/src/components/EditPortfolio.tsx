@@ -1,53 +1,57 @@
 import { useState } from "react";
-import { ArrowPath as RotateCcw, Check } from "./icons";
-import { assets, initialWeights } from "../../../quant/data";
-import { validateWeights } from "../../../quant/analytics";
+import { Check } from "./icons";
 import { Modal, AssetMark } from "./UI";
+import type { PortfolioAsset } from "../types/portfolioAsset";
+import { validPercentAllocation } from "../api/eventLab";
 
 export function EditPortfolio({
+  assets,
   weights,
   busy,
   error,
   onClose,
   onSave,
 }: {
+  assets: PortfolioAsset[];
   weights: number[];
   busy: boolean;
   error: string;
   onClose: () => void;
-  onSave: (w: number[]) => Promise<boolean>;
+  onSave: (weights: number[]) => Promise<boolean>;
 }) {
   const [draft, setDraft] = useState([...weights]);
-  const total = draft.reduce((a, b) => a + b, 0);
-  const valid = validateWeights(draft);
+  const total = draft.reduce((sum, value) => sum + value, 0);
+  const valid = draft.length === assets.length && validPercentAllocation(draft);
   return (
     <Modal
-      title="Edit your sample portfolio"
+      title="Edit saved allocation"
       onClose={busy ? () => undefined : onClose}
     >
       <p className="modal-description">
-        Set the allocation for each asset. Your weights should add up to 100%.
+        Set each saved holding’s allocation. The total must be 100%.
       </p>
       <div className="edit-weights">
-        {assets.map((a, i) => (
-          <label key={a.symbol}>
+        {assets.map((asset, index) => (
+          <label key={asset.symbol}>
             <span>
-              <AssetMark asset={a} small />
-              <strong>{a.symbol}</strong>
-              <small>{a.short}</small>
+              <AssetMark asset={asset} small />
+              <strong>{asset.symbol}</strong>
+              <small>{asset.name}</small>
             </span>
             <span className="edit-weight-input">
               <input
-                aria-label={`${a.symbol} portfolio allocation`}
+                aria-label={`${asset.symbol} portfolio allocation`}
                 type="number"
                 min="0"
                 max="100"
-                step="1"
-                value={draft[i]}
+                step="0.000001"
+                value={draft[index]}
                 disabled={busy}
-                onChange={(e) =>
-                  setDraft(
-                    draft.map((v, j) => (i === j ? Number(e.target.value) : v)),
+                onChange={(event) =>
+                  setDraft((old) =>
+                    old.map((value, i) =>
+                      i === index ? Number(event.target.value) : value,
+                    ),
                   )
                 }
               />
@@ -56,40 +60,39 @@ export function EditPortfolio({
           </label>
         ))}
       </div>
-      <div className={`allocation-total ${valid ? "valid" : "invalid"}`}>
+      <div
+        className={`allocation-total ${valid ? "valid" : "invalid"}`}
+        aria-live="polite"
+      >
         <span>Total allocation</span>
-        <strong>{Number(total.toFixed(2))}%</strong>
+        <strong>{Number(total.toFixed(6))}%</strong>
       </div>
       {!valid && (
         <p className="field-error" role="alert">
           Allocations must total 100%, with each value between 0% and 100%.
         </p>
       )}
+      {error && (
+        <p className="field-error" role="alert">
+          {error}
+        </p>
+      )}
       <div className="modal-actions">
-        <button
-          className="text-button"
-          disabled={busy}
-          onClick={() => setDraft([...initialWeights])}
-        >
-          <RotateCcw size={15} />
-          Restore example
+        <button className="button subtle" disabled={busy} onClick={onClose}>
+          Cancel
         </button>
         <button
           className="button dark"
           disabled={!valid || busy}
           onClick={() => void onSave(draft)}
         >
-          {busy ? "Saving…" : "Update portfolio"}
+          {busy ? "Saving…" : "Apply allocation"}
           <Check size={16} />
         </button>
       </div>
-      {error && (
-        <p className="field-error" role="alert">
-          {error}
-        </p>
-      )}
       <p className="small-text muted">
-        Changes stay in this session. Reloading restores the example portfolio.
+        Applying saves the allocation and creates a new analysis snapshot.
+        Existing event runs retain their own baseline.
       </p>
     </Modal>
   );

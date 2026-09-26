@@ -125,7 +125,7 @@ test("names, ticker syntax, empty holdings and holding count enforce the current
     { length: MAX_HOLDINGS },
     (_, index) => ({
       symbol: "T" + index,
-      percentage: "1",
+      percentage: String(100 / MAX_HOLDINGS),
     }),
   );
   assert.ok(validatePortfolioDraft("Full", rows).payload);
