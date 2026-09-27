@@ -17,26 +17,87 @@ class Settings(BaseSettings):
     gemini_api_key: SecretStr | None = None
     gemini_model: str = "gemini-3.8-flash"
     gemini_fallback_model: str = "gemini-3.5-flash-lite"
-    cors_origins: str = "http://localhost:3000,http://localhost:5173"
+    cors_origins: str = (
+        "http://localhost:3000,http://127.0.0.1:3000,"
+        "http://localhost:5173,http://127.0.0.1:5173,"
+        "http://localhost:5174,http://127.0.0.1:5174,"
+        "http://localhost:5175,http://127.0.0.1:5175,"
+        "http://localhost:5176,http://127.0.0.1:5176"
+    )
     storage_path: Path = Path(__file__).parent / "data" / "portfoliolens.sqlite3"
     gemini_timeout_seconds: float = Field(default=45, gt=0, le=120)
-    supabase_url: str | None = None
+    event_lab_enabled: bool = False
+    event_lab_public_enabled: bool = False
+    event_lab_probability_enabled: bool = False
+    event_lab_allowed_user_ids: str = ""
+    supabase_url: str = ""
     supabase_anon_key: SecretStr | None = None
+    supabase_publishable_key: str = ""
+    supabase_signing_mode: Literal["asymmetric", "legacy", "auto"] = "asymmetric"
     market_data_provider: Literal["sample", "twelvedata"] = "sample"
-    twelve_data_api_key: SecretStr | None = None
     market_data_timeout_seconds: float = Field(default=15, gt=0, le=60)
+    mongo_uri: SecretStr | None = None
+    mongo_database: str = "portfoliolens"
+    twelve_data_api_key: SecretStr | None = None
+    twelve_data_display_rights_confirmed: bool = False
+    twelve_data_cache_rights_confirmed: bool = False
+    fred_api_key: SecretStr | None = None
+    tavily_api_key: SecretStr | None = None
+    deepseek_api_key: SecretStr | None = None
+    deepseek_model: str = "deepseek-flash"
+    approved_news_domains: str = ""
+    event_max_active_jobs_per_user: int = Field(default=3, ge=1, le=20)
+    event_max_messages_per_run: int = Field(default=100, ge=1, le=1000)
 
     @property
-    def authentication_enabled(self) -> bool:
-        return bool(self.supabase_url and self.supabase_anon_key and self.supabase_anon_key.get_secret_value())
+    def event_lab_ready(self) -> bool:
+        return bool(
+            self.event_lab_enabled
+            and self.supabase_url
+            and self.supabase_publishable_key
+            and self.mongo_uri
+            and self.twelve_data_api_key
+            and self.has_gemini_key
+            and self.has_tavily_key
+            and self.has_deepseek_key
+        )
+
+    @property
+    def event_lab_public_ready(self) -> bool:
+        return bool(
+            self.event_lab_ready
+            and self.event_lab_public_enabled
+            and self.twelve_data_display_rights_confirmed
+            and self.twelve_data_cache_rights_confirmed
+            and self.approved_news_domains.strip()
+            and self.fred_api_key
+        )
 
     @property
     def has_gemini_key(self) -> bool:
         return bool(self.gemini_api_key and self.gemini_api_key.get_secret_value())
 
     @property
+    def has_tavily_key(self) -> bool:
+        return bool(self.tavily_api_key and self.tavily_api_key.get_secret_value())
+
+    @property
+    def has_deepseek_key(self) -> bool:
+        return bool(self.deepseek_api_key and self.deepseek_api_key.get_secret_value())
+
+    @property
     def has_twelve_data_key(self) -> bool:
         return bool(self.twelve_data_api_key and self.twelve_data_api_key.get_secret_value())
+
+    @property
+    def supabase_auth_api_key(self) -> str:
+        """Prefer an explicit legacy anon key; otherwise use the project publishable key."""
+        anon_key = self.supabase_anon_key.get_secret_value() if self.supabase_anon_key else ""
+        return anon_key.strip() or self.supabase_publishable_key.strip()
+
+    @property
+    def authentication_enabled(self) -> bool:
+        return bool(self.supabase_url and self.supabase_auth_api_key)
 
 
 @lru_cache

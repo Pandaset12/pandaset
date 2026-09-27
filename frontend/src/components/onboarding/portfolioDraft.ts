@@ -61,13 +61,14 @@ export function formatPercentage(units: number) {
 export function validatePortfolioDraft(
   name: string,
   holdings: readonly HoldingDraft[],
+  maxHoldings = MAX_HOLDINGS,
 ): DraftValidation {
   const errors: DraftErrors = { rows: {} };
   errors.name = portfolioNameError(name);
   if (!holdings.length)
     errors.holdings = "Add at least one holding to continue.";
-  if (holdings.length > MAX_HOLDINGS)
-    errors.holdings = `A portfolio can contain up to ${MAX_HOLDINGS} holdings.`;
+  if (holdings.length > maxHoldings)
+    errors.holdings = `A portfolio can contain up to ${maxHoldings} holdings.`;
 
   let totalUnits = 0;
   const symbols = new Set<string>();

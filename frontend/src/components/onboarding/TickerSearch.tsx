@@ -18,6 +18,7 @@ type Props = {
   searchTickers: SearchTickers;
   onSelect: (ticker: TickerResult) => void;
   disabled?: boolean;
+  allowDirectEntry?: boolean;
 };
 
 export function TickerSearch({
@@ -26,6 +27,7 @@ export function TickerSearch({
   searchTickers,
   onSelect,
   disabled = false,
+  allowDirectEntry = true,
 }: Props) {
   const listId = useId();
   const [query, setQuery] = useState("");
@@ -69,6 +71,7 @@ export function TickerSearch({
   const manualSymbol = normalizeSymbol(query);
   const options = [...results];
   const canAddManual =
+    allowDirectEntry &&
     status !== "loading" &&
     isValidSymbol(manualSymbol) &&
     !results.some((result) => result.symbol === manualSymbol);
@@ -165,8 +168,9 @@ export function TickerSearch({
         )}
       </div>
       <p id={inputId + "-help"} className="po-help">
-        Search by name, or add a ticker directly. Use arrows and Enter to
-        select.
+        {allowDirectEntry
+          ? "Search by name, or add a ticker directly. Use arrows and Enter to select."
+          : "Search supported instruments. Use arrows and Enter to select."}
       </p>
       {expanded && (
         <div className="po-search-menu">
@@ -174,9 +178,13 @@ export function TickerSearch({
             {status === "loading"
               ? "Searching tickers…"
               : status === "error"
-                ? "Search is unavailable. You can still add a ticker directly."
+                ? allowDirectEntry
+                  ? "Search is unavailable. You can still add a ticker directly."
+                  : "Search is unavailable. Try again in a moment."
                 : !results.length
-                  ? "No matching companies found. Check the ticker before adding it."
+                  ? allowDirectEntry
+                    ? "No matching companies found. Check the ticker before adding it."
+                    : "No supported instruments match this search."
                   : results.length +
                     (results.length === 1 ? " match" : " matches")}
           </div>

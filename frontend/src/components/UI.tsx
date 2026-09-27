@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import type { ReactNode } from "react";
 import { ArrowRight, ArrowUpRight, XMark } from "./icons";
-import type { Asset } from "../../../quant/data";
+import type { PortfolioAsset } from "../types/portfolioAsset";
 
 export function PandaMark({ className }: { className?: string }) {
   return (
@@ -61,7 +61,7 @@ export function AssetMark({
   asset,
   small = false,
 }: {
-  asset: Asset;
+  asset: PortfolioAsset;
   small?: boolean;
 }) {
   return (

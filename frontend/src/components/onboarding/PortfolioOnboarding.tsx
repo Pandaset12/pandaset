@@ -26,6 +26,8 @@ export type PortfolioOnboardingProps = {
   /** Key the component by the signed-in investor's user ID. */
   loadState?: "loading" | "empty" | "error";
   hasExistingPortfolios?: boolean;
+  maxHoldings?: number;
+  allowDirectEntry?: boolean;
   onRetryLoad?: () => void;
   searchTickers: SearchTickers;
   createPortfolio: (
@@ -45,6 +47,8 @@ const steps = [
 export function PortfolioOnboarding({
   loadState = "empty",
   hasExistingPortfolios = false,
+  maxHoldings = MAX_HOLDINGS,
+  allowDirectEntry = true,
   onRetryLoad,
   searchTickers,
   createPortfolio,
@@ -64,7 +68,7 @@ export function PortfolioOnboarding({
   const [focusTarget, setFocusTarget] = useState("");
   const title = useRef<HTMLHeadingElement>(null);
   const pending = useRef<AbortController | null>(null);
-  const validation = validatePortfolioDraft(name, holdings);
+  const validation = validatePortfolioDraft(name, holdings, maxHoldings);
   const currentStep = step === "name" ? 0 : step === "holdings" ? 1 : 2;
   const tickerInputId = prefix + "-search";
   const weightId = (symbol: string) => prefix + "-weight-" + symbol;
@@ -94,7 +98,7 @@ export function PortfolioOnboarding({
 
   function addHolding(ticker: TickerResult) {
     if (
-      holdings.length >= MAX_HOLDINGS ||
+      holdings.length >= maxHoldings ||
       holdings.some((row) => row.symbol === ticker.symbol)
     )
       return;
@@ -426,12 +430,13 @@ export function PortfolioOnboarding({
               inputId={tickerInputId}
               selectedSymbols={holdings.map((row) => row.symbol)}
               searchTickers={searchTickers}
+              allowDirectEntry={allowDirectEntry}
               onSelect={addHolding}
-              disabled={holdings.length >= MAX_HOLDINGS}
+              disabled={holdings.length >= maxHoldings}
             />
-            {holdings.length >= MAX_HOLDINGS && (
+            {holdings.length >= maxHoldings && (
               <p className="po-help" role="status">
-                You’ve reached the limit of {MAX_HOLDINGS} holdings.
+                You’ve reached the limit of {maxHoldings} holdings.
               </p>
             )}
             <div className="po-holdings-heading">
