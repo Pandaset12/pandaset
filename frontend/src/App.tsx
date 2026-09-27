@@ -309,7 +309,9 @@ export function Application({ onSignOut }: { onSignOut: () => Promise<void> }) {
       >
         Skip to content
       </a>
-      <div className="dashboard-shell">
+      <div
+        className={`dashboard-shell${route === "/" && active ? " dashboard-shell-overview" : ""}`}
+      >
         <WorkspaceNavigation route={route} onSignOut={onSignOut} />
         <div className="workspace-bar">
           <div>

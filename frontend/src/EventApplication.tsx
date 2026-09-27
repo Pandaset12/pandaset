@@ -253,7 +253,9 @@ export function EventApplication({
       >
         Skip to content
       </a>
-      <div className="dashboard-shell">
+      <div
+        className={`dashboard-shell${route === "/" && analysis && selected ? " dashboard-shell-overview" : ""}`}
+      >
         <WorkspaceNavigation route={route} onSignOut={onSignOut} />
         <div className="workspace-bar">
           <div className="workspace-portfolio-controls">

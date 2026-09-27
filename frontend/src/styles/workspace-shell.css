@@ -151,12 +151,23 @@
     display: block;
   }
 
+  .dashboard-shell.dashboard-shell-overview {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: 76px minmax(0, 1fr) auto;
+  }
+
   .workspace-navigation {
     position: relative;
     height: 76px;
     border-right: 0;
     border-bottom: 1px solid var(--border);
     z-index: 50;
+  }
+
+  .dashboard-shell-overview > .workspace-navigation {
+    grid-column: 1;
+    grid-row: 1;
   }
 
   .workspace-navigation-brand {
@@ -240,12 +251,39 @@
     padding: 10px 24px 0;
   }
 
+  .dashboard-shell-overview > .workspace-bar {
+    grid-column: 1;
+    grid-row: 2;
+    align-self: start;
+    justify-self: end;
+    width: max-content;
+    min-height: 0;
+    padding: 12px 24px 0;
+    position: relative;
+    z-index: 1;
+  }
+
   .dashboard-shell > .main-content {
     padding-top: 8px;
   }
 
+  .dashboard-shell-overview > .main-content {
+    grid-column: 1;
+    grid-row: 2;
+    padding-top: 12px;
+  }
+
+  .dashboard-shell-overview .page-heading > div:first-child {
+    max-width: calc(100% - min(320px, 40vw) - 16px);
+  }
+
   .dashboard-shell > .site-footer {
     margin: 0 24px;
+  }
+
+  .dashboard-shell-overview > .site-footer {
+    grid-column: 1;
+    grid-row: 3;
   }
 }
 
@@ -258,6 +296,14 @@
   .dashboard-shell > .workspace-bar {
     min-height: 64px;
     padding: 10px 20px 0;
+  }
+
+  .dashboard-shell-overview > .workspace-bar {
+    padding: 12px 20px 0;
+  }
+
+  .dashboard-shell-overview .page-heading > div:first-child {
+    max-width: calc(100% - min(240px, 48vw) - 16px);
   }
 
   .dashboard-shell .portfolio-selector {
