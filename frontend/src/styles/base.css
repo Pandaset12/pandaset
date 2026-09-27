@@ -334,6 +334,11 @@ svg {
 .brand > .panda-mark .panda-eye {
   fill: #fff;
 }
+.brand > .panda-mark .panda-face {
+  stroke: #171717;
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+}
 .brand > .panda-mark .panda-mouth {
   stroke: #171717;
 }
