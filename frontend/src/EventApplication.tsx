@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowUpRight, Check, XMark as X } from "./components/icons";
-import { Brand } from "./components/UI";
+import { WorkspaceNavigation } from "./components/WorkspaceNavigation";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { EditPortfolio } from "./components/EventEditPortfolio";
 import {
@@ -241,13 +241,6 @@ export function EventApplication({
     ) ?? [],
   );
   const assets = selected ? assetsForPortfolio(selected, instruments) : [];
-  const nav = [
-    ["/", "Overview"],
-    ["/risk", "Risk & exposure"],
-    ["/research", "Research"],
-    ["/what-if", "What-if lab"],
-  ];
-
   return (
     <>
       <a
@@ -260,197 +253,184 @@ export function EventApplication({
       >
         Skip to content
       </a>
-      <header className="site-header">
-        <div className="header-inner">
-          <Brand />
-          <nav aria-label="Main navigation">
-            {nav.map(([to, label]) => (
-              <a
-                key={to}
-                href={`#${to}`}
-                className={route === to ? "active" : ""}
-                aria-current={route === to ? "page" : undefined}
+      <div className="dashboard-shell">
+        <WorkspaceNavigation route={route} onSignOut={onSignOut} />
+        <div className="workspace-bar">
+          <div className="workspace-portfolio-controls">
+            {portfolios.length > 0 && (
+              <label className="portfolio-select-label">
+                Portfolio{" "}
+                <select
+                  aria-label="Select portfolio"
+                  value={selectedId}
+                  onChange={(e) => {
+                    setSelectedId(e.target.value);
+                    setOnboarding(false);
+                  }}
+                  disabled={listState !== "ready" || analysisBusy}
+                >
+                  {portfolios.map((p) => (
+                    <option key={p.portfolio_id} value={p.portfolio_id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            {listState === "ready" && portfolios.length > 0 && (
+              <button
+                className="text-button"
+                onClick={() => setOnboarding(true)}
               >
-                {label}
-              </a>
-            ))}
-          </nav>
-          <button
-            className="text-button sign-out-button"
-            onClick={() => void onSignOut()}
-          >
-            Sign out
-          </button>
-        </div>
-      </header>
-      <div className="workspace-bar">
-        <div className="workspace-portfolio-controls">
-          {portfolios.length > 0 && (
-            <label className="portfolio-select-label">
-              Portfolio{" "}
-              <select
-                aria-label="Select portfolio"
-                value={selectedId}
-                onChange={(e) => {
-                  setSelectedId(e.target.value);
-                  setOnboarding(false);
-                }}
-                disabled={listState !== "ready" || analysisBusy}
+                New portfolio
+              </button>
+            )}
+            {selected && (
+              <button
+                className="text-button"
+                disabled={analysisBusy}
+                onClick={() => void loadAnalysis(selected.portfolio_id, true)}
               >
-                {portfolios.map((p) => (
-                  <option key={p.portfolio_id} value={p.portfolio_id}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
-          {listState === "ready" && portfolios.length > 0 && (
-            <button className="text-button" onClick={() => setOnboarding(true)}>
-              New portfolio
-            </button>
-          )}
-          {selected && (
-            <button
-              className="text-button"
-              disabled={analysisBusy}
-              onClick={() => void loadAnalysis(selected.portfolio_id, true)}
-            >
-              {analysisBusy
-                ? "Loading analysis…"
-                : analysis
-                  ? "Refresh analysis"
-                  : "Create analysis"}
-            </button>
-          )}
+                {analysisBusy
+                  ? "Loading analysis…"
+                  : analysis
+                    ? "Refresh analysis"
+                    : "Create analysis"}
+              </button>
+            )}
+          </div>
         </div>
-      </div>
-      <main id="main-content" className="main-content" tabIndex={-1}>
-        {listState === "loading" ? (
-          <section className="api-state" role="status">
-            <strong>Loading your portfolios…</strong>
-          </section>
-        ) : listState === "error" ? (
-          <section className="api-state" role="alert">
-            <strong>Portfolios are unavailable.</strong>
-            <p>{listError}</p>
-            <button
-              className="button dark"
-              onClick={() => void loadPortfolios()}
-            >
-              Retry
-            </button>
-          </section>
-        ) : onboarding || portfolios.length === 0 ? (
-          <PortfolioOnboarding
-            maxHoldings={25}
-            allowDirectEntry={false}
-            key={onboarding ? "new" : "first"}
-            searchTickers={(q, options) => searchInstruments(q, options.signal)}
-            createPortfolio={(input, options) =>
-              createPortfolio(input, options.signal)
-            }
-            onOpenPortfolio={openPortfolio}
-            onCancel={
-              portfolios.length ? () => setOnboarding(false) : undefined
-            }
-          />
-        ) : route === "/what-if" && selected ? (
-          <ErrorBoundary>
-            <WhatIf
-              key={selected.portfolio_id}
-              portfolio={selected}
-              analysis={analysis}
-              analysisBusy={analysisBusy}
-              analysisError={visibleAnalysisError}
-              onRefreshAnalysis={() =>
-                void loadAnalysis(selected.portfolio_id, true)
+        <main id="main-content" className="main-content" tabIndex={-1}>
+          {listState === "loading" ? (
+            <section className="api-state" role="status">
+              <strong>Loading your portfolios…</strong>
+            </section>
+          ) : listState === "error" ? (
+            <section className="api-state" role="alert">
+              <strong>Portfolios are unavailable.</strong>
+              <p>{listError}</p>
+              <button
+                className="button dark"
+                onClick={() => void loadPortfolios()}
+              >
+                Retry
+              </button>
+            </section>
+          ) : onboarding || portfolios.length === 0 ? (
+            <PortfolioOnboarding
+              maxHoldings={25}
+              allowDirectEntry={false}
+              key={onboarding ? "new" : "first"}
+              searchTickers={(q, options) =>
+                searchInstruments(q, options.signal)
               }
-              assets={assets}
-              weights={weights}
-              onApply={apply}
-              query={query}
+              createPortfolio={(input, options) =>
+                createPortfolio(input, options.signal)
+              }
+              onOpenPortfolio={openPortfolio}
+              onCancel={
+                portfolios.length ? () => setOnboarding(false) : undefined
+              }
             />
-          </ErrorBoundary>
-        ) : analysisBusy && !analysis ? (
-          <section className="api-state" role="status">
-            <strong>Analyzing {selected?.name}…</strong>
-            <p>Retrieving adjusted price history for the saved allocation.</p>
-          </section>
-        ) : visibleAnalysisError && !analysis ? (
-          <section className="api-state" role="alert">
-            <strong>Analysis is unavailable.</strong>
-            <p>{visibleAnalysisError}</p>
-            <button
-              className="button dark"
-              onClick={() => selectedId && void loadAnalysis(selectedId, true)}
-            >
-              Retry analysis
-            </button>
-          </section>
-        ) : analysis && selected ? (
-          <ErrorBoundary>
-            {route === "/" ? (
-              <Overview
+          ) : route === "/what-if" && selected ? (
+            <ErrorBoundary>
+              <WhatIf
+                key={selected.portfolio_id}
+                portfolio={selected}
                 analysis={analysis}
-                assets={assets}
-                onEdit={() => setEdit(true)}
-                onBrief={() => setAiAction({ workflow: "analysis_briefing" })}
-                onMethod={() =>
-                  setToast(
-                    "This analysis uses saved adjusted-price history and the displayed data source.",
-                  )
+                analysisBusy={analysisBusy}
+                analysisError={visibleAnalysisError}
+                onRefreshAnalysis={() =>
+                  void loadAnalysis(selected.portfolio_id, true)
                 }
-              />
-            ) : route === "/risk" ? (
-              <Risk
-                analysis={analysis}
-                assets={assets}
-                onExplain={() =>
-                  setAiAction({
-                    workflow: "risk_explanation",
-                    question:
-                      "Explain the main sources of risk in this saved portfolio analysis.",
-                  })
-                }
-                onMethod={() =>
-                  setToast(
-                    "Risk estimates use the saved adjusted-price history.",
-                  )
-                }
-              />
-            ) : route === "/research" ? (
-              <Research
-                key={hash}
-                analysis={analysis}
                 assets={assets}
                 weights={weights}
-                onSummarizeSource={() =>
-                  setToast(
-                    "Issuer source summaries are unavailable for this saved analysis.",
-                  )
-                }
+                onApply={apply}
                 query={query}
               />
-            ) : null}
-            {analysisError && (
-              <p className="analysis-saving error" role="alert">
-                {analysisError}
-              </p>
-            )}
-          </ErrorBoundary>
-        ) : null}
-      </main>
-      <footer className="site-footer">
-        <span>
-          Pandaset<span className="footer-slash">/</span>A clearer view of what
-          you own.
-        </span>
-        <span>
-          Hypothetical analysis. No brokerage connection or trades.
-          <ArrowUpRight size={13} />
-        </span>
-      </footer>
+            </ErrorBoundary>
+          ) : analysisBusy && !analysis ? (
+            <section className="api-state" role="status">
+              <strong>Analyzing {selected?.name}…</strong>
+              <p>Retrieving adjusted price history for the saved allocation.</p>
+            </section>
+          ) : visibleAnalysisError && !analysis ? (
+            <section className="api-state" role="alert">
+              <strong>Analysis is unavailable.</strong>
+              <p>{visibleAnalysisError}</p>
+              <button
+                className="button dark"
+                onClick={() =>
+                  selectedId && void loadAnalysis(selectedId, true)
+                }
+              >
+                Retry analysis
+              </button>
+            </section>
+          ) : analysis && selected ? (
+            <ErrorBoundary>
+              {route === "/" ? (
+                <Overview
+                  analysis={analysis}
+                  assets={assets}
+                  onEdit={() => setEdit(true)}
+                  onBrief={() => setAiAction({ workflow: "analysis_briefing" })}
+                  onMethod={() =>
+                    setToast(
+                      "This analysis uses saved adjusted-price history and the displayed data source.",
+                    )
+                  }
+                />
+              ) : route === "/risk" ? (
+                <Risk
+                  analysis={analysis}
+                  assets={assets}
+                  onExplain={() =>
+                    setAiAction({
+                      workflow: "risk_explanation",
+                      question:
+                        "Explain the main sources of risk in this saved portfolio analysis.",
+                    })
+                  }
+                  onMethod={() =>
+                    setToast(
+                      "Risk estimates use the saved adjusted-price history.",
+                    )
+                  }
+                />
+              ) : route === "/research" ? (
+                <Research
+                  key={hash}
+                  analysis={analysis}
+                  assets={assets}
+                  weights={weights}
+                  onSummarizeSource={() =>
+                    setToast(
+                      "Issuer source summaries are unavailable for this saved analysis.",
+                    )
+                  }
+                  query={query}
+                />
+              ) : null}
+              {analysisError && (
+                <p className="analysis-saving error" role="alert">
+                  {analysisError}
+                </p>
+              )}
+            </ErrorBoundary>
+          ) : null}
+        </main>
+        <footer className="site-footer">
+          <span>
+            Pandaset<span className="footer-slash">/</span>A clearer view of
+            what you own.
+          </span>
+          <span>
+            Hypothetical analysis. No brokerage connection or trades.
+            <ArrowUpRight size={13} />
+          </span>
+        </footer>
+      </div>
       {edit && selected && (
         <EditPortfolio
           assets={assets}
