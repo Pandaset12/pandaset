@@ -15,9 +15,14 @@
   --bar-secondary: #b5b5b5;
   --action: #171717;
   --action-hover: #363636;
-  --positive: #171717;
-  --negative: #747474;
-  --negative-surface: #eeeeee;
+  --data-primary: #2d6f91;
+  --data-primary-on-dark: #86c3df;
+  --data-negative: #a84f43;
+  --chart-primary: var(--data-primary);
+  --chart-comparison: #777;
+  --positive: var(--data-primary);
+  --negative: var(--data-negative);
+  --negative-surface: #f8eae7;
   --warning: #626262;
   --overlay: #171717e6;
   --overlay-ink: #fff;
@@ -56,25 +61,6 @@
   color: var(--ink);
   background: #f0f0f0;
   border-color: var(--border);
-}
-
-.dashboard-shell .allocation-mosaic > div {
-  background: #717171 !important;
-  background-color: #717171 !important;
-}
-
-.dashboard-shell .allocation-mosaic > div:nth-child(3n + 1) {
-  background: #171717 !important;
-  background-color: #171717 !important;
-}
-
-.dashboard-shell .allocation-mosaic > div:nth-child(3n + 2) {
-  background: #9b9b9b !important;
-  background-color: #9b9b9b !important;
-}
-
-.dashboard-shell .exposure-list i {
-  background: #626262 !important;
 }
 
 .dashboard-shell
@@ -144,7 +130,7 @@
 }
 
 .dashboard-overview .focus-panel .focus-track.bright i {
-  background: #f8f8f8;
+  background: var(--data-primary-on-dark);
 }
 
 .dashboard-overview .focus-panel :focus-visible,
@@ -256,6 +242,15 @@
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--surface);
+}
+
+.dashboard-risk .risk-bar,
+.dashboard-risk .legend-square:not(.pale) {
+  background: var(--data-primary);
+}
+
+.dashboard-risk .risk-bar.negative {
+  background: var(--data-negative);
 }
 
 /* Research: a directory, a desk, then further reading. */

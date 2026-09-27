@@ -63,13 +63,13 @@
 }
 .legend-line {
   display: inline-block;
-  background: var(--bamboo);
+  background: var(--chart-primary, var(--bamboo));
   width: 16px;
   height: 2px;
 }
 .legend-line.secondary {
   height: 0;
-  border-top: 2px dashed var(--comparison);
+  border-top: 2px dashed var(--chart-comparison, var(--comparison));
   background: none;
 }
 .chart-legend .chart-readout {

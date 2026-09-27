@@ -254,7 +254,7 @@ export default function Risk({
                               ? "var(--panel-deep)"
                               : value < 0
                                 ? `color-mix(in srgb, var(--negative) ${intensity}%, var(--surface))`
-                                : `color-mix(in srgb, var(--bamboo) ${intensity}%, var(--surface))`;
+                                : `color-mix(in srgb, var(--data-primary, var(--bamboo)) ${intensity}%, var(--surface))`;
                           return (
                             <td
                               key={column.symbol}
