@@ -90,26 +90,6 @@ export function AuthScreen({
             <div className="auth-scene-panda">
               <LandingPanda />
             </div>
-            <svg className="auth-scene-bamboo" viewBox="0 0 84 150" fill="none">
-              <path
-                d="M33 145C37 110 42 72 49 15"
-                stroke="currentColor"
-                strokeWidth="3"
-                strokeLinecap="round"
-              />
-              <path
-                d="M43 78C19 76 11 62 8 45C26 46 40 57 43 78Z"
-                fill="currentColor"
-              />
-              <path
-                d="M46 60C70 58 77 44 79 29C61 31 49 41 46 60Z"
-                fill="currentColor"
-              />
-              <path
-                d="M38 105C18 105 10 94 5 82C21 82 34 89 38 105Z"
-                fill="currentColor"
-              />
-            </svg>
           </div>
         </section>
         <section className="auth-card" aria-labelledby="auth-title">
