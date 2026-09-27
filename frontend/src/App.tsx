@@ -260,23 +260,16 @@ export function Application({ onSignOut }: { onSignOut: () => Promise<void> }) {
       <div className="onboarding-page">
         <header className="auth-header onboarding-header">
           <Brand />
-          <span>Your investor workspace</span>
-          <div className="onboarding-header-actions">
-            {showOnboarding && portfolios.length > 0 && (
+          {showOnboarding && portfolios.length > 0 && (
+            <div className="onboarding-header-actions">
               <button
                 className="text-button onboarding-header-back"
                 onClick={() => setShowOnboarding(false)}
               >
                 Back to saved portfolios
               </button>
-            )}
-            <button
-              className="text-button sign-out-button"
-              onClick={() => void onSignOut()}
-            >
-              Sign out
-            </button>
-          </div>
+            </div>
+          )}
         </header>
         <main className="onboarding-main" id="main-content">
           <PortfolioOnboarding

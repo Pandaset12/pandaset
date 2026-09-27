@@ -1119,18 +1119,11 @@
   .onboarding-header {
     padding-inline: 20px;
   }
-  .onboarding-header > span {
-    display: none;
-  }
   .onboarding-header-actions {
     gap: 14px;
   }
   .onboarding-header-actions button {
     font-size: 0.76rem;
-  }
-  .onboarding-header .sign-out-button {
-    order: initial;
-    margin: 0;
   }
   .portfolio-onboarding {
     width: min(540px, calc(100% - 32px));
