@@ -1,0 +1,76 @@
+# Integrated smoke test — September 26, 2026
+
+Baseline: `main` at `5ccba9b`. Tested locally with the real Alpaca account,
+`MARKET_DATA_PROVIDER=alpaca`, `ALPACA_HISTORY_FEED=iex`, and isolated SQLite
+storage. History caching was left disabled. No keys or local test harnesses are
+included in this change.
+
+## Result
+
+No blocking 500s or fictional-price fallback reproduced in the tested standard
+workspace. Fixed two incorrect source labels: holdings outside the built-in
+library (tested with SPY) claimed to use sample prices, and the ticker preflight
+error did the same. Both now defer to the configured provider. No What-if UI,
+quant formulas, auth implementation, or Event Lab code changed.
+
+This is **not a full deployment sign-off**. Only Alpaca credentials were available
+locally. Auth used a synthetic upstream user response against the real v1 API
+ownership checks; the browser dashboard used a separate local test-session entry
+point. Actual Supabase login/session refresh and the production mode selector
+were not exercised. Gemini was configured in Gemini mode without a key to test
+failure behavior. Event Lab was disabled, not tested as a working live service.
+
+## Checks
+
+| Flow | Result |
+| --- | --- |
+| Landing → `app.html` | Landing and link work. The real app correctly shows missing Supabase setup instructions in this environment. |
+| Portfolio create | API create and browser onboarding pass, including direct-entry SPY at 100%. |
+| Edit/reload | Browser edit from AAPL/MSFT 60/40 to 65/35 persists after reload and recalculates metrics. |
+| Saved snapshots | Read-back matches the saved analysis. Edits invalidate old snapshots. Recreating the API app with the same SQLite file preserves portfolio and snapshot. |
+| Ownership | No bearer token: 401. Different synthetic owner: 404 for portfolio and analysis. Not a real Supabase test. |
+| Overview | Real IEX last-trade prices/timestamps render separately from adjusted-history risk calculations. |
+| Risk | Saved allocation, risk contributions and correlation matrix render from the live analysis. |
+| Research | 252-return histories load. All eight built-in tickers return aligned history together; direct-entry SPY and comparison history also load. Source identifies `alpaca_adjusted_daily` and IEX. |
+| Allocation What-if | API comparisons with changed weights and a new symbol pass without mutating saved holdings. Browser five-point transfer/comparison passes. Did not change Nel's UI. |
+| Gemini actions | Ask, briefing, risk explanation, scenario explanation and research summary return explicit unavailable states with `GEMINI_NOT_CONFIGURED`, not invented AI success or 500s. Briefing fallback also verified in browser. |
+| Missing Alpaca keys | Analysis returns safe 502; optional quotes return 503. No sample fallback. |
+| Unknown ticker | History returns 404, not a 500. |
+| Event Lab | Disabled v2 path returns 503. No real Mongo, jobs, event analysis or event chat tested. |
+| Browser checks | Corrected Research copy verified at desktop/mobile sizes; no horizontal overflow at the mobile check and no captured console errors/warnings. |
+
+The last completed market session was September 25, 2026. Latest IEX trades also
+reported September 25. These are expected weekend timestamps, not evidence of a
+continuously updating weekend feed. Daily history is not an intraday risk model.
+
+## Automated validation
+
+- Backend: 218 tests passed.
+- Python quant engine: 88 tests passed.
+- Frontend/TypeScript quant: 73 tests passed after the fix (72 on baseline).
+- Production build, backend compilation, changed-file formatting and
+  `git diff --check`: passed.
+- Both provenance assertions failed before the fix and passed afterward.
+
+## Still needed on the judging setup
+
+1. Supply the real frontend/backend Supabase configuration and use a test
+   account: sign in, create/edit/reload, sign out/back in, and check a second
+   account cannot read the first account's records. Confirm storage survives a
+   deployment restart, not just a local app restart.
+2. With Gemini configured, run each action and verify `status: complete`, the
+   selected analysis ID, citations and explicitly requested source evidence.
+   Missing-key fallback passing does not validate a real model/key/quota.
+3. If Event Lab will be shown, test it in the configured environment: owner-scoped
+   portfolio/analysis persistence, event draft/confirm, worker completion,
+   saved-run reload and chat. Keep it disabled if those dependencies/release
+   gates are unavailable. See [Event Lab release gates](event-lab-release-gates.md).
+4. Retest Nel's final allocation UI on the resulting main commit, including a
+   single holding, adding a symbol, fractional percentages and the eight-symbol
+   baseline/proposal union.
+5. Confirm applicable Alpaca display/retention rights before external judging;
+   this test does not establish those rights or change the release-gate settings.
+
+Use the existing [Alpaca history setup](../backend/docs/ALPACA_HISTORY.md) for
+server-side credentials. The Vite startup URL and API proxy instructions alone
+do not provide Supabase, Gemini or Event Lab configuration.

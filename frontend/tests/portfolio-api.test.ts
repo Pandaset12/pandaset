@@ -51,7 +51,7 @@ test("What-if accepts persisted symbols and fractional allocations outside the s
   });
 });
 
-test("unsupported edited tickers fail sample-history verification before save", async () => {
+test("failed history verification names the ticker without inventing sample provenance", async () => {
   stubFetch((url) => {
     assert.match(url, /symbols=TSLA/);
     return {
@@ -62,7 +62,10 @@ test("unsupported edited tickers fail sample-history verification before save", 
   });
   await assert.rejects(
     verifyPortfolioHistory([{ symbol: "TSLA", weight: 1 }]),
-    /TSLA/,
+    {
+      message:
+        "Could not verify price history for TSLA with the configured market-data provider. Try again or choose another ticker.",
+    },
   );
 });
 

@@ -31,6 +31,14 @@ test("backend portfolio symbols, including SPY, define the workspace holdings", 
   );
 });
 
+test("unknown holding metadata does not invent a market-data source", () => {
+  const [holding] = workspaceAssets(portfolio([{ symbol: "SPY", weight: 1 }]));
+  assert.equal(
+    holding.description,
+    "Price history comes from the configured market-data provider. See the chart for source and freshness.",
+  );
+});
+
 test("fractional backend weights stay exact and immediately valid", () => {
   const saved = portfolio([
     { symbol: "SPY", weight: 0.255 },

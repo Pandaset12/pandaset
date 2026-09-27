@@ -306,7 +306,7 @@ export async function verifyPortfolioHistory(
       await getMarketHistory([holding.symbol], 2);
     } catch {
       throw new Error(
-        `Could not verify sample price history for ${holding.symbol}. Try again or choose another ticker.`,
+        `Could not verify price history for ${holding.symbol} with the configured market-data provider. Try again or choose another ticker.`,
       );
     }
   }

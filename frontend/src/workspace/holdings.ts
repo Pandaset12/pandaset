@@ -19,7 +19,8 @@ export function workspaceAsset(symbol: string): Asset {
       target: 0,
       vol: 0,
       beta: 0,
-      description: "This holding uses the backend's sample price history.",
+      description:
+        "Price history comes from the configured market-data provider. See the chart for source and freshness.",
       thesis: "",
       watch: "",
       source: "",
