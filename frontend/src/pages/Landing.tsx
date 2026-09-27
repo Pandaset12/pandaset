@@ -435,7 +435,7 @@ export default function Landing() {
               starts with curiosity.
             </h2>
             <DemoLink />
-            <p>Explore a sample portfolio. No account needed.</p>
+            <p>Sign in to build and explore your portfolio.</p>
           </div>
           <footer className="lp-footer lp-wrap">
             <a className="lp-brand" href="./">
