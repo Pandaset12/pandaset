@@ -8,7 +8,7 @@ import {
   MagnifyingGlass as Search,
   InformationCircle as Info,
 } from "../components/icons";
-import { researchNotes, type Asset } from "../../../quant/data";
+import type { Asset } from "../../../quant/data";
 import { pct, showAnnualizedReturn, signedPct } from "../../../quant/analytics";
 import {
   AnalysisDetails,
@@ -17,13 +17,7 @@ import {
   observationCount,
   SampleContext,
 } from "../components/AnalysisContext";
-import {
-  AssetMark,
-  PageHeading,
-  SectionTitle,
-  TextLink,
-  Empty,
-} from "../components/UI";
+import { AssetMark, PageHeading, SectionTitle, Empty } from "../components/UI";
 import { LineChart } from "../components/LineChart";
 import { LiveQuotesPanel } from "../components/LiveQuotesPanel";
 import { allocationPercent } from "../workspace/holdings";
@@ -33,14 +27,12 @@ export default function Overview({
   analysis,
   holdings: portfolioAssets,
   onEdit,
-  onAsk,
   onBrief,
   onMethod,
 }: {
   analysis: AnalysisResponse;
   holdings: Asset[];
   onEdit: () => void;
-  onAsk: (q?: string) => void;
   onBrief: () => void;
   onMethod: () => void;
 }) {
@@ -96,11 +88,6 @@ export default function Overview({
     benchmark?.every((value): value is number => value !== null)
       ? benchmark
       : undefined;
-  const matchedNotes = researchNotes
-    .filter((note) =>
-      note.symbols.some((symbol) => (analysis.weights[symbol] ?? 0) > 0),
-    )
-    .slice(0, 3);
   const returnContributions = Object.values(analysis.return_contribution ?? {});
   const contributionRange = Math.max(
     0.0001,
@@ -292,7 +279,7 @@ export default function Overview({
           </strong>
         </div>
       </div>
-      <div className="overview-bottom">
+      <div className="overview-bottom overview-bottom-single">
         <section className="holdings-section">
           <SectionTitle eyebrow="THE BUILDING BLOCKS" title="Your holdings">
             <div className="holdings-actions">
@@ -439,50 +426,6 @@ export default function Overview({
               Try another company name or ticker.
             </Empty>
           )}
-          <p className="table-footnote">
-            Return contribution comes from the saved modeled analysis. Undefined
-            values stay unavailable.
-          </p>
-        </section>
-        <section className="briefing">
-          <SectionTitle eyebrow="CONNECT THE DOTS" title="On your radar">
-            <TextLink to="#/research">Research</TextLink>
-          </SectionTitle>
-          <p className="table-footnote">
-            Curated background reading for your holdings.
-          </p>
-          {matchedNotes.map((note, index) => (
-            <a
-              className="briefing-item"
-              key={note.id}
-              href={`#/research?note=${note.id}`}
-            >
-              <span className="note-index">0{index + 1}</span>
-              <div>
-                <div className="eyebrow">EDITORIAL PRIMER</div>
-                <h3>{note.title}</h3>
-                <div className="briefing-meta">
-                  {note.symbols.slice(0, 3).map((symbol) => (
-                    <span key={symbol}>{symbol}</span>
-                  ))}
-                  <ArrowUpRight size={16} />
-                </div>
-              </div>
-            </a>
-          ))}
-          <div className="analyst-callout">
-            <ChatBubbleLeftRight size={20} />
-            <div>
-              <strong>Make sense of the numbers.</strong>
-              <button
-                className="text-button"
-                onClick={() => onAsk("What is my biggest risk?")}
-              >
-                Ask about your portfolio
-                <ArrowRight size={15} />
-              </button>
-            </div>
-          </div>
         </section>
       </div>
     </>

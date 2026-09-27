@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import {
-  ArrowUpRight,
   ChatBubbleLeftRight,
   Check,
   ChevronDown,
@@ -410,7 +409,6 @@ export function Application({ onSignOut }: { onSignOut: () => Promise<void> }) {
                 holdings={workspaceHoldings}
                 analysis={active.analysis}
                 onEdit={() => setEdit(true)}
-                onAsk={(q) => setAnalyst(q || "")}
                 onBrief={() => setAiWorkflow({ workflow: "analysis_briefing" })}
                 onMethod={() => setMethod(true)}
               />
@@ -486,10 +484,6 @@ export function Application({ onSignOut }: { onSignOut: () => Promise<void> }) {
           Pandaset<span className="footer-slash">/</span>A clearer view of what
           you own.
         </span>
-        <button className="text-button" onClick={() => setMethod(true)}>
-          Data & methodology
-          <ArrowUpRight size={13} />
-        </button>
       </footer>
       {edit && active && (
         <EditPortfolio
