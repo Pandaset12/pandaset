@@ -1,12 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
-import {
-  ChatBubbleLeftRight,
-  Check,
-  ChevronDown,
-  InformationCircle as Info,
-  XMark as X,
-} from "./components/icons";
+import { Check, ChevronDown, XMark as X } from "./components/icons";
 import {
   analyzeExistingPortfolio,
   createPortfolio,
@@ -23,8 +17,6 @@ import { Brand } from "./components/UI";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { EditPortfolio } from "./components/EditPortfolio";
 import { MethodologyModal } from "./components/MethodologyModal";
-import { historySessionLabel } from "./components/AnalysisContext";
-import { Analyst } from "./components/Analyst";
 import { AuthScreen } from "./components/AuthScreen";
 import { AuthBoundary } from "./components/AuthBoundary";
 import { PortfolioOnboarding } from "./components/onboarding/PortfolioOnboarding";
@@ -54,7 +46,6 @@ export function Application({ onSignOut }: { onSignOut: () => Promise<void> }) {
   const [weights, setWeights] = useState<number[]>([]);
   const [edit, setEdit] = useState(false);
   const [method, setMethod] = useState(false);
-  const [analyst, setAnalyst] = useState<string | null>(null);
   const [aiWorkflow, setAiWorkflow] = useState<AIWorkflowAction | null>(null);
   const [toast, setToast] = useState("");
   const [active, setActive] = useState<ActiveAnalysis | null>(null);
@@ -132,7 +123,6 @@ export function Application({ onSignOut }: { onSignOut: () => Promise<void> }) {
     setActive(null);
     setAnalysisError("");
     setEdit(false);
-    setAnalyst(null);
     setAiWorkflow(null);
     setShowOnboarding(false);
     void loadAnalysis(portfolio);
@@ -176,7 +166,6 @@ export function Application({ onSignOut }: { onSignOut: () => Promise<void> }) {
         setActive(null);
         setWeights(portfolioPercentages(updated));
         setEdit(false);
-        setAnalyst(null);
         setAiWorkflow(null);
         if (!(await loadAnalysis(updated))) return false;
       } else {
@@ -215,7 +204,6 @@ export function Application({ onSignOut }: { onSignOut: () => Promise<void> }) {
     ["/research", "Research"],
     ["/what-if", "What-if lab"],
   ];
-  const asOf = active ? historySessionLabel(active.analysis) : "Unavailable";
   const workspaceHoldings = selectedPortfolio
     ? workspaceAssets(selectedPortfolio)
     : [];
@@ -292,15 +280,6 @@ export function Application({ onSignOut }: { onSignOut: () => Promise<void> }) {
             ))}
           </nav>
           <button
-            className="analyst-button"
-            onClick={() => setAnalyst("")}
-            disabled={!active}
-          >
-            <ChatBubbleLeftRight size={17} />
-            <span>Ask Panda</span>
-            <span className="key-hint">↗</span>
-          </button>
-          <button
             className="text-button sign-out-button"
             onClick={() => void onSignOut()}
           >
@@ -351,19 +330,7 @@ export function Application({ onSignOut }: { onSignOut: () => Promise<void> }) {
               </div>
             )}
           </div>
-          <button className="demo-badge" onClick={() => setMethod(true)}>
-            {active?.analysis.data_mode === "live"
-              ? active.analysis.data_quality.source === "alpaca_adjusted_daily"
-                ? "ALPACA HISTORY"
-                : "MARKET HISTORY"
-              : "SAMPLE DATA"}
-            <Info size={12} />
-          </button>
         </div>
-        <span className="as-of">
-          As of {asOf}
-          <span className="separator">/</span>USD
-        </span>
       </div>
       <main id="main-content" className="main-content" tabIndex={-1}>
         {analysisLoading && !active ? (
@@ -430,7 +397,6 @@ export function Application({ onSignOut }: { onSignOut: () => Promise<void> }) {
                 key={hash}
                 holdings={workspaceHoldings}
                 weights={weights}
-                onAsk={(q) => setAnalyst(q || "")}
                 onSummarizeSource={(symbol) =>
                   setAiWorkflow({ workflow: "research_summary", symbol })
                 }
@@ -500,14 +466,6 @@ export function Application({ onSignOut }: { onSignOut: () => Promise<void> }) {
         <MethodologyModal
           analysis={active?.analysis ?? null}
           onClose={() => setMethod(false)}
-        />
-      )}
-      {analyst !== null && active && (
-        <Analyst
-          portfolioId={active.portfolio.portfolio_id}
-          analysis={active.analysis}
-          question={analyst}
-          onClose={() => setAnalyst(null)}
         />
       )}
       {aiWorkflow && active && (

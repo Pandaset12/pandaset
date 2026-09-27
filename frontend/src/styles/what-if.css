@@ -162,9 +162,6 @@
   text-transform: none;
   letter-spacing: normal;
 }
-.workspace-portfolio-controls .demo-badge {
-  cursor: default;
-}
 .event-lab-grid {
   display: grid;
   grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);

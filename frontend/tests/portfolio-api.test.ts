@@ -4,7 +4,6 @@ import { assets, initialWeights } from "../../quant/data";
 import {
   ApiError,
   analyzePortfolio,
-  askPortfolio,
   comparePortfolio,
   createRequestGuard,
   getMarketHistory,
@@ -280,41 +279,26 @@ test("cancelling one quote consumer does not cancel another", async () => {
   assert.equal((await second).feed, "IEX");
 });
 
-test("what-if uses decimal weights and Ask Panda sends the active analysis ID", async () => {
+test("what-if sends decimal weights", async () => {
   const calls: { url: string; body: unknown }[] = [];
   stubFetch((url, init) => {
     calls.push({
       url,
       body: init?.body ? JSON.parse(String(init.body)) : null,
     });
-    return url.includes("what-if")
-      ? {
-          current_analysis: {},
-          proposed_analysis: {},
-          delta: {},
-          difference_convention: "proposed minus baseline",
-        }
-      : {
-          status: "demo",
-          answer: "Demo",
-          citations: [],
-          warnings: [],
-          disclaimer: "Educational only",
-          analysis_id: "analysis_saved",
-          error_code: null,
-          analyst_mode: "demo",
-        };
+    assert.match(url, /what-if$/);
+    return {
+      current_analysis: {},
+      proposed_analysis: {},
+      delta: {},
+      difference_convention: "proposed minus baseline",
+    };
   });
   await comparePortfolio("portfolio_saved", [0, 0, 0, 0, 0, 100, 0, 0]);
-  await askPortfolio("portfolio_saved", "analysis_saved", "Explain risk");
+  assert.equal(calls.length, 1);
   assert.deepEqual((calls[0].body as { holdings: unknown }).holdings, [
     { symbol: "TLT", weight: 1 },
   ]);
-  assert.equal(calls[1].url, "/api/v1/portfolios/portfolio_saved/ask");
-  assert.deepEqual(calls[1].body, {
-    analysis_id: "analysis_saved",
-    question: "Explain risk",
-  });
 });
 
 test("API errors expose only the safe message and request ID", async () => {

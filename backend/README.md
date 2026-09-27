@@ -97,20 +97,9 @@ token local. Do not paste it into issues or commit it.
 1. `POST /api/v1/portfolios` creates a portfolio owned by the current investor:
    `{"name":"My portfolio","holdings":[{"symbol":"SPY","weight":1.0}]}`.
    Copy its `portfolio_id`; `GET /api/v1/portfolios` lists your saved portfolios.
-2. `POST /api/v1/portfolios/{portfolio_id}/analysis` creates a saved analysis. Copy its
-   `analysis_id`.
-3. `POST /api/v1/portfolios/{portfolio_id}/ask` with:
-~~~json
-{
-  "analysis_id": "paste-the-returned-analysis-id",
-  "question": "What is my biggest risk?",
-  "web_search": false,
-  "source_urls": []
-}
-~~~
-
-The default answer has `status: "demo"` and explicitly labels the fixture as
-fictional. It is a deterministic snapshot summary, not an arbitrary-question AI.
+2. `POST /api/v1/portfolios/{portfolio_id}/analysis` creates a saved analysis.
+   Its `analysis_id` can be used to retrieve the snapshot or request a briefing
+   or risk explanation.
 The legacy seeded `demo` portfolio is unassigned and is not accessible to investor
 accounts; create an owned portfolio for manual testing. Any valid allocation
 using NVDA, MSFT, AAPL, JPM, VTI, TLT, AMD, GLD, or SPY can be analyzed and compared
@@ -134,7 +123,6 @@ is a sample session-date label, not a live quote or exchange closing timestamp.
 | GET | `/api/v1/portfolios/{id}/analyses/{analysis_id}` | Read that snapshot |
 | GET | `/api/v1/quotes?symbols=AAPL&symbols=MSFT` | Optional Alpaca IEX latest-trade snapshots; separate from daily portfolio analysis |
 | GET | `/api/v1/assets/search?q=Apple` | Authenticated company/symbol lookup; sample symbols in demo mode, read-only Alpaca US equity directory in Alpaca mode |
-| POST | `/api/v1/portfolios/{id}/ask` | Explain exactly the selected saved snapshot |
 | POST | `/api/v1/portfolios/{id}/what-if` | Compare saved and proposed holdings on the selected market-data history |
 | POST | `/api/v1/portfolios/{id}/briefing` | Write a briefing from one saved analysis |
 | POST | `/api/v1/portfolios/{id}/risk/explanation` | Explain risk using one saved analysis |
@@ -149,7 +137,7 @@ V1 errors use `{"error":{"code":"...","message":"..."}}`. Input errors are
 422, missing/invalid sessions 401, unconfigured auth 503, missing or another
 investor's objects 404, a portfolio changed during analysis 409, and provider
 errors 502. The inactive precomputed test provider can also return 501.
-AI failures on Ask Panda and the contextual workflow routes return HTTP 200
+AI failures on the contextual workflow routes return HTTP 200
 with `status: "unavailable"`, an `error_code` when available, and warnings.
 Saved metrics or the selected Research source remain accessible. Quant-provider
 failures on What-if routes still use HTTP errors. The frontend must check
@@ -161,10 +149,9 @@ failures emit JSON logs with that ID, error code, exception type and stack
 locations. Raw exception messages, prompts, credentials and upstream payloads
 are not logged. CORS exposes the ID header so the frontend can report it.
 
-The initial `/api/portfolios/{id}/analytics`, `/api/analyst` and
-`/api/what-if` routes remain deprecated compatibility routes. They retain their
-`detail` error envelope and older AI error HTTP statuses. New frontend work
-should use v1.
+The initial `/api/portfolios/{id}/analytics` and `/api/what-if` routes remain
+deprecated compatibility routes. They retain their `detail` error envelope.
+New frontend work should use v1.
 
 ## Enable Gemini
 
@@ -236,7 +223,6 @@ deterministic calculation runs continue. An exhausted fallback
 returns the existing safe partial response for v1 or fails the v2 draft;
 sequential attempts can take up to twice `GEMINI_TIMEOUT_SECONDS`. Each action
 receives only its scoped context:
-Ask Panda gets its selected snapshot and explicitly requested web inputs;
 Overview and Risk get one validated snapshot; What-if gets the server-calculated
 baseline, proposal, differences, and assumptions; Research gets one curated
 source URL.
@@ -252,26 +238,15 @@ This is a conservative guard, not proof that every qualitative statement is true
 or that all possible numerical paraphrases are detected. It can also reject
 otherwise harmless number-like prose. Live answer quality still needs review.
 
-**Tool access is workflow-scoped.** Ask Panda has no web tools by default;
-explicit `web_search: true` enables Google Search and URL Context, and explicit
-`source_urls` enable URL Context alone. Briefing, Risk, and What-if use no web
+**Tool access is workflow-scoped.** Briefing, Risk, and What-if use no web
 tools. Research enables URL Context only, for the hardcoded official issuer URL
 selected in the Research page; it does not use Google Search. Research does not
 crawl pages in the background. Choose a model supporting structured output and
 the URL Context tool.
 
-User-supplied sources require HTTPS domain URLs without credentials. IP addresses,
-single-label hosts, empty DNS labels, and `.localhost`, `.local`, or `.internal`
-names are rejected, including their trailing-root-dot forms. Public domains with
-one trailing root dot remain valid. This is syntactic input validation, not a
-DNS-resolution or redirect audit; retrieval and retrieval status come from Gemini.
-
-The response includes `sources`, `grounding_supports`, `url_retrievals` and
-`search_suggestions_html`. Preserve source array order: grounding indices refer
-to it. Text offsets refer to `grounding_text` (the original JSON model response),
-**not** the parsed `answer`. The frontend must handle Google's
-[search display requirements](https://ai.google.dev/gemini-api/docs/generate-content/google-search)
-and [URL retrieval status](https://ai.google.dev/gemini-api/docs/generate-content/url-context).
+Research responses include retrieval status and source evidence. Text offsets
+refer to `grounding_text` (the original model response), not the parsed answer.
+The frontend must handle [URL retrieval status](https://ai.google.dev/gemini-api/docs/generate-content/url-context).
 
 Enabling Gemini does not enable live prices. Quant calculations run through the
 provider before any scenario explanation. The explanation route cannot apply or
@@ -312,7 +287,7 @@ Passing them does not verify a live Gemini key, market API, MongoDB or Tiger Dat
 
 Main files: `api_v1.py` (routes), `schemas.py` (contracts), `storage.py`
 (local persistence), `providers.py` (integration boundary), `gemini_service.py`
-(Gemini adapter), `prompts/analyst.txt` (versioned instructions).
+(Gemini adapter), and `prompts/` (versioned workflow instructions).
 
 ## Recovered data-layer drafts
 

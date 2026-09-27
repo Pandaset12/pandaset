@@ -11,7 +11,6 @@ from backend.gemini_service import (
     GeminiUnavailable,
     extract_evidence,
     generate_analysis_workflow,
-    generate_answer,
     generate_research_summary,
     generate_scenario_workflow,
     metric_summary,
@@ -19,7 +18,7 @@ from backend.gemini_service import (
     resolve_citations,
 )
 from backend.providers import demo_metrics
-from backend.schemas import AnalystRequest, GroundedAnswer
+from backend.schemas import GroundedAnswer
 
 
 class FakeClient:
@@ -45,35 +44,6 @@ def settings(**overrides):
     return Settings(_env_file=None, analyst_mode="gemini", gemini_api_key="test-only", **overrides)
 
 
-def test_structured_answer_uses_backend_values_and_selected_tools():
-    raw = json.dumps({"explanation": "Demo NVDA is the largest risk contributor.",
-                      "cited_fields": ["risk_contribution.NVDA", "risk_contribution.NVDA"]})
-    client = FakeClient(response_with_text(raw))
-    constructor_options = {}
-
-    def factory(**kwargs):
-        constructor_options.update(kwargs)
-        return client
-
-    result = asyncio.run(generate_answer(
-        AnalystRequest(question="Explain risk", web_search=False, source_urls=["https://www.sec.gov/"]),
-        demo_metrics(), settings(), client_factory=factory,
-    ))
-    assert result["citations"][0].model_dump() == {"field": "risk_contribution.NVDA", "value": 0.41}
-    assert len(result["citations"]) == 1
-    assert result["grounding_text"] == raw
-    assert result["sources"] == []
-    assert "41.0%" in result["answer"]
-    call = client.models.generate_content.call_args.kwargs
-    assert len(call["config"].tools) == 1
-    assert call["config"].tools[0].url_context is not None
-    assert call["config"].tools[0].google_search is None
-    context = json.loads(call["contents"])
-    assert context["available_metrics"]["risk_contribution.NVDA"] == 0.41
-    assert constructor_options["http_options"].retry_options.attempts == 2
-    assert client.closed
-
-
 @pytest.mark.parametrize("raw", [
     "not JSON",
     '{"explanation":"  ","cited_fields":[]}',
@@ -83,9 +53,9 @@ def test_structured_answer_uses_backend_values_and_selected_tools():
 def test_invalid_model_output_is_rejected(raw):
     client = FakeClient(response_with_text(raw))
     with pytest.raises(GeminiUnavailable):
-        asyncio.run(generate_answer(
-            AnalystRequest(question="Explain risk"), demo_metrics(), settings(),
-            client_factory=lambda **_: client,
+        asyncio.run(generate_analysis_workflow(
+            "risk_explanation", "Explain risk", demo_metrics(), "analysis-42",
+            settings(), client_factory=lambda **_: client,
         ))
     assert client.closed
 
@@ -96,8 +66,8 @@ def test_entire_gemini_operation_times_out_and_closes_client():
 
     client = FakeClient(side_effect=slow_response)
     with pytest.raises(GeminiUnavailable, match="time limit"):
-        asyncio.run(generate_answer(
-            AnalystRequest(question="Explain risk"), demo_metrics(),
+        asyncio.run(generate_analysis_workflow(
+            "risk_explanation", "Explain risk", demo_metrics(), "analysis-42",
             settings(gemini_timeout_seconds=0.02), client_factory=lambda **_: client,
         ))
     assert client.closed
@@ -128,26 +98,14 @@ def test_out_of_range_source_indices_are_not_forwarded():
     "NVDA contributes \u4e5d\u5341\u4e5d% of risk.",
     "NVDA contributes \u00bd of risk.",
 ])
-def test_numerical_prose_rejected_even_with_valid_metric_reference(explanation):
+def test_risk_workflow_rejects_model_authored_numbers(explanation):
     raw = json.dumps({"explanation": explanation, "cited_fields": ["risk_contribution.NVDA"]})
     client = FakeClient(response_with_text(raw))
     with pytest.raises(GeminiUnavailable, match="numerical prose"):
-        asyncio.run(generate_answer(
-            AnalystRequest(question="Explain risk"), demo_metrics(), settings(),
-            client_factory=lambda **_: client,
+        asyncio.run(generate_analysis_workflow(
+            "risk_explanation", "Explain risk", demo_metrics(), "analysis-42",
+            settings(), client_factory=lambda **_: client,
         ))
-
-
-def test_web_tools_are_only_enabled_by_explicit_request():
-    raw = json.dumps({"explanation": "News provides context, not proof of causation.", "cited_fields": []})
-    client = FakeClient(response_with_text(raw))
-    asyncio.run(generate_answer(
-        AnalystRequest(question="Show external context", web_search=True),
-        demo_metrics(), settings(), client_factory=lambda **_: client,
-    ))
-    tools = client.models.generate_content.call_args.kwargs["config"].tools
-    assert any(tool.google_search is not None for tool in tools)
-    assert any(tool.url_context is not None for tool in tools)
 
 
 def test_analysis_workflow_uses_its_prompt_and_no_web_tools():

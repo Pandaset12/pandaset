@@ -78,16 +78,6 @@ export type LiveQuotesResponse = {
 export type AssetSearchResponse = {
   results: { symbol: string; name: string }[];
 };
-export type AskResponse = {
-  analyst_mode: "demo" | "gemini";
-  status: "complete" | "demo" | "unavailable";
-  answer: string;
-  citations: { field: string; value: number }[];
-  warnings: string[];
-  disclaimer: string;
-  analysis_id: string | null;
-  error_code: string | null;
-};
 export type AIWorkflow =
   | "analysis_briefing"
   | "risk_explanation"
@@ -385,17 +375,6 @@ export function comparePortfolio(
   return post<WhatIfResponse>(
     `/api/v1/portfolios/${encodeURIComponent(portfolioId)}/what-if`,
     { holdings: allocation(weights, symbols) },
-  );
-}
-
-export function askPortfolio(
-  portfolioId: string,
-  analysisId: string,
-  question: string,
-) {
-  return post<AskResponse>(
-    `/api/v1/portfolios/${encodeURIComponent(portfolioId)}/ask`,
-    { analysis_id: analysisId, question },
   );
 }
 

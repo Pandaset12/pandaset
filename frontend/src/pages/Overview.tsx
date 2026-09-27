@@ -103,10 +103,6 @@ export default function Overview({
           <SlidersHorizontal size={16} />
           Edit portfolio
         </button>
-        <a className="button dark" href="#/what-if">
-          Explore a what-if
-          <ArrowUpRight size={17} />
-        </a>
         <button className="button subtle" onClick={onBrief}>
           <ChatBubbleLeftRight size={16} />
           Brief this portfolio
