@@ -23,8 +23,9 @@ import {
   Empty,
 } from "../components/UI";
 import { LineChart } from "../components/LineChart";
-import type { AnalysisResponse } from "../api/portfolio";
+import { LiveQuotesPanel } from "../components/LiveQuotesPanel";
 import { allocationPercent } from "../workspace/holdings";
+import type { AnalysisResponse } from "../api/portfolio";
 
 export default function Overview({
   analysis,
@@ -44,6 +45,9 @@ export default function Overview({
   const [view, setView] = useState<"holdings" | "drivers">("holdings");
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<"weight" | "return">("weight");
+  const symbols = Object.keys(analysis.weights).filter(
+    (symbol) => analysis.weights[symbol] > 0,
+  );
   const holdings = portfolioAssets
     .map((asset) => ({
       asset,
@@ -118,6 +122,7 @@ export default function Overview({
           Brief this portfolio
         </button>
       </PageHeading>
+      <LiveQuotesPanel symbols={symbols} />
       <div className="overview-top">
         <section
           className="performance-panel"

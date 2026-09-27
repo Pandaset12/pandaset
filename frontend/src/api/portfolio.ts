@@ -62,6 +62,19 @@ export type MarketHistoryResponse = {
   observation_count: number;
   warnings: string[];
 };
+export type LiveQuote = {
+  symbol: string;
+  last_price: number | null;
+  last_trade_at: string | null;
+  bid: number | null;
+  ask: number | null;
+  quote_at: string | null;
+};
+export type LiveQuotesResponse = {
+  feed: "IEX";
+  source: "alpaca";
+  quotes: LiveQuote[];
+};
 export type AskResponse = {
   analyst_mode: "demo" | "gemini";
   status: "complete" | "demo" | "unavailable";
@@ -110,6 +123,7 @@ export class ApiError extends Error {
     message: string,
     readonly status: number,
     readonly requestId?: string,
+    readonly code?: string,
   ) {
     super(message);
     this.name = "ApiError";
@@ -173,11 +187,13 @@ export function setApiAccessToken(token: string | null) {
 
 function request<T>(url: string, init: RequestInit = {}): Promise<T> {
   const token = accessToken;
-  const protectedRoute = url.startsWith("/api/v1/portfolios");
+  const protectedRoute =
+    url.startsWith("/api/v1/portfolios") || url.startsWith("/api/v1/quotes");
   const headers = new Headers(init.headers);
   if (protectedRoute && token) headers.set("Authorization", `Bearer ${token}`);
   const key = `${protectedRoute ? tokenVersion : "public"} ${init.method ?? "GET"} ${url} ${typeof init.body === "string" ? init.body : ""}`;
-  const existing = requestsInFlight.get(key);
+  // A caller-owned signal must not cancel another consumer's request.
+  const existing = init.signal ? undefined : requestsInFlight.get(key);
   if (existing) return existing as Promise<T>;
   const pending = (async () => {
     const response = await fetch(url, { ...init, headers });
@@ -190,10 +206,12 @@ function request<T>(url: string, init: RequestInit = {}): Promise<T> {
           : `PandaSet API request failed (${response.status}).`,
         response.status,
         typeof error?.request_id === "string" ? error.request_id : undefined,
+        typeof error?.code === "string" ? error.code : undefined,
       );
     }
     return payload as T;
   })();
+  if (init.signal) return pending;
   requestsInFlight.set(key, pending);
   void pending.then(
     () => {
@@ -293,6 +311,31 @@ export async function verifyPortfolioHistory(
     }
   }
   if (signal?.aborted) throw new DOMException("Cancelled", "AbortError");
+}
+
+export async function getLiveQuotes(symbols: string[], signal?: AbortSignal) {
+  signal?.throwIfAborted();
+  const query = new URLSearchParams();
+  symbols.forEach((symbol) => query.append("symbols", symbol));
+  const controller = new AbortController();
+  const cancel = () => controller.abort(signal?.reason);
+  signal?.addEventListener("abort", cancel, { once: true });
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, 20_000);
+  try {
+    return await request<LiveQuotesResponse>(`/api/v1/quotes?${query}`, {
+      signal: controller.signal,
+    });
+  } catch (cause) {
+    if (timedOut) throw new ApiError("Live quote request timed out.", 408);
+    throw cause;
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener("abort", cancel);
+  }
 }
 
 export function comparePortfolio(

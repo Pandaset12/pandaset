@@ -37,6 +37,7 @@ def test_auth_and_portfolio_ownership(client):
     api, users = client
     payload = {"name": "Investor", "holdings": [{"symbol": "SPY", "weight": 1.0}]}
     assert api.get("/api/v1/portfolios").status_code == 401
+    assert api.get("/api/v1/quotes", params={"symbols": "AAPL"}).status_code == 401
     assert api.get("/api/v1/portfolios", headers={"Authorization": "Bearer bad"}).status_code == 401
     owner = {"Authorization": "Bearer owner"}
     other = {"Authorization": "Bearer other"}
@@ -148,6 +149,7 @@ def test_preflight_history_is_reused_by_following_analysis(client, monkeypatch):
 
 
 def test_twelve_data_preflight_is_reused_by_analysis(client, monkeypatch):
+    import pandas as pd
     from backend.twelve_data import TwelveDataPriceProvider
 
     api, _ = client
@@ -162,14 +164,15 @@ def test_twelve_data_preflight_is_reused_by_analysis(client, monkeypatch):
     def fetch(self, symbols, outputsize):
         calls.append((tuple(symbols), outputsize))
         return {"meta": {"symbol": symbols[0]}, "values": [
-            {"datetime": f"2026-09-{day:02d}", "close": str(100 + day)}
-            for day in range(18, 26)
+            {"datetime": day.strftime("%Y-%m-%d"), "close": str(100 + index)}
+            for index, day in enumerate(pd.bdate_range(end="2026-09-25", periods=outputsize))
         ]}
 
     monkeypatch.setattr(TwelveDataPriceProvider, "_fetch", fetch)
     preflight = api.get("/api/v1/market-history", params={"symbols": ["SPY"], "lookback_days": 2})
     assert preflight.status_code == 200, preflight.text
     assert preflight.json()["data_mode"] == "live"
+    assert preflight.json()["observation_count"] == 2
     headers = {"Authorization": "Bearer owner"}
     created = api.post("/api/v1/portfolios", json={"name": "Live", "holdings": [
         {"symbol": "SPY", "weight": 1.0},
@@ -178,6 +181,7 @@ def test_twelve_data_preflight_is_reused_by_analysis(client, monkeypatch):
     analysis = api.post(f"/api/v1/portfolios/{created.json()['portfolio_id']}/analysis", headers=headers)
     assert analysis.status_code == 200, analysis.text
     assert analysis.json()["data_mode"] == "live"
+    assert analysis.json()["observation_count"] == 252
     assert calls == [(("SPY",), 253)]
 
 
