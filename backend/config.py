@@ -24,6 +24,8 @@ class Settings(BaseSettings):
     supabase_anon_key: SecretStr | None = None
     market_data_provider: Literal["sample", "twelvedata"] = "sample"
     twelve_data_api_key: SecretStr | None = None
+    alpaca_api_key: SecretStr | None = None
+    alpaca_api_secret: SecretStr | None = None
     market_data_timeout_seconds: float = Field(default=15, gt=0, le=60)
 
     @property
@@ -37,6 +39,13 @@ class Settings(BaseSettings):
     @property
     def has_twelve_data_key(self) -> bool:
         return bool(self.twelve_data_api_key and self.twelve_data_api_key.get_secret_value())
+
+    @property
+    def has_alpaca_keys(self) -> bool:
+        return bool(
+            self.alpaca_api_key and self.alpaca_api_key.get_secret_value()
+            and self.alpaca_api_secret and self.alpaca_api_secret.get_secret_value()
+        )
 
 
 @lru_cache

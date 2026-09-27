@@ -37,6 +37,7 @@ def test_auth_and_portfolio_ownership(client):
     api, users = client
     payload = {"name": "Investor", "holdings": [{"symbol": "SPY", "weight": 1.0}]}
     assert api.get("/api/v1/portfolios").status_code == 401
+    assert api.get("/api/v1/quotes", params={"symbols": "AAPL"}).status_code == 401
     assert api.get("/api/v1/portfolios", headers={"Authorization": "Bearer bad"}).status_code == 401
     owner = {"Authorization": "Bearer owner"}
     other = {"Authorization": "Bearer other"}

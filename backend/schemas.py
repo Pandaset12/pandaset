@@ -79,6 +79,25 @@ class MarketHistoryResponse(BaseModel):
         return self
 
 
+class LiveQuote(BaseModel):
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+
+    symbol: str = Field(min_length=1, max_length=20)
+    last_price: float | None = Field(default=None, gt=0)
+    last_trade_at: AwareDatetime | None = None
+    bid: float | None = Field(default=None, ge=0)
+    ask: float | None = Field(default=None, ge=0)
+    quote_at: AwareDatetime | None = None
+
+
+class LiveQuotesResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+
+    feed: Literal["IEX"]
+    source: Literal["alpaca"]
+    quotes: list[LiveQuote] = Field(max_length=8)
+
+
 class AnalyticsSnapshot(BaseModel):
     model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
 

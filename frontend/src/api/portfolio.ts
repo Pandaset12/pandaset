@@ -59,6 +59,19 @@ export type MarketHistoryResponse = {
   observation_count: number;
   warnings: string[];
 };
+export type LiveQuote = {
+  symbol: string;
+  last_price: number | null;
+  last_trade_at: string | null;
+  bid: number | null;
+  ask: number | null;
+  quote_at: string | null;
+};
+export type LiveQuotesResponse = {
+  feed: "IEX";
+  source: "alpaca";
+  quotes: LiveQuote[];
+};
 export type AskResponse = {
   analyst_mode: "demo" | "gemini";
   status: "complete" | "demo" | "unavailable";
@@ -170,7 +183,8 @@ export function setApiAccessToken(token: string | null) {
 
 function request<T>(url: string, init: RequestInit = {}): Promise<T> {
   const token = accessToken;
-  const protectedRoute = url.startsWith("/api/v1/portfolios");
+  const protectedRoute =
+    url.startsWith("/api/v1/portfolios") || url.startsWith("/api/v1/quotes");
   const headers = new Headers(init.headers);
   if (protectedRoute && token) headers.set("Authorization", `Bearer ${token}`);
   const key = `${protectedRoute ? tokenVersion : "public"} ${init.method ?? "GET"} ${url} ${typeof init.body === "string" ? init.body : ""}`;
@@ -290,6 +304,12 @@ export async function verifyPortfolioHistory(
     }
   }
   if (signal?.aborted) throw new DOMException("Cancelled", "AbortError");
+}
+
+export function getLiveQuotes(symbols: string[]) {
+  const query = new URLSearchParams();
+  symbols.forEach((symbol) => query.append("symbols", symbol));
+  return request<LiveQuotesResponse>(`/api/v1/quotes?${query}`);
 }
 
 export function comparePortfolio(

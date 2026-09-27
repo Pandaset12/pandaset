@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ArrowUpRight,
   ArrowDownRight,
@@ -18,8 +18,8 @@ import {
   Empty,
 } from "../components/UI";
 import { LineChart } from "../components/LineChart";
-import type { AnalysisResponse } from "../api/portfolio";
 import { allocationPercent } from "../workspace/holdings";
+import { getLiveQuotes, type AnalysisResponse, type LiveQuote } from "../api/portfolio";
 
 export default function Overview({
   analysis,
@@ -39,6 +39,45 @@ export default function Overview({
   const [view, setView] = useState<"holdings" | "drivers">("holdings");
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<"weight" | "return">("weight");
+  const [liveQuotes, setLiveQuotes] = useState<LiveQuote[]>([]);
+  const [quoteError, setQuoteError] = useState("");
+  const [quotesLoading, setQuotesLoading] = useState(false);
+  const symbols = Object.keys(analysis.weights).filter((symbol) => analysis.weights[symbol] > 0);
+  const symbolKey = symbols.join(",");
+  useEffect(() => {
+    let active = true;
+    let timer: number | undefined;
+    const requestedSymbols = symbolKey ? symbolKey.split(",") : [];
+    setLiveQuotes([]);
+    setQuoteError("");
+    setQuotesLoading(requestedSymbols.length > 0);
+    const refresh = async () => {
+      try {
+        const result = await getLiveQuotes(requestedSymbols);
+        if (active) {
+          setLiveQuotes(result.quotes);
+          setQuoteError("");
+          setQuotesLoading(false);
+        }
+      } catch {
+        if (active) {
+          setQuoteError("Live quotes unavailable. Configure Alpaca credentials on the backend.");
+          setQuotesLoading(false);
+        }
+      } finally {
+        if (active) timer = window.setTimeout(() => void refresh(), 15_000);
+      }
+    };
+    if (requestedSymbols.length > 0) void refresh();
+    else {
+      setLiveQuotes([]);
+      setQuoteError("");
+    }
+    return () => {
+      active = false;
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
+  }, [symbolKey]);
   const holdings = portfolioAssets
     .map((asset) => ({
       asset,
@@ -113,6 +152,33 @@ export default function Overview({
           Brief this portfolio
         </button>
       </PageHeading>
+      <section className="live-quotes" aria-label="Latest IEX stock prices">
+        <div className="live-quotes-heading">
+          <strong>Latest available prices</strong>
+          <span>Alpaca IEX · auto-refresh every 15 seconds · separate from risk calculations</span>
+        </div>
+        {quoteError && <p className="live-quotes-message" role="status">{quoteError}</p>}
+        <div className="live-quotes-grid">
+          {symbols.map((symbol) => {
+            const quote = liveQuotes.find((item) => item.symbol === symbol);
+            return (
+              <div className="live-quote" key={symbol}>
+                <strong>{symbol}</strong>
+                <span>{quote?.last_price == null ? "—" : `$${quote.last_price.toFixed(2)}`}</span>
+                <small>
+                  {quote?.last_trade_at
+                    ? `Last IEX trade ${new Date(quote.last_trade_at).toLocaleString()}`
+                    : quotesLoading
+                      ? "Loading…"
+                      : quoteError
+                        ? "Unavailable"
+                        : "No recent IEX trade"}
+                </small>
+              </div>
+            );
+          })}
+        </div>
+      </section>
       <section className="backend-analysis" aria-label="Saved backend analysis">
         <div>
           <strong>

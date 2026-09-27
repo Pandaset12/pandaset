@@ -1,6 +1,8 @@
 node_modules/
 dist/
 *.tsbuildinfo
+.pytest_cache/
+backend/.pytest_*/
 .DS_Store
 .env
 .env.local

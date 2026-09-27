@@ -76,6 +76,7 @@ is a sample session-date label, not a live quote or exchange closing timestamp.
 | GET | `/api/v1/portfolios/{id}` | Read saved portfolio |
 | POST | `/api/v1/portfolios/{id}/analysis` | Validate provider output and save a snapshot |
 | GET | `/api/v1/portfolios/{id}/analyses/{analysis_id}` | Read that snapshot |
+| GET | `/api/v1/quotes?symbols=AAPL&symbols=MSFT` | Optional Alpaca IEX latest-trade snapshots; separate from daily portfolio analysis |
 | POST | `/api/v1/portfolios/{id}/ask` | Explain exactly the selected saved snapshot |
 | POST | `/api/v1/portfolios/{id}/what-if` | Compare saved and proposed holdings on the selected market-data history |
 | POST | `/api/v1/portfolios/{id}/briefing` | Write a briefing from one saved analysis |
@@ -122,6 +123,15 @@ is not used by this service. Never commit actual keys.
 | GEMINI_TIMEOUT_SECONDS | 45 per model; maximum 120 |
 | CORS_ORIGINS | Comma-separated frontend origins; localhost ports 3000 and 5173 |
 | STORAGE_PATH | Optional override for the SQLite file |
+| ALPACA_API_KEY / ALPACA_API_SECRET | Optional server-side credentials for real-time IEX quote snapshots; never expose them to the frontend |
+
+The Overview's optional live-price strip polls `/api/v1/quotes` every 15 seconds.
+It uses Alpaca's free IEX feed, which covers one exchange rather than consolidated
+US market activity; it is labeled IEX and is not used by the quant engine or
+saved risk metrics. A successful free API call does not itself establish public
+display rights: verify Alpaca's applicable market-data agreements before showing
+prices to judges or other users. When keys are absent or the vendor is unavailable,
+the strip reports quotes as unavailable; it never substitutes sample prices.
 
 All Gemini-backed actions use one server-side adapter with a versioned,
 workflow-specific prompt and JSON response schema. The primary model has a

@@ -8,6 +8,7 @@ import {
   comparePortfolio,
   createRequestGuard,
   getMarketHistory,
+  getLiveQuotes,
   portfolioInput,
   listPortfolios,
   setApiAccessToken,
@@ -155,6 +156,23 @@ test("market history keeps repeated symbol query parameters", async () => {
   const query = new URL(requested, "http://localhost").searchParams;
   assert.deepEqual(query.getAll("symbols"), ["NVDA", "VTI"]);
   assert.equal(query.get("lookback_days"), "63");
+});
+
+test("live quote requests keep repeated symbols and request only the backend", async () => {
+  let requested = "";
+  let authorization = "";
+  stubFetch((url, init) => {
+    requested = url;
+    authorization = new Headers(init?.headers).get("Authorization") ?? "";
+    return { feed: "IEX", source: "alpaca", quotes: [] };
+  });
+  setApiAccessToken("test-user-token");
+  await getLiveQuotes(["AAPL", "MSFT"]);
+  setApiAccessToken(null);
+  const parsed = new URL(requested, "http://localhost");
+  assert.equal(parsed.pathname, "/api/v1/quotes");
+  assert.deepEqual(parsed.searchParams.getAll("symbols"), ["AAPL", "MSFT"]);
+  assert.equal(authorization, "Bearer test-user-token");
 });
 
 test("identical requests in flight share one backend call", async () => {
