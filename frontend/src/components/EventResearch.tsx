@@ -337,6 +337,8 @@ export function EventResearch({
   return (
     <section
       className="event-research"
+      id="event-research-panel"
+      tabIndex={-1}
       aria-labelledby="event-research-title"
       data-allocation={allocationKey}
     >
