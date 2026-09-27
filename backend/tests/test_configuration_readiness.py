@@ -2,10 +2,29 @@ import httpx
 import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 
 from backend.auth import current_user_id
 from backend.config import Settings
 from backend.main import create_app
+
+
+@pytest.mark.parametrize("configured,expected", [
+    ("AUTO", "auto"),
+    (" Legacy ", "legacy"),
+    ("asymmetric", "asymmetric"),
+])
+def test_supabase_signing_mode_accepts_case_variants_from_environment(
+    monkeypatch, configured, expected,
+):
+    monkeypatch.setenv("SUPABASE_SIGNING_MODE", configured)
+    assert Settings(_env_file=None).supabase_signing_mode == expected
+
+
+def test_supabase_signing_mode_rejects_unknown_value(monkeypatch):
+    monkeypatch.setenv("SUPABASE_SIGNING_MODE", "unknown")
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None)
 
 
 @pytest.mark.parametrize("overrides,issues", [

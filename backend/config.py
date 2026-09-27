@@ -2,7 +2,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, SecretStr
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -34,6 +34,12 @@ class Settings(BaseSettings):
     supabase_anon_key: SecretStr | None = None
     supabase_publishable_key: str = ""
     supabase_signing_mode: Literal["asymmetric", "legacy", "auto"] = "asymmetric"
+
+    @field_validator("supabase_signing_mode", mode="before")
+    @classmethod
+    def normalize_supabase_signing_mode(cls, value: object) -> object:
+        return value.strip().lower() if isinstance(value, str) else value
+
     market_data_provider: Literal["sample", "alpaca"] = "sample"
     alpaca_api_key: SecretStr | None = None
     alpaca_api_secret: SecretStr | None = None
