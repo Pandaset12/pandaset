@@ -30,6 +30,7 @@ _STOCKS = (
     ("MSFT", "Microsoft", "Technology"),
     ("AAPL", "Apple", "Technology"),
     ("AMZN", "Amazon", "Consumer discretionary"),
+    ("NFLX", "Netflix", "Communication services"),
     ("GOOGL", "Alphabet Class A", "Communication services"),
     ("META", "Meta Platforms", "Communication services"),
     ("TSLA", "Tesla", "Consumer discretionary"),
