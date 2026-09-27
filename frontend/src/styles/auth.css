@@ -62,12 +62,17 @@
 }
 .auth-scene {
   position: absolute;
-  z-index: -1;
+  z-index: 0;
   width: clamp(190px, 22vw, 290px);
   aspect-ratio: 1;
   right: -4%;
   bottom: -49px;
-  pointer-events: none;
+  pointer-events: auto;
+}
+.auth-intro > h1,
+.auth-intro > p {
+  position: relative;
+  z-index: 1;
 }
 .auth-scene-orbit {
   position: absolute;
@@ -99,9 +104,84 @@
   width: 100%;
   height: auto;
 }
+.auth-scene .lp-panda-head,
+.auth-scene .lp-panda-gaze,
+.auth-scene .lp-panda-blink,
+.auth-scene .lp-panda-wave-paw {
+  transform-box: fill-box;
+}
+.auth-scene .lp-panda-head {
+  transform-origin: 50% 75%;
+  transition: transform 460ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.auth-scene .lp-panda-gaze {
+  transition: transform 300ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.auth-scene .lp-panda-blink {
+  transform-origin: center;
+  transition: transform 220ms ease;
+}
+.auth-scene .lp-panda-wave-paw {
+  transform-origin: 18% 88%;
+}
+.auth-scene[data-focus="email"] .lp-panda-head {
+  transform: rotate(6deg);
+}
+.auth-scene[data-focus="email"] .lp-panda-gaze {
+  transform: translate(8px, -2px);
+}
+.auth-scene[data-focus="password"] .lp-panda-head {
+  transform: rotate(-18deg);
+}
+.auth-scene[data-focus="password"] .lp-panda-gaze {
+  transform: translate(-10px, 1px);
+}
+.auth-scene[data-focus="password"] .lp-panda-blink {
+  transform: scaleY(0.09);
+}
+.auth-scene-bamboo {
+  position: absolute;
+  width: 31%;
+  height: auto;
+  left: 0;
+  bottom: 1%;
+  color: #39734f;
+  opacity: 0.85;
+  transform: rotate(-8deg);
+  transform-origin: bottom center;
+  transition:
+    opacity 300ms ease,
+    transform 460ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.auth-scene[data-focus="email"] .auth-scene-bamboo {
+  opacity: 1;
+  transform: rotate(3deg);
+}
 @media (prefers-reduced-motion: no-preference) {
   .auth-scene-panda {
     animation: auth-panda-enter 750ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+  .auth-scene:hover .lp-panda-wave-paw {
+    animation: auth-panda-wave 650ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .auth-scene .lp-panda-head,
+  .auth-scene .lp-panda-gaze,
+  .auth-scene .lp-panda-blink,
+  .auth-scene-bamboo {
+    transition-duration: 0.01ms;
+  }
+}
+@keyframes auth-panda-wave {
+  40% {
+    transform: rotate(-24deg);
+  }
+  72% {
+    transform: rotate(8deg);
+  }
+  to {
+    transform: rotate(0);
   }
 }
 @keyframes auth-panda-enter {
@@ -246,9 +326,9 @@
     min-height: 330px;
   }
   .auth-scene {
-    width: 132px;
+    width: 195px;
     right: 0;
-    bottom: -6px;
+    bottom: -23px;
   }
   .auth-card {
     padding: clamp(28px, 6vw, 38px);
@@ -256,7 +336,7 @@
 }
 @media (min-width: 921px) and (max-width: 1180px) {
   .auth-scene {
-    width: 145px;
+    width: 195px;
     right: -2%;
     bottom: -28px;
   }

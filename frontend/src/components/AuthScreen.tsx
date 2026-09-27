@@ -17,6 +17,9 @@ export function AuthScreen({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [confirmation, setConfirmation] = useState(false);
+  const [focusedField, setFocusedField] = useState<"email" | "password" | null>(
+    null,
+  );
 
   function changeMode(next: Mode) {
     setMode(next);
@@ -78,11 +81,35 @@ export function AuthScreen({
             Explore performance, risk, research, and scenarios in one focused
             workspace.
           </p>
-          <div className="auth-scene" aria-hidden="true">
+          <div
+            className="auth-scene"
+            data-focus={focusedField ?? undefined}
+            aria-hidden="true"
+          >
             <div className="auth-scene-orbit" />
             <div className="auth-scene-panda">
               <LandingPanda />
             </div>
+            <svg className="auth-scene-bamboo" viewBox="0 0 84 150" fill="none">
+              <path
+                d="M33 145C37 110 42 72 49 15"
+                stroke="currentColor"
+                strokeWidth="3"
+                strokeLinecap="round"
+              />
+              <path
+                d="M43 78C19 76 11 62 8 45C26 46 40 57 43 78Z"
+                fill="currentColor"
+              />
+              <path
+                d="M46 60C70 58 77 44 79 29C61 31 49 41 46 60Z"
+                fill="currentColor"
+              />
+              <path
+                d="M38 105C18 105 10 94 5 82C21 82 34 89 38 105Z"
+                fill="currentColor"
+              />
+            </svg>
           </div>
         </section>
         <section className="auth-card" aria-labelledby="auth-title">
@@ -118,6 +145,8 @@ export function AuthScreen({
                   autoComplete="email"
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
+                  onFocus={() => setFocusedField("email")}
+                  onBlur={() => setFocusedField(null)}
                   disabled={busy}
                   required
                 />
@@ -130,6 +159,8 @@ export function AuthScreen({
                   }
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
+                  onFocus={() => setFocusedField("password")}
+                  onBlur={() => setFocusedField(null)}
                   disabled={busy}
                   required
                   minLength={6}
