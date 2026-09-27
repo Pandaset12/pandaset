@@ -5,6 +5,8 @@ import {
   assetPath,
   correlationMatrix,
   covarianceMatrix,
+  showAnnualizedReturn,
+  transferAllocation,
   validateWeights,
 } from "../analytics.ts";
 import { assets, initialWeights, returns, dates } from "../data.ts";
@@ -82,4 +84,22 @@ test("a scenario produces new metrics without mutating the original", () => {
   scenario[3] += 10;
   assert.notEqual(analyze(scenario).volatility, analyze(before).volatility);
   assert.deepEqual(initialWeights, before);
+});
+
+test("annualized returns stay hidden until a full trading year is observed", () => {
+  assert.equal(showAnnualizedReturn(null), false);
+  assert.equal(showAnnualizedReturn(6), false);
+  assert.equal(showAnnualizedReturn(251), false);
+  assert.equal(showAnnualizedReturn(252), true);
+});
+
+test("transferring an allocation preserves the total and leaves the original untouched", () => {
+  const before = [...initialWeights];
+  const next = transferAllocation(before, 0, 5, 5);
+  assert.equal(next[0], before[0] - 5);
+  assert.equal(next[5], before[5] + 5);
+  assert.equal(validateWeights(next), true);
+  assert.deepEqual(before, initialWeights);
+  assert.throws(() => transferAllocation(before, 0, 5, before[0] + 1));
+  assert.throws(() => transferAllocation(before, 0, 0, 5));
 });

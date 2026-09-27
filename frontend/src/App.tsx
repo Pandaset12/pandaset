@@ -202,9 +202,14 @@ function Application() {
             </p>
           </section>
         ) : analysisError && !active ? (
-          <section className="api-state" role="alert">
-            <strong>Portfolio analysis is unavailable.</strong>
-            <p>{analysisError}</p>
+          <section className="api-state api-state-featured" role="alert">
+            <span className="api-state-kicker">SAMPLE PORTFOLIO</span>
+            <h1>We couldn’t load the portfolio analysis.</h1>
+            <p>
+              The demo analysis service did not respond. No portfolio changes
+              were made. Try again; if you run PandaSet locally, check that the
+              demo API is running.
+            </p>
             <button
               className="button dark"
               onClick={() => void loadAnalysis(initialWeights)}
@@ -212,6 +217,13 @@ function Application() {
             >
               Retry analysis
             </button>
+            <button className="text-button" onClick={() => setMethod(true)}>
+              About the sample data
+            </button>
+            <details>
+              <summary>Technical details</summary>
+              <p>{analysisError}</p>
+            </details>
           </section>
         ) : active ? (
           <ErrorBoundary>
@@ -266,15 +278,20 @@ function Application() {
               </p>
             )}
             {analysisError && (
-              <p className="analysis-saving error" role="alert">
-                The active analysis is unchanged. {analysisError}{" "}
+              <div className="analysis-saving error" role="alert">
+                The sample analysis couldn’t be updated. Your active portfolio
+                is unchanged.{" "}
                 <button
                   className="text-button"
                   onClick={() => void loadAnalysis(weights)}
                 >
                   Retry
                 </button>
-              </p>
+                <details>
+                  <summary>Technical details</summary>
+                  {analysisError}
+                </details>
+              </div>
             )}
           </ErrorBoundary>
         ) : null}
@@ -298,7 +315,12 @@ function Application() {
           onSave={(w) => apply(w)}
         />
       )}
-      {method && <MethodologyModal onClose={() => setMethod(false)} />}
+      {method && (
+        <MethodologyModal
+          analysis={active?.analysis ?? null}
+          onClose={() => setMethod(false)}
+        />
+      )}
       {analyst !== null && active && (
         <Analyst
           portfolioId={active.portfolio.portfolio_id}

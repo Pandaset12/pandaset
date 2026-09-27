@@ -50,6 +50,7 @@ export function LineChart({
       .join(" ");
   const format = (v: number) =>
     currency ? money((v / series.at(-1)!) * endValue) : pct(v - 1, 0);
+  const dateTicks = width < 420 ? [0, 0.5, 1] : [0, 0.25, 0.5, 0.75, 1];
   const index = Math.min(hover ?? series.length - 1, series.length - 1);
   const date = new Date(
     (dates[index] || dates.at(-1) || "") + "T12:00:00Z",
@@ -137,14 +138,20 @@ export function LineChart({
           strokeWidth="2.6"
           strokeLinejoin="round"
         />
-        {[0, 0.25, 0.5, 0.75, 1].map((f, i) => {
+        {dateTicks.map((f, i) => {
           const idx = Math.round((series.length - 1) * f);
           return (
             <text
               key={i}
               x={x(idx)}
               y={height - 5}
-              textAnchor={i === 0 ? "start" : i === 4 ? "end" : "middle"}
+              textAnchor={
+                i === 0
+                  ? "start"
+                  : i === dateTicks.length - 1
+                    ? "end"
+                    : "middle"
+              }
               className="chart-label"
             >
               {new Date((dates[idx] || "") + "T12:00:00Z").toLocaleDateString(

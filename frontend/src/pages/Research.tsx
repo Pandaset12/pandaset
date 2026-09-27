@@ -135,6 +135,33 @@ export default function Research({
               Your holdings
             </button>
           </div>
+          <label className="mobile-asset-picker">
+            <span>
+              Browse {results.length}{" "}
+              {results.length === 1 ? "asset" : "assets"}
+            </span>
+            <select
+              value={
+                results.some((asset) => asset.symbol === selected.symbol)
+                  ? selected.symbol
+                  : ""
+              }
+              onChange={(event) => {
+                if (event.target.value)
+                  location.hash = `#/research?symbol=${event.target.value}`;
+              }}
+              disabled={results.length === 0}
+            >
+              {!results.some((asset) => asset.symbol === selected.symbol) && (
+                <option value="">Choose an asset</option>
+              )}
+              {results.map((asset) => (
+                <option key={asset.symbol} value={asset.symbol}>
+                  {asset.symbol} · {asset.name}
+                </option>
+              ))}
+            </select>
+          </label>
           <div className="asset-index-list">
             {results.map((asset) => (
               <a

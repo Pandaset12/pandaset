@@ -231,3 +231,203 @@
     margin-right: 46px;
   }
 }
+
+.sample-context {
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  max-width: 55ch;
+}
+.sample-context strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+.sample-context.limited {
+  color: var(--warning);
+}
+.risk-intro .sample-context {
+  max-width: 34ch;
+  margin-top: 14px;
+}
+.comparison-summary .sample-context {
+  color: var(--warning);
+  font-size: 0.8125rem;
+  margin: 12px 0;
+}
+.analysis-details {
+  margin: 12px 0 22px;
+  color: var(--muted);
+  font-size: 0.8125rem;
+}
+.analysis-details summary {
+  width: fit-content;
+  cursor: pointer;
+  color: var(--ink);
+  font-weight: 500;
+  padding: 6px 0;
+}
+.analysis-details > div {
+  border-top: 1px solid var(--border);
+  padding: 12px 0 4px;
+  margin-top: 5px;
+}
+.analysis-details p {
+  margin: 0 0 8px;
+}
+.analysis-details dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px 20px;
+  margin: 12px 0;
+}
+.analysis-details dt {
+  font-weight: 600;
+  color: var(--ink);
+}
+.analysis-details dd {
+  margin: 3px 0 0;
+  overflow-wrap: anywhere;
+}
+.api-state-featured {
+  max-width: 700px;
+  padding: 35px 0;
+}
+.api-state-kicker {
+  color: var(--warning);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+.api-state-featured h1 {
+  font: 400 2.5rem/1.15 var(--serif);
+  margin: 12px 0;
+}
+.api-state-featured > p {
+  max-width: 58ch;
+  color: var(--muted);
+  line-height: 1.55;
+  margin-bottom: 22px;
+}
+.api-state-featured > .text-button {
+  margin-left: 17px;
+}
+.api-state-featured details,
+.analysis-saving details {
+  margin-top: 24px;
+  font-size: 0.8125rem;
+  color: var(--muted);
+}
+.api-state-featured summary,
+.analysis-saving summary {
+  cursor: pointer;
+  width: fit-content;
+}
+.api-state-featured details p {
+  overflow-wrap: anywhere;
+}
+.mobile-asset-picker {
+  display: none;
+}
+.scenario-changes {
+  margin: -10px 0 22px;
+  font-size: 0.8125rem;
+  color: var(--muted);
+}
+.scenario-changes > strong {
+  display: block;
+  color: var(--ink);
+  margin-bottom: 8px;
+}
+.scenario-changes ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.scenario-changes li {
+  padding: 6px 8px;
+  background: var(--selected);
+  border-radius: 3px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+.allocation-transfer {
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  padding: 17px 0;
+  margin: -5px 0 22px;
+}
+.allocation-transfer > strong {
+  display: block;
+  font-size: 0.875rem;
+  margin-bottom: 12px;
+}
+.allocation-transfer > div {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.allocation-transfer label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+.allocation-transfer .transfer-amount {
+  grid-column: 1 / -1;
+}
+.allocation-transfer select,
+.allocation-transfer input {
+  width: 100%;
+  min-height: 42px;
+  padding: 8px 9px;
+  border: 1px solid var(--control-border);
+  border-radius: 5px;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 0.8125rem;
+}
+.allocation-transfer .button {
+  margin-top: 12px;
+  width: 100%;
+}
+.allocation-transfer p {
+  margin: 9px 0 0;
+  color: var(--muted);
+  font-size: 0.75rem;
+  line-height: 1.45;
+}
+@media (max-width: 720px) {
+  .research-index .asset-index-list {
+    display: none;
+  }
+  .mobile-asset-picker {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    color: var(--ink);
+    font-size: 0.8125rem;
+    font-weight: 500;
+  }
+  .mobile-asset-picker select {
+    width: 100%;
+    min-height: 44px;
+    padding: 8px 12px;
+    border: 1px solid var(--control-border);
+    border-radius: 5px;
+    background: var(--surface);
+    color: var(--ink);
+  }
+  .analysis-details dl {
+    grid-template-columns: 1fr;
+  }
+  .api-state-featured > .text-button {
+    display: flex;
+    margin: 16px 0 0;
+  }
+}
