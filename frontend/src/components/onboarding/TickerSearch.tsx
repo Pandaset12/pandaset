@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { ArrowPath, MagnifyingGlass, Plus } from "../icons";
+import { AssetMark } from "../UI";
 import {
   isValidSymbol,
   normalizeSymbol,
@@ -207,6 +208,7 @@ export function TickerSearch({
                   }}
                   onClick={() => select(index)}
                 >
+                  <AssetMark asset={option} small />
                   <span className="po-result-symbol">{option.symbol}</span>
                   <span className="po-result-name">
                     {manual

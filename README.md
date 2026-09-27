@@ -39,6 +39,8 @@ Requires Node.js 22.22.2+ on the 22.x line, 24.15.0+ on the 24.x line, or 26+, p
 
 The standard workspace runs with the fictional sample provider and demo AI mode. It needs no market-data or Gemini key. To use adjusted daily prices, configure `MARKET_DATA_PROVIDER=alpaca`, server-side Alpaca credentials, and an explicit history feed; see the [Alpaca history guide](backend/docs/ALPACA_HISTORY.md). To enable AI explanations, see [Gemini setup](backend/README.md#enable-gemini). Neither option turns the application into a brokerage connection or a live intraday quote feed.
 
+To show stock and fund logos automatically, set `VITE_LOGO_DEV_PUBLISHABLE_KEY` in `.env.local` to a Logo.dev publishable key (`pk_…`). The browser requests images by ticker; no company logo files or ticker-to-domain mappings are needed. Missing images and missing configuration show a local ticker mark. Before deploying, confirm the Logo.dev plan, allowed production origins, and [attribution terms](https://www.logo.dev/docs/platform/attribution) for the intended use. Only use a publishable key in `VITE_` configuration; keep secret keys out of the frontend.
+
 ## Workspaces
 
 After sign-in, create a named portfolio with supported tickers and weights totaling 100%. You can select and edit saved portfolios; the backend stores them for the authenticated account. The available experience depends on server configuration:

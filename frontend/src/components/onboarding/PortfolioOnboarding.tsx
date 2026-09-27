@@ -10,6 +10,7 @@ import {
   XMark,
 } from "../icons";
 import { TickerSearch } from "./TickerSearch";
+import { AssetMark, LogoAttribution } from "../UI";
 import type { SearchTickers } from "./TickerSearch";
 import {
   MAX_HOLDINGS,
@@ -232,6 +233,7 @@ export function PortfolioOnboarding({
           Back to portfolios
         </button>
       )}
+      <LogoAttribution />
     </aside>
   );
 
@@ -452,19 +454,14 @@ export function PortfolioOnboarding({
               </div>
             )}
             <div className="po-holdings-list">
-              {holdings.map((holding, index) => {
+              {holdings.map((holding) => {
                 const error = showHoldingErrors
                   ? validation.errors.rows[holding.symbol]
                   : undefined;
                 return (
                   <div key={holding.symbol} className="po-holding-row">
                     <div className="po-holding-identity">
-                      <span
-                        className={"po-ticker-mark po-tone-" + (index % 4)}
-                        aria-hidden="true"
-                      >
-                        {holding.symbol.slice(0, 1)}
-                      </span>
+                      <AssetMark asset={holding} small />
                       <span>
                         <strong>{holding.symbol}</strong>
                         <small>
@@ -606,12 +603,9 @@ export function PortfolioOnboarding({
               ))}
             </div>
             <ul className="po-review-list" aria-label="Holdings to create">
-              {holdings.map((holding, index) => (
+              {holdings.map((holding) => (
                 <li key={holding.symbol}>
-                  <span
-                    className={"po-review-dot po-tone-" + (index % 4)}
-                    aria-hidden="true"
-                  />
+                  <AssetMark asset={holding} small />
                   <span>
                     <strong>{holding.symbol}</strong>
                     <small>{holding.name || "Unverified exact ticker"}</small>
