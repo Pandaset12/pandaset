@@ -11,6 +11,7 @@ import {
 } from "../icons";
 import { TickerSearch } from "./TickerSearch";
 import type { SearchTickers } from "./TickerSearch";
+import { LandingPanda } from "../LandingPanda";
 import {
   MAX_HOLDINGS,
   MAX_NAME_LENGTH,
@@ -182,7 +183,6 @@ export function PortfolioOnboarding({
 
   const intro = (
     <aside className="po-intro" aria-label="Portfolio setup steps">
-      <span className="po-eyebrow">YOUR INVESTOR WORKSPACE</span>
       <h1>
         Your investments,
         <br />
@@ -244,11 +244,10 @@ export function PortfolioOnboarding({
           role={loadState === "loading" ? "status" : "alert"}
           aria-live="polite"
         >
-          <div className="po-state-icon">
-            {loadState === "loading" ? (
-              <ArrowPath size={28} className="po-spin" aria-hidden="true" />
-            ) : (
-              <InformationCircle size={28} aria-hidden="true" />
+          <div className="po-state-illustration" aria-hidden="true">
+            <LandingPanda />
+            {loadState === "loading" && (
+              <ArrowPath size={19} className="po-state-spinner po-spin" />
             )}
           </div>
           <h2>
@@ -275,10 +274,12 @@ export function PortfolioOnboarding({
       <section className="portfolio-onboarding">
         {intro}
         <div className="po-panel po-state">
-          <div className="po-state-icon po-success-icon">
-            <Check size={28} aria-hidden="true" />
+          <div className="po-state-illustration" aria-hidden="true">
+            <LandingPanda />
+            <span className="po-state-success-mark">
+              <Check size={16} />
+            </span>
           </div>
-          <span className="po-eyebrow">A CLEARER PICTURE STARTS HERE</span>
           <h2 ref={title} tabIndex={-1}>
             Your portfolio is ready.
           </h2>
@@ -303,21 +304,9 @@ export function PortfolioOnboarding({
       <section className="portfolio-onboarding">
         {intro}
         <div className="po-panel po-welcome">
-          <div className="po-empty-art" aria-hidden="true">
-            <div className="po-paper po-paper-back" />
-            <div className="po-paper">
-              <RectangleStack size={29} />
-              <span />
-              <span />
-              <span />
-            </div>
-            <span className="po-art-plus">+</span>
+          <div className="po-empty-mascot" aria-hidden="true">
+            <LandingPanda />
           </div>
-          <span className="po-eyebrow">
-            {hasExistingPortfolios
-              ? "BUILD ANOTHER PORTFOLIO"
-              : "LET’S BUILD YOUR FIRST PORTFOLIO"}
-          </span>
           <h2>
             {hasExistingPortfolios
               ? "Start another portfolio."
@@ -366,7 +355,6 @@ export function PortfolioOnboarding({
         aria-busy={saving}
       >
         <div className="po-panel-heading">
-          <span className="po-eyebrow">PORTFOLIO SETUP</span>
           <span className="po-step-count">STEP {currentStep + 1} OF 3</span>
         </div>
         <h2 ref={title} tabIndex={-1}>

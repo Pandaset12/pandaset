@@ -226,43 +226,51 @@ export function Application({ onSignOut }: { onSignOut: () => Promise<void> }) {
 
   if (portfolioState !== "ready" || showOnboarding)
     return (
-      <>
-        <button
-          className="text-button sign-out-button"
-          onClick={() => void onSignOut()}
-        >
-          Sign out
-        </button>
-        {showOnboarding && (
-          <button
-            className="text-button"
-            onClick={() => setShowOnboarding(false)}
-          >
-            Back to saved portfolios
-          </button>
-        )}
-        <PortfolioOnboarding
-          loadState={
-            showOnboarding || portfolioState === "ready"
-              ? "empty"
-              : portfolioState
-          }
-          hasExistingPortfolios={portfolios.length > 0}
-          onRetryLoad={() => void loadPortfolios()}
-          searchTickers={searchTickers}
-          createPortfolio={async (input, options) => {
-            await verifyPortfolioHistory(input.holdings, options.signal);
-            return createPortfolio(input, options.signal);
-          }}
-          onOpenPortfolio={(portfolio) => {
-            setSelectedPortfolio(portfolio);
-            setPortfolios((current) => [portfolio, ...current]);
-            setPortfolioState("ready");
-            setShowOnboarding(false);
-            void loadAnalysis(portfolio);
-          }}
-        />
-      </>
+      <div className="onboarding-page">
+        <header className="auth-header onboarding-header">
+          <Brand />
+          <span>Your investor workspace</span>
+          <div className="onboarding-header-actions">
+            {showOnboarding && (
+              <button
+                className="text-button onboarding-header-back"
+                onClick={() => setShowOnboarding(false)}
+              >
+                Back to saved portfolios
+              </button>
+            )}
+            <button
+              className="text-button sign-out-button"
+              onClick={() => void onSignOut()}
+            >
+              Sign out
+            </button>
+          </div>
+        </header>
+        <main className="onboarding-main" id="main-content">
+          <PortfolioOnboarding
+            loadState={
+              showOnboarding || portfolioState === "ready"
+                ? "empty"
+                : portfolioState
+            }
+            hasExistingPortfolios={portfolios.length > 0}
+            onRetryLoad={() => void loadPortfolios()}
+            searchTickers={searchTickers}
+            createPortfolio={async (input, options) => {
+              await verifyPortfolioHistory(input.holdings, options.signal);
+              return createPortfolio(input, options.signal);
+            }}
+            onOpenPortfolio={(portfolio) => {
+              setSelectedPortfolio(portfolio);
+              setPortfolios((current) => [portfolio, ...current]);
+              setPortfolioState("ready");
+              setShowOnboarding(false);
+              void loadAnalysis(portfolio);
+            }}
+          />
+        </main>
+      </div>
     );
   return (
     <>
