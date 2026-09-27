@@ -122,7 +122,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                         verifier.http_client.close()
 
     application = FastAPI(
-        title="PortfolioLens API",
+        title="PandaSet API",
         version="0.2.0",
         description="Backend #2 starter. Default mode uses fictional demo data.",
         lifespan=lifespan,
