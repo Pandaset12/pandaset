@@ -10,7 +10,7 @@ from backend.config import Settings
 from backend.gemini_service import metric_catalog
 from backend.main import create_app
 from backend.providers import EngineQuantProvider, SamplePriceProvider, get_provider, map_quant_report
-from backend.schemas import AnalyticsSnapshot
+from backend.schemas import AnalyticsSnapshot, PortfolioInput
 
 
 @pytest.fixture
@@ -112,7 +112,7 @@ def test_what_if_union_and_deltas_use_saved_baseline_without_mutation(client):
 
 def test_undefined_metrics_and_warnings_survive_storage(client):
     class ConstantPrices:
-        def prices(self, symbols):
+        def prices(self, symbols, lookback_days=252):
             return pd.DataFrame({symbol: [100.0] * 4 for symbol in symbols},
                                 index=pd.date_range("2026-09-21", periods=4, tz="UTC"))
 
@@ -154,8 +154,15 @@ def test_weight_tolerance_matches_engine_without_normalization(client):
 
 
 def test_missing_sample_history_fails_instead_of_fabricating_prices(client):
-    portfolio_id = create(client, {"UNKNOWN": 1.0})
-    assert client.post(f"/api/v1/portfolios/{portfolio_id}/analysis").status_code == 404
+    rejected = client.post("/api/v1/portfolios", json={
+        "name": "Unknown", "holdings": [{"symbol": "UNKNOWN", "weight": 1.0}],
+    })
+    assert rejected.status_code == 422
+    assert rejected.json()["error"]["code"] == "UNSUPPORTED_PORTFOLIO_SYMBOL"
+    assert all(
+        portfolio["name"] != "Unknown"
+        for portfolio in client.get("/api/v1/portfolios").json()
+    )
     response = client.post("/api/v1/portfolios/demo/what-if", json={
         "holdings": [{"symbol": "UNKNOWN", "weight": 1.0}],
     })
@@ -196,7 +203,11 @@ def test_symbol_limit_includes_what_if_union_and_portfolio_creation(client):
     })
     assert create_response.status_code == 422
 
-    portfolio_id = create(client, {f"A{i}": .125 for i in range(8)})
+    portfolio_id = client.app.state.store.create(PortfolioInput(
+        name="Union limit", holdings=[
+            {"symbol": f"A{i}", "weight": .125} for i in range(8)
+        ],
+    ), "legacy-test-investor").portfolio_id
     response = client.post(f"/api/v1/portfolios/{portfolio_id}/what-if", json={
         "holdings": [{"symbol": "NEW", "weight": 1.0}],
     })

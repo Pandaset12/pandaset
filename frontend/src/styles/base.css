@@ -400,6 +400,17 @@ svg {
   font-size: 0.8125rem;
   font-weight: 500;
   padding: 0;
+  max-width: min(330px, 48vw);
+}
+.portfolio-selector-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.portfolio-selector > svg,
+.portfolio-selector .portfolio-initial {
+  flex: none;
 }
 .portfolio-picker {
   position: relative;
@@ -419,13 +430,45 @@ svg {
   border-radius: 6px;
   box-shadow: 0 10px 25px rgb(0 0 0 / 12%);
 }
+.portfolio-menu-row {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
 .portfolio-menu button {
-  display: block;
-  width: 100%;
   padding: 9px 10px;
   text-align: left;
   border-radius: 4px;
-  overflow-wrap: anywhere;
+}
+.portfolio-menu-choice {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.portfolio-menu .portfolio-menu-delete {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 58px;
+  height: 36px;
+  padding: 0;
+  color: var(--muted);
+  font-size: 0.6875rem;
+}
+.portfolio-menu .portfolio-menu-delete:hover {
+  color: var(--negative);
+}
+.portfolio-menu .portfolio-menu-new {
+  display: block;
+  width: 100%;
+  margin-top: 5px;
+  border-top: 1px solid var(--border);
+  border-radius: 0;
+  color: var(--bamboo);
+  font-weight: 700;
 }
 .portfolio-menu button:hover,
 .portfolio-menu button:focus-visible,

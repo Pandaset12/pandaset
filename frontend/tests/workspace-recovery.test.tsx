@@ -216,6 +216,101 @@ test("a saved ticker rejected by sample prices offers retry, switching, and repl
   cleanup();
 });
 
+test("workspace selector opens the existing new portfolio flow", async () => {
+  const saved = {
+    portfolio_id: "saved",
+    name: "Saved portfolio",
+    created_at: "2026-09-26T00:00:00Z",
+    holdings: [{ symbol: "SPY", weight: 1 }],
+  };
+  globalThis.fetch = (async (url: RequestInfo | URL) => {
+    if (String(url) === "/api/v1/portfolios")
+      return { ok: true, json: async () => [saved] } as Response;
+    return { ok: false, status: 502, json: async () => null } as Response;
+  }) as typeof fetch;
+  render(createElement(Application, { onSignOut: async () => {} }));
+  await screen.findByRole("button", { name: /Saved portfolio/ });
+  fireEvent.click(screen.getByRole("button", { name: /Saved portfolio/ }));
+  fireEvent.click(screen.getByRole("button", { name: "+ New portfolio" }));
+  assert.ok(screen.getByRole("button", { name: "Back to saved portfolios" }));
+  assert.ok(screen.getByRole("button", { name: /Create another portfolio/ }));
+  cleanup();
+});
+
+test("delete confirmation names the portfolio, selects another, then offers onboarding after the last delete", async () => {
+  const saved = [
+    {
+      portfolio_id: "first",
+      name: "First portfolio",
+      created_at: "2026-09-26T00:00:00Z",
+      holdings: [{ symbol: "SPY", weight: 1 }],
+    },
+    {
+      portfolio_id: "second",
+      name: "Second portfolio",
+      created_at: "2026-09-26T00:00:00Z",
+      holdings: [{ symbol: "TLT", weight: 1 }],
+    },
+  ];
+  const deleted: string[] = [];
+  let analyses = 0;
+  globalThis.fetch = (async (url: RequestInfo | URL, init?: RequestInit) => {
+    const path = String(url);
+    if (path === "/api/v1/portfolios")
+      return { ok: true, json: async () => saved } as Response;
+    if (init?.method === "DELETE") {
+      deleted.push(path);
+      return { ok: true, status: 204, json: async () => null } as Response;
+    }
+    if (init?.method === "POST" && path.endsWith("/analysis")) {
+      analyses += 1;
+      return {
+        ok: false,
+        status: 502,
+        json: async () => ({ error: { message: "History unavailable." } }),
+      } as Response;
+    }
+    throw new Error(`Unexpected request: ${path}`);
+  }) as typeof fetch;
+  render(createElement(Application, { onSignOut: async () => {} }));
+  await screen.findByRole("button", { name: /First portfolio/ });
+  fireEvent.click(screen.getByRole("button", { name: /First portfolio/ }));
+  fireEvent.click(
+    screen.getByRole("button", { name: "Delete First portfolio" }),
+  );
+  assert.deepEqual(deleted, []);
+  assert.ok(
+    screen.getByRole("dialog").textContent?.includes("First portfolio"),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+  assert.deepEqual(deleted, []);
+  fireEvent.click(screen.getByRole("button", { name: /First portfolio/ }));
+  fireEvent.click(
+    screen.getByRole("button", { name: "Delete First portfolio" }),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Delete portfolio" }));
+  await waitFor(() => assert.deepEqual(deleted, ["/api/v1/portfolios/first"]));
+  await waitFor(() =>
+    assert.ok(screen.getByRole("button", { name: /Second portfolio/ })),
+  );
+  assert.equal(
+    screen.queryByRole("button", { name: "Delete First portfolio" }),
+    null,
+  );
+  await waitFor(() => assert.equal(analyses, 2));
+  fireEvent.click(screen.getByRole("button", { name: /Second portfolio/ }));
+  fireEvent.click(
+    screen.getByRole("button", { name: "Delete Second portfolio" }),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Delete portfolio" }));
+  await screen.findByRole("button", { name: /Create your first portfolio/ });
+  assert.deepEqual(deleted, [
+    "/api/v1/portfolios/first",
+    "/api/v1/portfolios/second",
+  ]);
+  cleanup();
+});
+
 test("SPY and fractional saved allocations remain usable in edit and What-if", () => {
   const saved = {
     portfolio_id: "fractional",
@@ -678,6 +773,78 @@ test("company search selects the returned symbol without offering the company na
   cleanup();
 });
 
+test("manual ticker entry waits for verification and leaves missing symbols out of holdings", async () => {
+  const added: string[] = [];
+  const checked: string[] = [];
+  render(
+    createElement(TickerSearch, {
+      inputId: "ticker-check",
+      selectedSymbols: added,
+      searchTickers: async () => [],
+      verifyTicker: async (symbol: string) => {
+        checked.push(symbol);
+        if (symbol === "SPACE" || symbol === "BALLSS")
+          throw new Error(`We couldn't find that ticker (${symbol}).`);
+      },
+      onSelect: (ticker: { symbol: string }) => added.push(ticker.symbol),
+    }),
+  );
+  const search = screen.getByRole("combobox", { name: "Add a holding" });
+  for (const symbol of ["SPACE", "BALLSS"]) {
+    fireEvent.change(search, { target: { value: symbol } });
+    fireEvent.click(
+      await screen.findByRole("option", {
+        name: new RegExp(`${symbol}.*Add exact ticker`),
+      }),
+    );
+    await screen.findByRole("alert", { name: "" });
+    assert.match(
+      screen.getByRole("alert").textContent ?? "",
+      /couldn't find that ticker/i,
+    );
+    assert.deepEqual(added, []);
+  }
+  for (const symbol of ["AAPL", "MSFT", "SPY", "JPM"]) {
+    fireEvent.change(search, { target: { value: symbol } });
+    fireEvent.click(
+      await screen.findByRole("option", {
+        name: new RegExp(`${symbol}.*Add exact ticker`),
+      }),
+    );
+    await waitFor(() => assert.ok(added.includes(symbol)));
+  }
+  assert.deepEqual(checked, ["SPACE", "BALLSS", "AAPL", "MSFT", "SPY", "JPM"]);
+  cleanup();
+});
+
+test("workspace onboarding searches backend tickers by company name", async () => {
+  globalThis.fetch = (async (url: RequestInfo | URL) => {
+    if (String(url) === "/api/v1/portfolios")
+      return { ok: true, json: async () => [] } as Response;
+    if (String(url) === "/api/v1/assets/search?q=Apple")
+      return {
+        ok: true,
+        json: async () => ({
+          results: [{ symbol: "AAPL", name: "Apple Inc." }],
+        }),
+      } as Response;
+    throw new Error(`Unexpected request: ${url}`);
+  }) as typeof fetch;
+  render(createElement(Application, { onSignOut: async () => {} }));
+  fireEvent.click(
+    await screen.findByRole("button", { name: /Create your first portfolio/ }),
+  );
+  fireEvent.change(screen.getByRole("textbox", { name: "Portfolio name" }), {
+    target: { value: "Search test" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+  fireEvent.change(screen.getByRole("combobox", { name: "Add a holding" }), {
+    target: { value: "Apple" },
+  });
+  assert.ok(await screen.findByRole("option", { name: /AAPL.*Apple/ }));
+  cleanup();
+});
+
 test("repeated workspace edits PUT one selected portfolio and refresh its analysis", async () => {
   let saved = {
     portfolio_id: "saved",
@@ -763,7 +930,7 @@ test("repeated workspace edits PUT one selected portfolio and refresh its analys
       { target: { value: first } },
     );
     fireEvent.change(
-      screen.getByRole("textbox", { name: "AAPL portfolio allocation" }),
+      await screen.findByRole("textbox", { name: "AAPL portfolio allocation" }),
       { target: { value: second } },
     );
     fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
