@@ -1,9 +1,14 @@
-# Quant engine integration review
+# Historical quant engine integration review
+
+This records the pre-integration review of `500c77c`, not the current runtime.
+The quant engine is now connected through `EngineQuantProvider`. Current status
+and contracts are in [INTEGRATION.md](../INTEGRATION.md); the findings below
+describe the older review baseline.
 
 Reviewed `quant-engine` commit
 [`500c77c`](https://github.com/Pandaset12/pandaset/commit/500c77c)
-on 2026-09-26. The module was inspected and tested in an isolated copy; it has
-not been merged into this branch or wired into the API.
+on 2026-09-26. At that time the module was inspected and tested in an isolated
+copy before being wired into the API.
 
 ## Confirmed implementation
 

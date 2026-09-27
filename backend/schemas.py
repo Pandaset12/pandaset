@@ -211,10 +211,17 @@ class QuestionInput(BaseModel):
     @classmethod
     def public_https_urls(cls, urls: list[AnyHttpUrl]) -> list[AnyHttpUrl]:
         for url in urls:
-            host = (url.host or "").lower()
+            # A DNS root dot does not turn localhost/internal names into public
+            # domains. Strip one valid root dot before checking suffixes; empty
+            # labels (including multiple trailing dots) remain invalid.
+            host = (url.host or "").lower().removesuffix(".")
             if url.scheme != "https" or url.username or url.password:
                 raise ValueError("Use public HTTPS URLs without credentials.")
-            if "." not in host or host.endswith((".localhost", ".local", ".internal")):
+            if (
+                "." not in host
+                or any(not label for label in host.split("."))
+                or host.endswith((".localhost", ".local", ".internal"))
+            ):
                 raise ValueError("Use a public website domain.")
             try:
                 ipaddress.ip_address(host.strip("[]"))
