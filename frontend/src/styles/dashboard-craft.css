@@ -1,0 +1,357 @@
+/* The dashboard uses a quiet reading rhythm rather than scroll-locked scenes. */
+.main-content[class*="dashboard-"] > .page-heading {
+  margin-bottom: 28px;
+}
+
+.main-content[class*="dashboard-"] .page-heading h1 {
+  text-wrap: balance;
+}
+
+.main-content[class*="dashboard-"] .page-heading p {
+  max-width: 60ch;
+  line-height: 1.55;
+}
+
+/* Overview: lead with the saved analysis, then give live prices their own beat. */
+.dashboard-overview .overview-top {
+  margin-bottom: 22px;
+}
+
+.dashboard-overview .performance-panel {
+  border-color: color-mix(in srgb, var(--bamboo) 23%, var(--border));
+  box-shadow: 0 12px 34px #171b1808;
+}
+
+.dashboard-overview .large-value {
+  font-size: clamp(3rem, 5vw, 4.6rem);
+  line-height: 1.1;
+  letter-spacing: -0.055em;
+  margin: 11px 0 5px;
+}
+
+.dashboard-overview .focus-panel {
+  background: #dce7dc;
+}
+
+.dashboard-overview .live-quotes {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 14px 24px;
+  padding: 13px 18px;
+  margin-bottom: 12px;
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--surface) 75%, var(--canvas));
+}
+
+.dashboard-overview .live-quotes-heading {
+  display: block;
+  margin: 0;
+  flex: 1 1 230px;
+}
+
+.dashboard-overview .live-quotes-heading span {
+  display: block;
+  margin-top: 3px;
+  line-height: 1.4;
+}
+
+.dashboard-overview .live-quotes-grid {
+  flex: 2 1 280px;
+}
+
+.dashboard-overview .live-quote {
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+
+.dashboard-overview .holdings-section {
+  padding-top: 4px;
+}
+
+/* Risk: make the finding prominent; keep the comparison and matrix scannable. */
+.dashboard-risk .risk-summary {
+  gap: clamp(24px, 4vw, 56px);
+  padding: 0 0 32px;
+  border-top: 0;
+}
+
+.dashboard-risk .risk-intro {
+  padding: 27px;
+  background: var(--panel-deep);
+  border: 1px solid color-mix(in srgb, var(--bamboo) 20%, var(--border));
+  border-radius: var(--radius);
+}
+
+.dashboard-risk .risk-intro h2 {
+  font-size: clamp(2.15rem, 3.2vw, 3.2rem);
+}
+
+.dashboard-risk .risk-intro h2 em {
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+.dashboard-risk .risk-bars-panel {
+  min-width: 0;
+  padding: 27px 0 0;
+}
+
+.dashboard-risk .risk-bar-row {
+  min-height: 44px;
+  padding-inline: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.dashboard-risk .risk-detail {
+  gap: 26px;
+}
+
+.dashboard-risk .risk-detail > section {
+  min-width: 0;
+  padding: 23px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+/* Research: a directory, a desk, then further reading. */
+.dashboard-research .research-workspace {
+  border-radius: var(--radius);
+  box-shadow: 0 12px 34px #171b1808;
+}
+
+.dashboard-research .research-index {
+  background: color-mix(in srgb, var(--raised) 58%, var(--surface));
+}
+
+.dashboard-research .asset-index-item.active {
+  box-shadow: inset 3px 0 0 var(--bamboo);
+}
+
+.dashboard-research .company-detail {
+  padding: clamp(23px, 3vw, 42px);
+}
+
+.dashboard-research .company-identity h2 {
+  font-size: clamp(2.1rem, 3vw, 3rem);
+}
+
+.dashboard-research .research-reading {
+  padding-top: 38px;
+}
+
+.dashboard-research .reading-note {
+  min-height: 205px;
+  padding: 23px 17px 18px;
+  transition:
+    background 180ms ease,
+    transform 180ms ease;
+}
+
+.dashboard-research .reading-note:hover,
+.dashboard-research .reading-note:focus-visible {
+  transform: translateY(-3px);
+}
+
+/* What-if: restore the two-part workbench and separate prompts from inputs. */
+.dashboard-what-if .scenario-presets {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 9px;
+  padding: 13px 16px;
+  margin-bottom: 23px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.dashboard-what-if .scenario-presets > span {
+  margin-right: auto;
+  color: var(--muted);
+  font-size: 0.69rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.dashboard-what-if .scenario-presets > button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 36px;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--canvas);
+  font-size: 0.75rem;
+}
+
+.dashboard-what-if .scenario-presets > button:not(:disabled):hover,
+.dashboard-what-if .scenario-presets > button:not(:disabled):focus-visible {
+  background: var(--selected);
+  border-color: var(--bamboo);
+}
+
+.dashboard-what-if .scenario-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 0.96fr) minmax(0, 1.04fr);
+  align-items: start;
+  gap: 24px;
+}
+
+.dashboard-what-if .scenario-editor,
+.dashboard-what-if .scenario-results {
+  min-width: 0;
+  padding: 24px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.dashboard-what-if .scenario-results {
+  background: color-mix(in srgb, var(--panel-deep) 47%, var(--surface));
+}
+
+.dashboard-what-if .scenario-editor > .section-heading,
+.dashboard-what-if .scenario-results > .section-heading {
+  padding-bottom: 15px;
+  border-bottom: 1px solid var(--border);
+}
+
+.dashboard-what-if .scenario-results .scenario-empty {
+  margin-top: 28px;
+}
+
+@media (min-width: 1201px) {
+  .dashboard-what-if .scenario-workspace {
+    grid-template-columns: minmax(0, 0.93fr) minmax(0, 1.07fr);
+  }
+}
+
+@media (max-width: 1100px) {
+  .dashboard-what-if .scenario-workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 720px) {
+  .dashboard-overview .large-value {
+    font-size: 2.75rem;
+  }
+
+  .dashboard-risk .risk-summary {
+    gap: 15px;
+  }
+
+  .dashboard-risk .risk-intro,
+  .dashboard-risk .risk-detail > section {
+    padding: 19px;
+  }
+
+  .dashboard-research .reading-note {
+    min-height: 0;
+  }
+
+  .dashboard-what-if .scenario-presets > span {
+    flex-basis: 100%;
+  }
+
+  .dashboard-what-if .scenario-editor,
+  .dashboard-what-if .scenario-results {
+    padding: 19px;
+  }
+}
+
+.dashboard-what-if .scenario-results .scenario-empty {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 310px;
+  margin-top: 24px;
+}
+
+.dashboard-what-if .scenario-empty .scenario-illustration {
+  display: none;
+}
+
+.dashboard-what-if .scenario-empty h3 {
+  max-width: 13ch;
+  font-family: var(--serif);
+  font-size: clamp(2rem, 3vw, 3rem);
+  font-weight: 400;
+  line-height: 1.06;
+}
+
+.dashboard-what-if .scenario-empty > p {
+  max-width: 43ch;
+  color: var(--muted);
+  font-size: 0.875rem;
+  line-height: 1.55;
+}
+
+.dashboard-what-if .comparison-preview {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  margin-top: auto;
+  padding-top: 19px;
+  border-top: 1px solid var(--border);
+}
+
+.dashboard-what-if .comparison-preview > span {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.dashboard-what-if .comparison-preview strong {
+  color: var(--ink);
+  font-size: 1.65rem;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.dashboard-what-if .scenario-disclaimer {
+  margin-top: 16px;
+  color: var(--muted);
+  font-size: 0.75rem;
+  line-height: 1.55;
+}
+
+.dashboard-what-if .scenario-disclaimer .sample-context {
+  margin-bottom: 7px;
+}
+
+.dashboard-what-if .scenario-editor .allocation-transfer {
+  border-top: 0;
+  padding-top: 0;
+  margin-top: 0;
+}
+
+.dashboard-risk .correlation-empty {
+  display: grid;
+  align-content: center;
+  min-height: 180px;
+  padding: 22px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  background: var(--canvas);
+}
+
+.dashboard-risk .correlation-empty strong {
+  font-family: var(--serif);
+  font-size: 1.65rem;
+  font-weight: 400;
+  line-height: 1.15;
+}
+
+.dashboard-risk .correlation-empty p {
+  max-width: 36ch;
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 0.8125rem;
+}

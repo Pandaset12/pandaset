@@ -110,7 +110,6 @@ export default function Overview({
           Brief this portfolio
         </button>
       </PageHeading>
-      <LiveQuotesPanel symbols={symbols} />
       <div className="overview-top">
         <section
           className="performance-panel"
@@ -238,6 +237,7 @@ export default function Overview({
           </a>
         </aside>
       </div>
+      <LiveQuotesPanel symbols={symbols} />
       <AnalysisDetails analysis={analysis} />
       <div className="metric-strip">
         <div>

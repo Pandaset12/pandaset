@@ -104,11 +104,6 @@ export default function Overview({
           Brief this portfolio
         </button>
       </PageHeading>
-      <LiveQuotesPanel
-        symbols={Object.keys(analysis.weights).filter(
-          (symbol) => analysis.weights[symbol] > 0,
-        )}
-      />
       <section className="backend-analysis" aria-label="Saved backend analysis">
         <div>
           <strong>
@@ -247,6 +242,11 @@ export default function Overview({
           </a>
         </aside>
       </div>
+      <LiveQuotesPanel
+        symbols={Object.keys(analysis.weights).filter(
+          (symbol) => analysis.weights[symbol] > 0,
+        )}
+      />
       <div className="metric-strip">
         <div>
           <span>Annualized volatility</span>

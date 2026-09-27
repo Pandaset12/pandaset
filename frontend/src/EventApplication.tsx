@@ -302,7 +302,11 @@ export function EventApplication({
             )}
           </div>
         </div>
-        <main id="main-content" className="main-content" tabIndex={-1}>
+        <main
+          id="main-content"
+          className={`main-content dashboard-${route === "/" ? "overview" : route.slice(1)}`}
+          tabIndex={-1}
+        >
           {listState === "loading" ? (
             <section className="api-state" role="status">
               <strong>Loading your portfolios…</strong>
