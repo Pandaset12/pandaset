@@ -49,9 +49,7 @@
   text-wrap: balance;
 }
 .auth-intro {
-  position: relative;
-  isolation: isolate;
-  min-height: 440px;
+  min-width: 0;
 }
 .auth-intro > p {
   color: var(--auth-muted);
@@ -59,103 +57,6 @@
   line-height: 1.75;
   max-width: 440px;
   margin-top: 28px;
-}
-.auth-scene {
-  position: absolute;
-  z-index: 0;
-  width: clamp(190px, 22vw, 290px);
-  aspect-ratio: 1;
-  right: -4%;
-  bottom: -49px;
-  pointer-events: none;
-}
-.auth-intro > h1,
-.auth-intro > p {
-  position: relative;
-  z-index: 1;
-}
-.auth-scene-orbit {
-  position: absolute;
-  inset: 4% 5% 10% 4%;
-  border: 1px solid #e1e1e1;
-  border-radius: 50%;
-  background: radial-gradient(circle at center, #f0f0f0 0 1px, transparent 1px)
-    center / 18px 18px;
-  mask-image: radial-gradient(circle, #000 48%, transparent 75%);
-}
-.auth-scene-orbit::before,
-.auth-scene-orbit::after {
-  content: "";
-  position: absolute;
-  inset: 15%;
-  border: 1px solid #dedede;
-  border-radius: 50%;
-}
-.auth-scene-orbit::after {
-  inset: 32%;
-}
-.auth-scene-panda {
-  position: absolute;
-  inset: 3% 0 0 18%;
-  transform: rotate(4deg);
-}
-.auth-scene .landing-panda {
-  display: block;
-  width: 100%;
-  height: auto;
-}
-.auth-scene .lp-panda-head,
-.auth-scene .lp-panda-gaze,
-.auth-scene .lp-panda-blink {
-  transform-box: fill-box;
-}
-.auth-scene .lp-panda-head {
-  transform-origin: 50% 75%;
-  transition: transform 460ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-.auth-scene .lp-panda-gaze {
-  transition: transform 300ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-.auth-scene .lp-panda-blink {
-  transform-origin: center;
-  transition: transform 220ms ease;
-}
-.auth-scene[data-focus="email"] .lp-panda-head {
-  transform: rotate(6deg);
-}
-.auth-scene[data-focus="email"] .lp-panda-gaze {
-  transform: translate(8px, -2px);
-}
-.auth-scene[data-focus="password"] .lp-panda-head {
-  transform: rotate(-18deg);
-}
-.auth-scene[data-focus="password"] .lp-panda-gaze {
-  transform: translate(-10px, 1px);
-}
-.auth-scene[data-focus="password"] .lp-panda-blink {
-  transform: scaleY(0.09);
-}
-@media (prefers-reduced-motion: no-preference) {
-  .auth-scene-panda {
-    animation: auth-panda-enter 750ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .auth-scene .lp-panda-head,
-  .auth-scene .lp-panda-gaze,
-  .auth-scene .lp-panda-blink {
-    transition-duration: 0.01ms;
-  }
-}
-@keyframes auth-panda-enter {
-  from {
-    opacity: 0;
-    transform: translateY(16px) rotate(7deg);
-  }
-  to {
-    opacity: 1;
-    transform: rotate(4deg);
-  }
 }
 .auth-card {
   width: 100%;
@@ -285,23 +186,8 @@
   .auth-intro > p {
     margin-top: 20px;
   }
-  .auth-intro {
-    min-height: 330px;
-  }
-  .auth-scene {
-    width: 195px;
-    right: 0;
-    bottom: -23px;
-  }
   .auth-card {
     padding: clamp(28px, 6vw, 38px);
-  }
-}
-@media (min-width: 921px) and (max-width: 1180px) {
-  .auth-scene {
-    width: 195px;
-    right: -2%;
-    bottom: -28px;
   }
 }
 @media (max-width: 720px) {

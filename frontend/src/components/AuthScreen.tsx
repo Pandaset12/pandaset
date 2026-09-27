@@ -1,7 +1,6 @@
 import { useState, type FormEvent } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { Brand } from "./UI";
-import { LandingPanda } from "./LandingPanda";
 import { getSupabase } from "../lib/supabase";
 
 type Mode = "signin" | "signup";
@@ -17,9 +16,6 @@ export function AuthScreen({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [confirmation, setConfirmation] = useState(false);
-  const [focusedField, setFocusedField] = useState<"email" | "password" | null>(
-    null,
-  );
 
   function changeMode(next: Mode) {
     setMode(next);
@@ -81,16 +77,6 @@ export function AuthScreen({
             Explore performance, risk, research, and scenarios in one focused
             workspace.
           </p>
-          <div
-            className="auth-scene"
-            data-focus={focusedField ?? undefined}
-            aria-hidden="true"
-          >
-            <div className="auth-scene-orbit" />
-            <div className="auth-scene-panda">
-              <LandingPanda />
-            </div>
-          </div>
         </section>
         <section className="auth-card" aria-labelledby="auth-title">
           {confirmation ? (
@@ -125,8 +111,6 @@ export function AuthScreen({
                   autoComplete="email"
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
-                  onFocus={() => setFocusedField("email")}
-                  onBlur={() => setFocusedField(null)}
                   disabled={busy}
                   required
                 />
@@ -139,8 +123,6 @@ export function AuthScreen({
                   }
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
-                  onFocus={() => setFocusedField("password")}
-                  onBlur={() => setFocusedField(null)}
                   disabled={busy}
                   required
                   minLength={6}
