@@ -96,6 +96,10 @@
 .po-intro > .po-back-link {
   margin-top: 20px;
 }
+.po-intro > .logo-attribution {
+  display: inline-block;
+  margin-top: 20px;
+}
 .po-panel {
   min-width: 0;
   background: var(--surface);
@@ -355,17 +359,6 @@
   margin-top: 4px;
   overflow-wrap: anywhere;
 }
-.po-ticker-mark {
-  display: grid;
-  place-items: center;
-  width: 32px;
-  height: 34px;
-  flex: 0 0 32px;
-  border-radius: 5px;
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--ink-on-accent);
-}
 .po-tone-0 {
   background: #39734f;
 }
@@ -578,12 +571,6 @@
   flex-shrink: 0;
   font-variant-numeric: tabular-nums;
 }
-.po-review-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
 .po-review-note {
   color: var(--muted);
   font-size: 0.71rem;
@@ -723,9 +710,6 @@
   .po-holding-row {
     grid-template-columns: minmax(0, 1fr) 88px 26px;
     column-gap: 6px;
-  }
-  .po-ticker-mark {
-    display: none;
   }
   .po-remove {
     width: 26px;

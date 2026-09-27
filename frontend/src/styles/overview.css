@@ -378,6 +378,7 @@
   color: var(--muted);
 }
 .asset-mark {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -391,6 +392,24 @@
   color: var(--asset-color);
   flex-shrink: 0;
   letter-spacing: -1px;
+  overflow: hidden;
+}
+.asset-mark-fallback {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+}
+.asset-mark img {
+  position: absolute;
+  inset: 3px;
+  width: calc(100% - 6px);
+  height: calc(100% - 6px);
+  object-fit: contain;
+  opacity: 0;
+}
+.asset-mark img.loaded {
+  opacity: 1;
 }
 .asset-mark svg {
   width: 26px;
@@ -516,6 +535,14 @@
 .site-footer .text-button {
   font-size: 0.75rem;
   color: var(--muted);
+}
+.logo-attribution {
+  color: var(--muted);
+  font-size: 0.75rem;
+  text-underline-offset: 3px;
+}
+.logo-attribution:hover {
+  color: var(--ink);
 }
 .backend-analysis {
   display: flex;

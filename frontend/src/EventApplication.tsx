@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowUpRight, Check, XMark as X } from "./components/icons";
-import { Brand } from "./components/UI";
+import { Brand, LogoAttribution } from "./components/UI";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { EditPortfolio } from "./components/EventEditPortfolio";
 import {
@@ -446,6 +446,7 @@ export function EventApplication({
           Pandaset<span className="footer-slash">/</span>A clearer view of what
           you own.
         </span>
+        <LogoAttribution />
         <span>
           Hypothetical analysis. No brokerage connection or trades.
           <ArrowUpRight size={13} />

@@ -15,7 +15,7 @@ import {
   type AnalysisResponse,
   type Portfolio,
 } from "./api/portfolio";
-import { Brand, Modal } from "./components/UI";
+import { Brand, LogoAttribution, Modal } from "./components/UI";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { EditPortfolio } from "./components/EditPortfolio";
 import { MethodologyModal } from "./components/MethodologyModal";
@@ -535,6 +535,7 @@ export function Application({ onSignOut }: { onSignOut: () => Promise<void> }) {
           Pandaset<span className="footer-slash">/</span>A clearer view of what
           you own.
         </span>
+        <LogoAttribution />
       </footer>
       {edit && active && (
         <EditPortfolio

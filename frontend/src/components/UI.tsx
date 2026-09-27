@@ -1,7 +1,8 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { ArrowRight, ArrowUpRight, XMark } from "./icons";
 import type { PortfolioAsset } from "../types/portfolioAsset";
+import { assetLogoUrl, hasAssetLogoProvider } from "./assetLogo";
 
 export function PandaMark({ className }: { className?: string }) {
   return (
@@ -66,46 +67,82 @@ export function Brand({
 export function AssetMark({
   asset,
   small = false,
+  logoKey,
 }: {
-  asset: PortfolioAsset;
+  asset: Pick<PortfolioAsset, "symbol"> &
+    Partial<Pick<PortfolioAsset, "color">>;
   small?: boolean;
+  logoKey?: string;
 }) {
+  const symbol = asset.symbol;
+  const logoUrl = assetLogoUrl(symbol, logoKey);
+  const [imageState, setImageState] = useState<{
+    symbol: string;
+    status: "loaded" | "error";
+  } | null>(null);
+  const imageStatus = imageState?.symbol === symbol ? imageState.status : null;
+  const showFallback = !logoUrl || imageStatus !== "loaded";
+
   return (
     <span
       className={`asset-mark ${small ? "small" : ""}`}
-      style={{ "--asset-color": asset.color } as React.CSSProperties}
+      style={
+        { "--asset-color": asset.color ?? "#64748b" } as React.CSSProperties
+      }
       aria-hidden="true"
     >
-      {asset.symbol === "MSFT" ? (
-        <span className="ms-grid">
-          <i />
-          <i />
-          <i />
-          <i />
+      {showFallback && (
+        <span className="asset-mark-fallback">
+          {asset.symbol === "MSFT" ? (
+            <span className="ms-grid">
+              <i />
+              <i />
+              <i />
+              <i />
+            </span>
+          ) : asset.symbol === "NVDA" ? (
+            "N"
+          ) : asset.symbol === "VTI" ? (
+            "V"
+          ) : asset.symbol === "TLT" ? (
+            "iS"
+          ) : asset.symbol === "GLD" ? (
+            "Au"
+          ) : asset.symbol === "JPM" ? (
+            "J"
+          ) : asset.symbol === "AMD" ? (
+            "A"
+          ) : asset.symbol === "AAPL" ? (
+            <svg viewBox="0 0 24 24">
+              <path
+                d="M15.4 3.3c-.9.1-2 .6-2.6 1.3-.6.7-1.1 1.7-.9 2.7 1 .1 2-.5 2.7-1.2.6-.8 1-1.7.8-2.8ZM18.5 14.8c-.5 1.3-.8 1.9-1.5 3-1 1.5-2.5 3.4-4.2 3.4-1.5 0-1.9-.9-3.9-.9s-2.5.9-3.9.9c-1.6 0-3.1-1.7-4.1-3.2-2.8-4.2-3.1-9.1-1.4-11.6C.7 4.6 2.8 3.6 4.8 3.6c1.5 0 2.5.9 3.8.9s2.1-.9 3.8-.9c1.6 0 3.3.9 4.4 2.3-3.8 2.1-3.2 7.5 1.7 8.9Z"
+                transform="translate(4 4) scale(.75)"
+              />
+            </svg>
+          ) : (
+            asset.symbol.slice(0, 2)
+          )}
         </span>
-      ) : asset.symbol === "NVDA" ? (
-        "N"
-      ) : asset.symbol === "VTI" ? (
-        "V"
-      ) : asset.symbol === "TLT" ? (
-        "iS"
-      ) : asset.symbol === "GLD" ? (
-        "Au"
-      ) : asset.symbol === "JPM" ? (
-        "J"
-      ) : asset.symbol === "AMD" ? (
-        "A"
-      ) : asset.symbol === "AAPL" ? (
-        <svg viewBox="0 0 24 24">
-          <path
-            d="M15.4 3.3c-.9.1-2 .6-2.6 1.3-.6.7-1.1 1.7-.9 2.7 1 .1 2-.5 2.7-1.2.6-.8 1-1.7.8-2.8ZM18.5 14.8c-.5 1.3-.8 1.9-1.5 3-1 1.5-2.5 3.4-4.2 3.4-1.5 0-1.9-.9-3.9-.9s-2.5.9-3.9.9c-1.6 0-3.1-1.7-4.1-3.2-2.8-4.2-3.1-9.1-1.4-11.6C.7 4.6 2.8 3.6 4.8 3.6c1.5 0 2.5.9 3.8.9s2.1-.9 3.8-.9c1.6 0 3.3.9 4.4 2.3-3.8 2.1-3.2 7.5 1.7 8.9Z"
-            transform="translate(4 4) scale(.75)"
-          />
-        </svg>
-      ) : (
-        asset.symbol.slice(0, 2)
+      )}
+      {logoUrl && imageStatus !== "error" && (
+        <img
+          className={imageStatus === "loaded" ? "loaded" : ""}
+          src={logoUrl}
+          alt=""
+          decoding="async"
+          onLoad={() => setImageState({ symbol, status: "loaded" })}
+          onError={() => setImageState({ symbol, status: "error" })}
+        />
       )}
     </span>
+  );
+}
+export function LogoAttribution() {
+  if (!hasAssetLogoProvider()) return null;
+  return (
+    <a className="logo-attribution" href="https://logo.dev">
+      Logos provided by Logo.dev
+    </a>
   );
 }
 export function SectionTitle({
@@ -208,6 +245,7 @@ export function Modal({
           </button>
         </div>
         {children}
+        <LogoAttribution />
       </div>
     </dialog>
   );
