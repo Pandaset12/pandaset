@@ -73,3 +73,11 @@ docs/                Design, onboarding, verification, and release notes
 ```
 
 Vite builds both `index.html` (landing) and `app.html` (dashboard). The dashboard uses hash routes, so a static host can serve `frontend/dist/` without route rewrites. See the [backend guide](backend/README.md), [Python quant guide](quant_engine/README.md), [design notes](docs/design-system.md), and [verification notes](docs/verification.md) for details. Font licenses are in `frontend/public/fonts/`.
+
+## Vercel frontend and Render API
+
+Import the repository root as the Vercel project. `vercel.json` runs `npm run build`, serves `frontend/dist/`, and proxies `/api/*` to `https://pandaset.onrender.com/api/*`. The Vite development proxy applies only to local development.
+
+Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` in the Vercel project for each deployment environment, then redeploy. Use the same Supabase project for Render's `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY`. Configure the production site URL and email confirmation redirects in Supabase Auth to use the Vercel domain. The publishable key is exposed in the frontend bundle; keep server secrets on Render.
+
+Check `https://pandaset.onrender.com/health` before deploying. It should report `status: ok` and `authentication_enabled: true`. After deployment, a request to the Vercel site's `/api/v1/portfolios` without a bearer token should return HTTP 401 from the backend. Render's v1 SQLite storage also needs a persistent disk and `STORAGE_PATH` pointing to it to keep saved portfolios across restarts.
