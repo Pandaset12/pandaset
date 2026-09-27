@@ -40,7 +40,9 @@ export default function Overview({
   const [view, setView] = useState<"holdings" | "drivers">("holdings");
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<"weight" | "return">("weight");
-  const symbols = Object.keys(analysis.weights).filter((symbol) => analysis.weights[symbol] > 0);
+  const symbols = Object.keys(analysis.weights).filter(
+    (symbol) => analysis.weights[symbol] > 0,
+  );
   const holdings = portfolioAssets
     .map((asset) => ({
       asset,

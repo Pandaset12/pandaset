@@ -191,6 +191,54 @@ test("identical requests in flight share one backend call", async () => {
   await Promise.all([first, second]);
 });
 
+test("stalled quotes time out and release the request for a later retry", async (context) => {
+  context.mock.timers.enable({ apis: ["setTimeout"] });
+  let signal!: AbortSignal;
+  globalThis.fetch = ((_input, init) =>
+    new Promise<Response>((_resolve, reject) => {
+      signal = init!.signal!;
+      signal.addEventListener("abort", () => reject(signal.reason), {
+        once: true,
+      });
+    })) as typeof fetch;
+  const pending = getLiveQuotes(["AAPL"]);
+  const rejected = assert.rejects(
+    pending,
+    (error: unknown) => error instanceof ApiError && error.status === 408,
+  );
+  context.mock.timers.tick(20_000);
+  await rejected;
+  assert.equal(signal.aborted, true);
+  stubFetch(() => ({ feed: "IEX", source: "alpaca", quotes: [] }));
+  assert.equal((await getLiveQuotes(["AAPL"])).feed, "IEX");
+});
+
+test("cancelling one quote consumer does not cancel another", async () => {
+  const requests: {
+    signal: AbortSignal;
+    resolve: (response: Response) => void;
+  }[] = [];
+  globalThis.fetch = ((_input, init) =>
+    new Promise<Response>((resolve, reject) => {
+      const signal = init!.signal!;
+      signal.addEventListener("abort", () => reject(signal.reason), {
+        once: true,
+      });
+      requests.push({ signal, resolve });
+    })) as typeof fetch;
+  const controller = new AbortController();
+  const first = getLiveQuotes(["AAPL"], controller.signal);
+  const second = getLiveQuotes(["AAPL"]);
+  const rejected = assert.rejects(first, { name: "AbortError" });
+  controller.abort();
+  await rejected;
+  assert.equal(requests[1].signal.aborted, false);
+  requests[1].resolve(
+    new Response(JSON.stringify({ feed: "IEX", source: "alpaca", quotes: [] })),
+  );
+  assert.equal((await second).feed, "IEX");
+});
+
 test("what-if uses decimal weights and Ask Panda sends the active analysis ID", async () => {
   const calls: { url: string; body: unknown }[] = [];
   stubFetch((url, init) => {

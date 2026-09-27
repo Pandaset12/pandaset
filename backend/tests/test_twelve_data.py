@@ -16,8 +16,8 @@ def rows(symbol, values):
 
 def test_batched_history_is_sorted_aligned_and_requests_adjusted_daily(monkeypatch):
     payload = {
-        "AAPL": rows("AAPL", [("2026-01-02", 102), ("2026-01-01", 100)]),
-        "MSFT": rows("MSFT", [("2026-01-01", 200), ("2026-01-02", 198)]),
+        "AAPL": rows("AAPL", [("2026-01-02", 102), ("2025-12-31", 99), ("2026-01-01", 100)]),
+        "MSFT": rows("MSFT", [("2026-01-01", 200), ("2026-01-02", 198), ("2025-12-31", 199)]),
     }
     captured = {}
 
@@ -42,16 +42,16 @@ def test_batched_history_is_sorted_aligned_and_requests_adjusted_daily(monkeypat
     assert query["timezone"] == ["UTC"]
     assert query["apikey"] == ["test-key"]
     assert captured["timeout"] == 7
-    assert list(frame.index.strftime("%Y-%m-%d")) == ["2026-01-01", "2026-01-02"]
-    assert frame.to_dict() == {"AAPL": {frame.index[0]: 100.0, frame.index[1]: 102.0},
-                               "MSFT": {frame.index[0]: 200.0, frame.index[1]: 198.0}}
+    assert list(frame.index.strftime("%Y-%m-%d")) == ["2025-12-31", "2026-01-01", "2026-01-02"]
+    assert frame["AAPL"].tolist() == [99.0, 100.0, 102.0]
+    assert frame["MSFT"].tolist() == [199.0, 200.0, 198.0]
 
 
 def test_single_symbol_response_shape_is_supported(monkeypatch):
     provider = TwelveDataPriceProvider("test-key")
-    provider._fetch = lambda symbols, outputsize: rows("AAPL", [("2026-01-02", 102), ("2026-01-01", 100)])
+    provider._fetch = lambda symbols, outputsize: rows("AAPL", [("2026-01-02", 102), ("2026-01-01", 100), ("2025-12-31", 99)])
     frame = provider.prices(["AAPL"], 2)
-    assert frame["AAPL"].tolist() == [100.0, 102.0]
+    assert frame["AAPL"].tolist() == [99.0, 100.0, 102.0]
 
 
 def test_missing_key_does_not_call_upstream():
@@ -68,7 +68,7 @@ def test_provider_rejects_partial_or_misaligned_history():
         "MSFT": rows("MSFT", [("2026-01-02", 200), ("2026-01-03", 201)]),
     }
     with pytest.raises(ProviderUnavailable, match="same trading dates"):
-        provider.prices(["AAPL", "MSFT"])
+        provider.prices(["AAPL", "MSFT"], 1)
 
 
 def test_provider_rejects_invalid_or_nonpositive_values():

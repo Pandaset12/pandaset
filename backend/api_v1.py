@@ -25,6 +25,7 @@ from .providers import IntegrationPending, QuantProvider, get_provider
 from .research_sources import curated_research_source
 from .schemas import (
     MAX_PORTFOLIO_SYMBOLS,
+    MAX_QUOTE_SYMBOLS,
     AIWorkflowResponse,
     AllocationInput,
     AnalysisResponse,
@@ -57,25 +58,25 @@ def api_error(status: int, code: str, message: str) -> HTTPException:
 
 @router.get("/quotes")
 async def live_quotes(
-    symbols: list[str] = Query(min_length=1, max_length=8),
+    symbols: list[str] = Query(min_length=1, max_length=MAX_QUOTE_SYMBOLS),
     settings: Settings = Depends(get_settings),
     _user_id: str = Depends(current_user_id),
 ) -> LiveQuotesResponse:
     normalized = [symbol.strip().upper() for symbol in symbols]
     if (
-        any(not re.fullmatch(r"[A-Z0-9]+(?:[.-][A-Z0-9]+)*", symbol, flags=re.ASCII) for symbol in normalized)
+        any(len(symbol) > 20 or not re.fullmatch(r"[A-Z0-9]+(?:[.-][A-Z0-9]+)*", symbol, flags=re.ASCII) for symbol in normalized)
         or len(set(normalized)) != len(normalized)
     ):
-        raise api_error(422, "INVALID_QUOTES_REQUEST", "Provide one to eight unique stock symbols.")
+        raise api_error(422, "INVALID_QUOTES_REQUEST", f"Provide one to {MAX_QUOTE_SYMBOLS} unique stock symbols, each at most 20 characters.")
     if not settings.has_alpaca_keys:
         raise api_error(503, "ALPACA_NOT_CONFIGURED", "Live quotes are unavailable. Configure ALPACA_API_KEY and ALPACA_API_SECRET on the backend.")
     try:
         payload = await run_in_threadpool(
             fetch_alpaca_quotes,
             normalized,
-            settings.alpaca_api_key.get_secret_value(),
-            settings.alpaca_api_secret.get_secret_value(),
-            settings.market_data_timeout_seconds,
+            settings.alpaca_api_key.get_secret_value().strip(),
+            settings.alpaca_api_secret.get_secret_value().strip(),
+            min(settings.market_data_timeout_seconds, 10),
         )
         return LiveQuotesResponse.model_validate(payload)
     except (AlpacaQuotesUnavailable, ValidationError) as exc:

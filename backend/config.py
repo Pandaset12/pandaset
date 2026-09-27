@@ -94,8 +94,8 @@ class Settings(BaseSettings):
     @property
     def has_alpaca_keys(self) -> bool:
         return bool(
-            self.alpaca_api_key and self.alpaca_api_key.get_secret_value()
-            and self.alpaca_api_secret and self.alpaca_api_secret.get_secret_value()
+            self.alpaca_api_key and self.alpaca_api_key.get_secret_value().strip()
+            and self.alpaca_api_secret and self.alpaca_api_secret.get_secret_value().strip()
         )
 
     @property

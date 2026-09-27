@@ -1,5 +1,6 @@
 import ipaddress
 import math
+import re
 from datetime import datetime
 from typing import Any, Literal
 
@@ -8,6 +9,8 @@ from pydantic import AwareDatetime, AnyHttpUrl, BaseModel, ConfigDict, Field, fi
 
 DISCLAIMER = "For educational purposes only; not financial advice."
 MAX_PORTFOLIO_SYMBOLS = 8
+# Quotes also serve Event Lab portfolios (up to 25 holdings), not just v1 risk analysis.
+MAX_QUOTE_SYMBOLS = 25
 
 
 def check_weights(weights: dict[str, float]) -> dict[str, float]:
@@ -89,13 +92,30 @@ class LiveQuote(BaseModel):
     ask: float | None = Field(default=None, ge=0)
     quote_at: AwareDatetime | None = None
 
+    @field_validator("last_trade_at", "quote_at", mode="before")
+    @classmethod
+    def explicit_timestamp(cls, value):
+        if value is not None and not isinstance(value, (str, datetime)):
+            raise ValueError("Market timestamps must include an explicit timezone.")
+        if isinstance(value, str) and not re.search(r"[Tt].*(?:[Zz]|[+-]\d{2}:\d{2})$", value):
+            raise ValueError("Market timestamps must include an explicit timezone.")
+        return value
+
+    @model_validator(mode="after")
+    def prices_have_timestamps(self):
+        if (self.last_price is None) != (self.last_trade_at is None):
+            raise ValueError("A last trade requires both its price and timestamp.")
+        if (self.bid is not None or self.ask is not None) and self.quote_at is None:
+            raise ValueError("Bid/ask prices require a quote timestamp.")
+        return self
+
 
 class LiveQuotesResponse(BaseModel):
     model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
 
     feed: Literal["IEX"]
     source: Literal["alpaca"]
-    quotes: list[LiveQuote] = Field(max_length=8)
+    quotes: list[LiveQuote] = Field(max_length=MAX_QUOTE_SYMBOLS)
 
 
 class AnalyticsSnapshot(BaseModel):

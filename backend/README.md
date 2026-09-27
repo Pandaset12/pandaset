@@ -167,13 +167,40 @@ is not used by this service. Never commit actual keys.
 | STORAGE_PATH | Optional override for the SQLite file |
 | ALPACA_API_KEY / ALPACA_API_SECRET | Optional server-side credentials for real-time IEX quote snapshots; never expose them to the frontend |
 
-The Overview's optional live-price strip polls `/api/v1/quotes` every 15 seconds.
+The Overview and Event Lab's optional live-price strip polls the authenticated
+`/api/v1/quotes` endpoint every 15 seconds while the page is visible. It accepts
+1–25 unique symbols (at most 20 characters each), including Event Lab's larger
+portfolios. This quote limit is independent of the eight-symbol v1 analysis limit.
 It uses Alpaca's free IEX feed, which covers one exchange rather than consolidated
 US market activity; it is labeled IEX and is not used by the quant engine or
 saved risk metrics. A successful free API call does not itself establish public
 display rights: verify Alpaca's applicable market-data agreements before showing
-prices to judges or other users. When keys are absent or the vendor is unavailable,
-the strip reports quotes as unavailable; it never substitutes sample prices.
+prices to judges or other users. When keys are absent, `ALPACA_NOT_CONFIGURED`
+hides this optional strip and stops polling until it remounts (for example after
+a reload or portfolio change). Vendor outages show an unavailable state instead;
+the strip never substitutes sample prices.
+
+The vendor socket timeout is capped at 10 seconds (or a smaller configured
+`MARKET_DATA_TIMEOUT_SECONDS`); the browser cancels after 20 seconds and when
+switching portfolios or leaving the page. Failed refreshes back off to 30 then
+60 seconds. Previously received prices remain visible with an explicit warning.
+Trade timestamps identify the last IEX trade, not the time the page refreshed;
+they may be old outside trading hours or for thinly traded instruments. A missing
+trade is shown as unavailable. There is no quote persistence or shared quote
+cache, so each active client consumes vendor requests. Restrict demo access and
+add server-side rate limiting before an unrestricted public rollout.
+
+For a read-only live credential check (two symbols; no trading API calls):
+
+~~~powershell
+.\backend\.venv\Scripts\python.exe -m backend.check_alpaca_quotes
+~~~
+
+The command reads ignored `backend/.env`; `--env-file <path>` selects another
+local file. It prints only the feed, symbols, last prices, and trade timestamps,
+and exits nonzero on an error or missing trades. Do not put keys on the command
+line. Mocked unit tests do not contact Alpaca; this opt-in check does. Successful
+vendor access does not verify production sign-in, deployment, or display rights.
 
 All Gemini-backed actions use one server-side adapter with a versioned,
 workflow-specific prompt and JSON response schema. The primary model has a

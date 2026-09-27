@@ -14,6 +14,8 @@ class AlpacaQuotesUnavailable(Exception):
 def _number(value, *, positive: bool = False):
     if value is None:
         return None
+    if isinstance(value, bool):
+        raise ValueError("Invalid market price")
     result = float(value)
     if not math.isfinite(result) or (positive and result <= 0) or (not positive and result < 0):
         raise ValueError("Invalid market price")
@@ -43,7 +45,7 @@ def fetch_alpaca_quotes(
         else:
             message = f"Alpaca snapshot request failed with HTTP {exc.code}."
         raise AlpacaQuotesUnavailable(message) from exc
-    except (URLError, TimeoutError, json.JSONDecodeError, OSError) as exc:
+    except (URLError, TimeoutError, json.JSONDecodeError, UnicodeError, OSError) as exc:
         raise AlpacaQuotesUnavailable("Alpaca market data is temporarily unavailable.") from exc
 
     if not isinstance(payload, dict):
@@ -53,14 +55,20 @@ def fetch_alpaca_quotes(
     try:
         for symbol in symbols:
             snapshot = payload.get(symbol)
-            if not isinstance(snapshot, dict):
+            if snapshot is None:
                 quotes.append({
                     "symbol": symbol, "last_price": None, "last_trade_at": None,
                     "bid": None, "ask": None, "quote_at": None,
                 })
                 continue
-            trade = snapshot.get("latestTrade") or {}
-            quote = snapshot.get("latestQuote") or {}
+            if not isinstance(snapshot, dict):
+                raise ValueError("Invalid snapshot")
+            trade = snapshot.get("latestTrade")
+            quote = snapshot.get("latestQuote")
+            trade = {} if trade is None else trade
+            quote = {} if quote is None else quote
+            if not isinstance(trade, dict) or not isinstance(quote, dict):
+                raise ValueError("Invalid trade or quote")
             quotes.append({
                 "symbol": symbol,
                 "last_price": _number(trade.get("p"), positive=True),
