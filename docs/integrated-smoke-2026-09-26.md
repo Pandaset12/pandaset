@@ -3,6 +3,9 @@
 Initial baseline: `main` at `5ccba9b`; then incorporated `5d66be8` (Nel's
 What-if layout fix) and `00882a3` (Alpaca Overview and company-name search).
 Final automated, live API, and browser scenario checks use `00882a3` plus this fix.
+The subsequent auth-screen-only update through `73df823` was also merged;
+all 80 frontend tests and the production build were rerun successfully. That
+does not extend this report to real Supabase authentication.
 Tested locally with the real Alpaca account,
 `MARKET_DATA_PROVIDER=alpaca`, `ALPACA_HISTORY_FEED=iex`, and isolated SQLite
 storage. History caching was left disabled. No keys or local test harnesses are
