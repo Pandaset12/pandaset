@@ -241,14 +241,6 @@ export function EventApplication({
     ) ?? [],
   );
   const assets = selected ? assetsForPortfolio(selected, instruments) : [];
-  const asOf = analysis?.as_of
-    ? new Date(analysis.as_of).toLocaleDateString("en-US", {
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-        timeZone: "UTC",
-      })
-    : "Unavailable";
   const nav = [
     ["/", "Overview"],
     ["/risk", "Risk & exposure"],
@@ -331,12 +323,7 @@ export function EventApplication({
                   : "Create analysis"}
             </button>
           )}
-          {analysis && <span className="demo-badge">LIVE DATA</span>}
         </div>
-        <span className="as-of">
-          As of {asOf}
-          <span className="separator">/</span>USD
-        </span>
       </div>
       <main id="main-content" className="main-content" tabIndex={-1}>
         {listState === "loading" ? (
@@ -408,11 +395,6 @@ export function EventApplication({
                 analysis={analysis}
                 assets={assets}
                 onEdit={() => setEdit(true)}
-                onAsk={() =>
-                  setToast(
-                    "Portfolio chat is available in a completed event run.",
-                  )
-                }
                 onBrief={() => setAiAction({ workflow: "analysis_briefing" })}
                 onMethod={() =>
                   setToast(
@@ -443,11 +425,6 @@ export function EventApplication({
                 analysis={analysis}
                 assets={assets}
                 weights={weights}
-                onAsk={() =>
-                  setToast(
-                    "Portfolio chat is available in a completed event run.",
-                  )
-                }
                 onSummarizeSource={() =>
                   setToast(
                     "Issuer source summaries are unavailable for this saved analysis.",

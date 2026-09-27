@@ -5,7 +5,6 @@ import {
   BookOpen,
   ChevronDown,
   XMark as X,
-  ChatBubbleLeftRight,
   ArrowTopRightOnSquare as ExternalLink,
   MagnifyingGlass as Search,
 } from "../components/icons";
@@ -28,13 +27,11 @@ import { LineChart } from "../components/LineChart";
 export default function Research({
   weights,
   holdings,
-  onAsk,
   onSummarizeSource,
   query,
 }: {
   weights: number[];
   holdings: Asset[];
-  onAsk: (q?: string) => void;
   onSummarizeSource: (symbol: string) => void;
   query: URLSearchParams;
 }) {
@@ -408,15 +405,6 @@ export default function Research({
                 </div>
               </div>
               <div className="company-action">
-                <button
-                  className="text-button"
-                  onClick={() =>
-                    onAsk(`How does ${selected.symbol} affect my portfolio?`)
-                  }
-                >
-                  <ChatBubbleLeftRight size={16} />
-                  Explain its portfolio impact
-                </button>
                 <a
                   className="button dark"
                   href={`#/what-if?asset=${selected.symbol}`}

@@ -1,10 +1,9 @@
-import ipaddress
 import math
 import re
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import AwareDatetime, AnyHttpUrl, BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 DISCLAIMER = "For educational purposes only; not financial advice."
@@ -192,53 +191,6 @@ class AnalyticsSnapshot(BaseModel):
         return self
 
 
-class QuestionInput(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    question: str = Field(min_length=1, max_length=4000)
-    web_search: bool = False
-    source_urls: list[AnyHttpUrl] = Field(default_factory=list, max_length=5)
-
-    @field_validator("question")
-    @classmethod
-    def nonempty_question(cls, value: str) -> str:
-        value = value.strip()
-        if not value:
-            raise ValueError("Question cannot be blank.")
-        return value
-
-    @field_validator("source_urls")
-    @classmethod
-    def public_https_urls(cls, urls: list[AnyHttpUrl]) -> list[AnyHttpUrl]:
-        for url in urls:
-            # A DNS root dot does not turn localhost/internal names into public
-            # domains. Strip one valid root dot before checking suffixes; empty
-            # labels (including multiple trailing dots) remain invalid.
-            host = (url.host or "").lower().removesuffix(".")
-            if url.scheme != "https" or url.username or url.password:
-                raise ValueError("Use public HTTPS URLs without credentials.")
-            if (
-                "." not in host
-                or any(not label for label in host.split("."))
-                or host.endswith((".localhost", ".local", ".internal"))
-            ):
-                raise ValueError("Use a public website domain.")
-            try:
-                ipaddress.ip_address(host.strip("[]"))
-            except ValueError:
-                continue
-            raise ValueError("Use a website domain, not an IP address.")
-        return urls
-
-
-class AnalystRequest(QuestionInput):
-    portfolio_id: str = Field(default="demo", min_length=1, max_length=64)
-
-
-class AskRequest(QuestionInput):
-    analysis_id: str = Field(min_length=1, max_length=80)
-
-
 class MetricCitation(BaseModel):
     field: str
     value: float
@@ -248,24 +200,6 @@ class GroundedAnswer(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     explanation: str = Field(min_length=1, max_length=16000)
     cited_fields: list[str] = Field(max_length=200)
-
-
-class AnalystResponse(BaseModel):
-    analyst_mode: Literal["demo", "gemini"]
-    answer: str
-    metrics: AnalyticsSnapshot
-    sources: list[dict[str, Any]] = Field(default_factory=list)
-    grounding_supports: list[dict[str, Any]] = Field(default_factory=list)
-    search_suggestions_html: str | None = None
-    url_retrievals: list[dict[str, Any]] = Field(default_factory=list)
-    warnings: list[str] = Field(default_factory=list)
-    status: Literal["complete", "demo", "unavailable"] = "complete"
-    citations: list[MetricCitation] = Field(default_factory=list)
-    disclaimer: str = DISCLAIMER
-    analysis_id: str | None = None
-    # Grounding offsets refer to this original model text, not parsed answer text.
-    grounding_text: str | None = None
-    error_code: str | None = None
 
 
 AI_WORKFLOWS = Literal[

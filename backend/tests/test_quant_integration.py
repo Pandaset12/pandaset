@@ -31,7 +31,7 @@ def create(client, weights):
     return response.json()["portfolio_id"]
 
 
-def test_creation_analysis_mapping_persistence_and_ask(client):
+def test_creation_analysis_mapping_and_persistence(client):
     weights = {"NVDA": 0.6, "TLT": 0.4}
     portfolio_id = create(client, weights)
     report = analyze_portfolio(SamplePriceProvider().prices(sorted(weights)), weights)
@@ -65,11 +65,6 @@ def test_creation_analysis_mapping_persistence_and_ask(client):
     assert set(report["warnings"]) <= set(analysis["data_quality"]["warnings"])
     assert set(report["metadata"]["assumptions"]) <= set(analysis["assumptions"])
     assert client.get(f"/api/v1/portfolios/{portfolio_id}/analyses/{analysis['analysis_id']}").json() == analysis
-    answer = client.post(f"/api/v1/portfolios/{portfolio_id}/ask", json={
-        "analysis_id": analysis["analysis_id"], "question": "Explain this snapshot",
-    })
-    assert answer.status_code == 200
-    assert answer.json()["metrics"]["portfolio_return"] == analysis["portfolio_return"]
     assert client.get("/health").json()["quant_integration"] == "quant_engine_sample_prices"
 
 
@@ -115,7 +110,7 @@ def test_what_if_union_and_deltas_use_saved_baseline_without_mutation(client):
     assert legacy.json() == result
 
 
-def test_undefined_metrics_and_warnings_survive_storage_and_citations(client):
+def test_undefined_metrics_and_warnings_survive_storage(client):
     class ConstantPrices:
         def prices(self, symbols):
             return pd.DataFrame({symbol: [100.0] * 4 for symbol in symbols},
@@ -134,11 +129,6 @@ def test_undefined_metrics_and_warnings_survive_storage_and_citations(client):
     assert any("undefined" in warning for warning in saved.notes)
     assert "risk_contribution.NVDA" not in metric_catalog(saved)
     json.dumps(saved.model_dump(mode="json"), allow_nan=False)
-    answer = client.post(f"/api/v1/portfolios/{portfolio_id}/ask", json={
-        "analysis_id": analysis["analysis_id"], "question": "Explain risk",
-    })
-    assert answer.status_code == 200
-    assert answer.json()["citations"] == []
 
 
 def test_correlation_roundoff_is_preserved_but_invalid_values_rejected():

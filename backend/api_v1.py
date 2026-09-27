@@ -20,7 +20,6 @@ from .gemini_service import (
     GeminiNotConfigured,
     GeminiUnavailable,
     generate_analysis_workflow,
-    generate_answer,
     generate_research_summary,
     generate_scenario_workflow,
     metric_summary,
@@ -35,11 +34,8 @@ from .schemas import (
     AIWorkflowResponse,
     AllocationInput,
     AnalysisResponse,
-    AnalystRequest,
-    AnalystResponse,
     AnalyticsSnapshot,
     AnalysisWorkflowRequest,
-    AskRequest,
     MarketHistoryResponse,
     LiveQuotesResponse,
     Portfolio,
@@ -347,47 +343,6 @@ def market_history(
     except ProviderUnavailable as exc:
         log_failure("MARKET_HISTORY_UNAVAILABLE", exc)
         raise api_error(502, "MARKET_HISTORY_UNAVAILABLE", "Market data is unavailable. Check Alpaca credentials, selected history feed, entitlement, and provider status.") from exc
-
-
-@router.post("/portfolios/{portfolio_id}/ask", response_model=AnalystResponse)
-async def ask(
-    portfolio_id: str, request: AskRequest, store: PortfolioStore = Depends(get_store),
-    settings: Settings = Depends(get_settings),
-    owner_id: str = Depends(current_user_id),
-):
-    await run_in_threadpool(require_portfolio, store, portfolio_id, owner_id)
-    try:
-        metrics, _ = await run_in_threadpool(store.get_analysis, portfolio_id, request.analysis_id)
-    except SnapshotNotFound as exc:
-        raise api_error(404, "ANALYSIS_NOT_FOUND", "Analysis not found for this portfolio.") from exc
-    warnings = list(metrics.notes)
-    if metrics.freshness == "stale":
-        warnings.append("This saved snapshot contains stale market data.")
-    summary, citations = metric_summary(metrics)
-    common = dict(
-        analyst_mode=settings.analyst_mode, metrics=metrics,
-        analysis_id=request.analysis_id, warnings=warnings,
-    )
-    if settings.analyst_mode == "demo":
-        warnings.append("Offline demo response; Gemini and web tools were not called.")
-        return AnalystResponse(
-            **common, status="demo", citations=citations,
-            answer="Offline snapshot summary; this does not answer arbitrary questions. " + summary,
-        )
-    question = AnalystRequest(
-        portfolio_id=portfolio_id, **request.model_dump(exclude={"analysis_id"})
-    )
-    try:
-        output = await generate_answer(question, metrics, settings)
-    except (GeminiNotConfigured, GeminiUnavailable) as exc:
-        log_failure("GEMINI_NOT_CONFIGURED" if isinstance(exc, GeminiNotConfigured) else "GEMINI_UNAVAILABLE", exc)
-        warnings.append(str(exc))
-        return AnalystResponse(
-            **common, status="unavailable", citations=citations,
-            error_code="GEMINI_NOT_CONFIGURED" if isinstance(exc, GeminiNotConfigured) else "GEMINI_UNAVAILABLE",
-            answer="AI explanation is unavailable. The saved metrics remain accessible. " + summary,
-        )
-    return AnalystResponse(**common, status="complete", **output)
 
 
 async def analysis_workflow_response(

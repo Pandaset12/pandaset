@@ -19,7 +19,6 @@ from .event_jobs import EventWorker
 from .instruments import SUPPORTED_INSTRUMENTS
 from .mongo_store import MongoPortfolioStore
 from .alpaca_history import AlpacaHistoryProvider
-from .gemini_service import GeminiNotConfigured, GeminiUnavailable, generate_answer, metric_summary
 from .api_v1 import get_store, require_portfolio, router as v1_router
 from .auth import current_user_id
 from .observability import log_failure, request_id_context
@@ -33,8 +32,6 @@ from .providers import (
 )
 from .market_data_errors import MarketHistoryNotFound, ProviderUnavailable, SymbolLimitExceeded
 from .schemas import (
-    AnalystRequest,
-    AnalystResponse,
     AnalyticsSnapshot,
     Portfolio,
     WhatIfRequest,
@@ -263,43 +260,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def analytics(portfolio_id: str, provider: QuantProvider = Depends(get_provider),
                   store: PortfolioStore = Depends(get_store), owner_id: str = Depends(current_user_id)):
         return read_metrics(require_portfolio(store, portfolio_id, owner_id), provider)
-
-    @application.post("/api/analyst", response_model=AnalystResponse, deprecated=True)
-    async def analyst(
-        request: AnalystRequest,
-        settings: Settings = Depends(get_settings),
-        provider: QuantProvider = Depends(get_provider),
-        store: PortfolioStore = Depends(get_store),
-        owner_id: str = Depends(current_user_id),
-    ):
-        portfolio = await run_in_threadpool(require_portfolio, store, request.portfolio_id, owner_id)
-        metrics = await run_in_threadpool(read_metrics, portfolio, provider)
-        warnings = list(metrics.notes)
-        if settings.analyst_mode == "demo":
-            warnings.append("Offline demo response; Gemini and web tools were not called.")
-            summary, citations = metric_summary(metrics)
-            answer = "Offline snapshot summary; this does not answer arbitrary questions. " + summary
-            return AnalystResponse(
-                analyst_mode="demo", status="demo", answer=answer, metrics=metrics,
-                warnings=warnings, citations=citations,
-            )
-        try:
-            output = await generate_answer(request, metrics, settings)
-        except GeminiNotConfigured as exc:
-            log_failure("GEMINI_NOT_CONFIGURED", exc)
-            raise HTTPException(
-                status_code=503,
-                detail={"code": "gemini_not_configured", "message": str(exc)},
-            )
-        except GeminiUnavailable as exc:
-            log_failure("GEMINI_UNAVAILABLE", exc)
-            raise HTTPException(
-                status_code=502,
-                detail={"code": "gemini_unavailable", "message": str(exc)},
-            )
-        return AnalystResponse(
-            analyst_mode="gemini", metrics=metrics, warnings=warnings, **output
-        )
 
     @application.post("/api/what-if", deprecated=True)
     def what_if(

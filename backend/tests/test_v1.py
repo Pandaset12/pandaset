@@ -1,11 +1,7 @@
-from unittest.mock import AsyncMock
-
 import pytest
 from fastapi.testclient import TestClient
 
-from backend import api_v1
-from backend.config import Settings, get_settings
-from backend.gemini_service import GeminiUnavailable
+from backend.config import Settings
 from backend.main import create_app
 from backend.providers import DemoQuantProvider, ProviderUnavailable, demo_metrics, get_provider
 
@@ -37,7 +33,7 @@ def analyze(client, portfolio_id="demo"):
     return result.json()
 
 
-def test_create_analysis_ask_complete_demo_flow(client):
+def test_create_analysis_complete_demo_flow(client):
     portfolio_id = create_demo(client)
     analysis = analyze(client, portfolio_id)
     assert analysis["concentration"] == {"largest_position": "SPY", "largest_weight": 0.4}
@@ -46,18 +42,9 @@ def test_create_analysis_ask_complete_demo_flow(client):
     assert analysis["correlation_matrix"] is None
     assert analysis["observation_count"] is None
     assert analysis["data_quality"]["source"] == "synthetic_fixture"
-    result = client.post(f"/api/v1/portfolios/{portfolio_id}/ask", json={
-        "question": "What is my biggest risk?", "analysis_id": analysis["analysis_id"],
-    })
-    assert result.status_code == 200
-    answer = result.json()
-    assert answer["status"] == "demo"
-    assert answer["analysis_id"] == analysis["analysis_id"]
-    assert answer["metrics"]["portfolio_id"] == portfolio_id
-    assert answer["citations"][0] == {"field": "risk_contribution.NVDA", "value": 0.41}
-    assert answer["sources"] == []
-    assert "fictional" in answer["answer"].lower()
-    assert answer["disclaimer"]
+    saved = client.get(f"/api/v1/portfolios/{portfolio_id}/analyses/{analysis['analysis_id']}")
+    assert saved.status_code == 200
+    assert saved.json() == analysis
 
 
 def test_snapshot_survives_app_restart(settings):
@@ -68,37 +55,6 @@ def test_snapshot_survives_app_restart(settings):
         result = second.get(f"/api/v1/portfolios/{portfolio_id}/analyses/{analysis['analysis_id']}")
         assert result.status_code == 200
         assert result.json() == analysis
-
-
-def test_questions_do_not_recompute_or_use_changed_provider_results(client):
-    class CountingProvider(DemoQuantProvider):
-        calls = 0
-
-        def analyze(self, portfolio):
-            self.calls += 1
-            self.result = super().analyze(portfolio)
-            return self.result
-
-    provider = CountingProvider()
-    client.app.dependency_overrides[get_provider] = lambda: provider
-    analysis = analyze(client)
-    provider.result.risk_contribution["NVDA"] = 0.99
-    for _ in range(2):
-        result = client.post("/api/v1/portfolios/demo/ask", json={
-            "question": "Explain risk", "analysis_id": analysis["analysis_id"],
-        })
-        assert result.json()["metrics"]["risk_contribution"]["NVDA"] == 0.41
-    assert provider.calls == 1
-
-
-def test_analysis_cannot_be_used_with_another_portfolio(client):
-    analysis = analyze(client)
-    other = create_demo(client)
-    result = client.post(f"/api/v1/portfolios/{other}/ask", json={
-        "question": "Explain risk", "analysis_id": analysis["analysis_id"],
-    })
-    assert result.status_code == 404
-    assert result.json()["error"]["code"] == "ANALYSIS_NOT_FOUND"
 
 
 @pytest.mark.parametrize("holdings", [
@@ -135,39 +91,6 @@ def test_v1_what_if_is_explicitly_pending_and_does_not_modify_portfolio(client):
     assert result.status_code == 501
     assert result.json()["error"]["code"] == "QUANT_INTEGRATION_PENDING"
     assert client.get("/api/v1/portfolios/demo").json() == before
-
-
-def test_gemini_failure_keeps_metrics_and_backend_citations(client, settings, monkeypatch):
-    client.app.dependency_overrides[get_settings] = lambda: settings.model_copy(update={
-        "analyst_mode": "gemini",
-    })
-    gateway = AsyncMock(side_effect=GeminiUnavailable("Gemini timed out."))
-    monkeypatch.setattr(api_v1, "generate_answer", gateway)
-    analysis = analyze(client)
-    result = client.post("/api/v1/portfolios/demo/ask", json={
-        "question": "Explain risk", "analysis_id": analysis["analysis_id"],
-    })
-    assert result.status_code == 200
-    data = result.json()
-    assert data["status"] == "unavailable"
-    assert data["error_code"] == "GEMINI_UNAVAILABLE"
-    assert data["metrics"]["portfolio_volatility"] == 0.184
-    assert data["citations"][0]["value"] == 0.41
-    assert data["sources"] == []
-    gateway.assert_awaited_once()
-
-
-def test_missing_key_is_visible_partial_response(client, settings):
-    client.app.dependency_overrides[get_settings] = lambda: settings.model_copy(update={
-        "analyst_mode": "gemini", "gemini_api_key": None,
-    })
-    analysis = analyze(client)
-    result = client.post("/api/v1/portfolios/demo/ask", json={
-        "question": "Explain risk", "analysis_id": analysis["analysis_id"],
-    })
-    assert result.status_code == 200
-    assert result.json()["status"] == "unavailable"
-    assert result.json()["error_code"] == "GEMINI_NOT_CONFIGURED"
 
 
 @pytest.mark.parametrize("failure", ["wrong_portfolio", "bad_weights", "bad_risk", "provider_error"])

@@ -25,14 +25,12 @@ export default function Overview({
   analysis,
   assets,
   onEdit,
-  onAsk,
   onBrief,
   onMethod,
 }: {
   analysis: AnalysisResponse;
   assets: PortfolioAsset[];
   onEdit: () => void;
-  onAsk: (q?: string) => void;
   onBrief: () => void;
   onMethod: () => void;
 }) {
@@ -99,10 +97,6 @@ export default function Overview({
           <SlidersHorizontal size={16} />
           Edit portfolio
         </button>
-        <a className="button dark" href="#/what-if">
-          Explore a what-if
-          <ArrowUpRight size={17} />
-        </a>
         <button className="button subtle" onClick={onBrief}>
           <ChatBubbleLeftRight size={16} />
           Brief this portfolio
@@ -473,19 +467,6 @@ export default function Overview({
               No saved holdings are available for research.
             </p>
           )}
-          <div className="analyst-callout">
-            <ChatBubbleLeftRight size={20} />
-            <div>
-              <strong>Make sense of the numbers.</strong>
-              <button
-                className="text-button"
-                onClick={() => onAsk("What is my biggest risk?")}
-              >
-                Ask about your portfolio
-                <ArrowRight size={15} />
-              </button>
-            </div>
-          </div>
         </section>
       </div>
     </>

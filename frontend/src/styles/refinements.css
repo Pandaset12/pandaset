@@ -131,16 +131,8 @@
   .workspace-bar > div {
     justify-content: space-between;
   }
-  .portfolio-selector,
-  .demo-badge {
+  .portfolio-selector {
     white-space: nowrap;
-  }
-  .as-of {
-    display: block;
-    max-width: none;
-    text-align: left;
-    margin-top: 9px;
-    font-size: 0.75rem;
   }
   .performance-head {
     flex-wrap: wrap;

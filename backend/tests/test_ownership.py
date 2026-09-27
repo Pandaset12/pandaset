@@ -53,7 +53,6 @@ def test_auth_and_portfolio_ownership(client):
     for method, path, body in [
         ("post", "analysis", None),
         ("get", "analyses/nonexistent", None),
-        ("post", "ask", {"analysis_id": "nonexistent", "question": "Risk?"}),
         ("post", "briefing", {"analysis_id": "nonexistent"}),
         ("post", "risk/explanation", {"analysis_id": "nonexistent"}),
         ("post", "what-if", {"holdings": payload["holdings"]}),
@@ -64,7 +63,6 @@ def test_auth_and_portfolio_ownership(client):
 
     legacy_paths = [
         ("get", f"/api/portfolios/{portfolio_id}/analytics", None),
-        ("post", "/api/analyst", {"portfolio_id": portfolio_id, "question": "Risk?"}),
         ("post", "/api/what-if", {"portfolio_id": portfolio_id, "proposed_weights": {"SPY": 1.0}}),
     ]
     for method, path, body in legacy_paths:
