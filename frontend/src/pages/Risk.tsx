@@ -173,7 +173,7 @@ export default function Risk({
           </div>
           <p className="muted small-text">
             Risk contribution is an estimate based on the available daily return
-            sample. Red bars mark negative contributions. Undefined values
+            sample. Negative contributions carry a minus sign. Undefined values
             remain unavailable.
           </p>
         </section>

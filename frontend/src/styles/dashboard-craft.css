@@ -1,3 +1,94 @@
+/* Match the landing page's panda palette without changing data semantics. */
+.dashboard-shell {
+  --canvas: #fafafa;
+  --surface: #fff;
+  --raised: #f0f0f0;
+  --panel-deep: #ededed;
+  --selected: #e9e9e9;
+  --ink: #171717;
+  --muted: #626262;
+  --border: #d7d7d7;
+  --control-border: #888;
+  --bamboo: #171717;
+  --bamboo-hover: #363636;
+  --comparison: #a1a1a1;
+  --bar-secondary: #b5b5b5;
+  --action: #171717;
+  --action-hover: #363636;
+  --positive: #171717;
+  --negative: #747474;
+  --negative-surface: #eeeeee;
+  --warning: #626262;
+  --overlay: #171717e6;
+  --overlay-ink: #fff;
+  --radius: 4px;
+  --serif: "DM Sans", Arial, sans-serif;
+  background: var(--canvas);
+  color: var(--ink);
+  accent-color: var(--ink);
+}
+
+.dashboard-shell ::selection {
+  background: var(--ink);
+  color: #fff;
+}
+
+.dashboard-shell .page-heading h1 {
+  font-family: "DM Sans", Arial, sans-serif;
+  font-size: clamp(2.7rem, 4vw, 4.2rem);
+  font-weight: 500;
+  line-height: 1.05;
+  letter-spacing: -0.055em;
+}
+
+.dashboard-shell .workspace-navigation-links a.active {
+  background: var(--ink);
+  color: #fff;
+}
+
+.dashboard-shell .workspace-navigation-links a.active:hover,
+.dashboard-shell .workspace-navigation-links a.active:focus-visible {
+  background: #363636;
+  color: #fff;
+}
+
+.dashboard-shell .asset-mark {
+  color: var(--ink);
+  background: #f0f0f0;
+  border-color: var(--border);
+}
+
+.dashboard-shell .allocation-mosaic > div {
+  background: #717171 !important;
+  background-color: #717171 !important;
+}
+
+.dashboard-shell .allocation-mosaic > div:nth-child(3n + 1) {
+  background: #171717 !important;
+  background-color: #171717 !important;
+}
+
+.dashboard-shell .allocation-mosaic > div:nth-child(3n + 2) {
+  background: #9b9b9b !important;
+  background-color: #9b9b9b !important;
+}
+
+.dashboard-shell .exposure-list i {
+  background: #626262 !important;
+}
+
+.dashboard-shell
+  :is(
+    .performance-panel,
+    .focus-panel,
+    .research-workspace,
+    .event-panel,
+    .event-stage,
+    .live-quotes
+  ) {
+  border-radius: 4px;
+}
+
 /* The dashboard uses a quiet reading rhythm rather than scroll-locked scenes. */
 .main-content[class*="dashboard-"] > .page-heading {
   margin-bottom: 28px;
@@ -19,7 +110,7 @@
 
 .dashboard-overview .performance-panel {
   border-color: color-mix(in srgb, var(--bamboo) 23%, var(--border));
-  box-shadow: 0 12px 34px #171b1808;
+  box-shadow: 0 12px 34px #1717170a;
 }
 
 .dashboard-overview .large-value {
@@ -30,7 +121,39 @@
 }
 
 .dashboard-overview .focus-panel {
-  background: #dce7dc;
+  background: #181818;
+  color: #f8f8f8;
+}
+
+.dashboard-overview .focus-panel :is(h2, strong, .focus-link) {
+  color: #f8f8f8;
+}
+
+.dashboard-overview
+  .focus-panel
+  :is(p, .focus-label, .focus-bars > div:not(.focus-track)) {
+  color: #b5b5b5;
+}
+
+.dashboard-overview .focus-panel .focus-track {
+  background: #424242;
+}
+
+.dashboard-overview .focus-panel .focus-track i {
+  background: #a1a1a1;
+}
+
+.dashboard-overview .focus-panel .focus-track.bright i {
+  background: #f8f8f8;
+}
+
+.dashboard-overview .focus-panel :focus-visible,
+.dashboard-risk .risk-intro :focus-visible {
+  outline-color: #fff;
+}
+
+.dashboard-overview .focus-panel .focus-link {
+  border-color: #424242;
 }
 
 .dashboard-overview .live-quotes {
@@ -83,6 +206,26 @@
   border-radius: var(--radius);
 }
 
+.dashboard-risk .risk-intro {
+  background: #181818;
+  border-color: #181818;
+  color: #f8f8f8;
+}
+
+.dashboard-risk .risk-intro :is(.label-chip, p, .sample-context) {
+  color: #b5b5b5;
+}
+
+.dashboard-risk .risk-intro .sample-context strong,
+.dashboard-risk .risk-intro .text-link {
+  color: #f8f8f8;
+}
+
+.dashboard-risk .risk-intro h2 em {
+  background: #f8f8f8;
+  color: #171717;
+}
+
 .dashboard-risk .risk-intro h2 {
   font-size: clamp(2.15rem, 3.2vw, 3.2rem);
 }
@@ -118,7 +261,7 @@
 /* Research: a directory, a desk, then further reading. */
 .dashboard-research .research-workspace {
   border-radius: var(--radius);
-  box-shadow: 0 12px 34px #171b1808;
+  box-shadow: 0 12px 34px #1717170a;
 }
 
 .dashboard-research .research-index {
@@ -127,6 +270,22 @@
 
 .dashboard-research .asset-index-item.active {
   box-shadow: inset 3px 0 0 var(--bamboo);
+}
+
+.dashboard-research .asset-index-item.active {
+  background: #171717;
+  border-color: #171717;
+  color: #fff;
+}
+
+.dashboard-research .asset-index-item.active :is(strong, small, svg) {
+  color: #fff;
+}
+
+.dashboard-research .asset-index-item.active .asset-mark {
+  background: #fff;
+  color: #171717;
+  border-color: #fff;
 }
 
 .dashboard-research .company-detail {
@@ -236,6 +395,10 @@
 }
 
 @media (max-width: 720px) {
+  .dashboard-shell .page-heading h1 {
+    font-size: clamp(2.2rem, 9vw, 2.8rem);
+  }
+
   .dashboard-overview .large-value {
     font-size: 2.75rem;
   }
