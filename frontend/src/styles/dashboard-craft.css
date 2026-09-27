@@ -127,8 +127,8 @@
 }
 
 .dashboard-overview .performance-panel {
-  border-color: color-mix(in srgb, var(--bamboo) 23%, var(--border));
-  box-shadow: 0 12px 34px #1717170a;
+  background: #f0f7f2;
+  border-color: #c9dfcf;
 }
 
 .dashboard-overview .large-value {
@@ -138,27 +138,43 @@
   margin: 11px 0 5px;
 }
 
+.dashboard-overview .large-value.positive,
+.dashboard-overview .return-caption.positive {
+  color: #245f40;
+}
+
+.dashboard-overview .large-value.negative,
+.dashboard-overview .return-caption.negative {
+  color: var(--data-negative);
+}
+
+.dashboard-overview .chart-legend .chart-readout {
+  color: var(--data-primary);
+}
+
 .dashboard-overview .focus-panel {
-  background: #181818;
-  color: #f8f8f8;
+  background: #14251d;
+  color: #f5faf6;
 }
 
 .dashboard-overview .focus-panel :is(h2, strong, .focus-link) {
-  color: #f8f8f8;
+  color: #f5faf6;
 }
 
-.dashboard-overview
-  .focus-panel
-  :is(p, .focus-label, .focus-bars > div:not(.focus-track)) {
-  color: #b5b5b5;
+.dashboard-overview .focus-panel :is(p, .focus-bars > div:not(.focus-track)) {
+  color: #bdcec2;
+}
+
+.dashboard-overview .focus-panel .focus-label {
+  color: #a9dcbc;
 }
 
 .dashboard-overview .focus-panel .focus-track {
-  background: #424242;
+  background: #43544a;
 }
 
 .dashboard-overview .focus-panel .focus-track i {
-  background: #a1a1a1;
+  background: #b0bdb3;
 }
 
 .dashboard-overview .focus-panel .focus-track.bright i {
@@ -171,7 +187,30 @@
 }
 
 .dashboard-overview .focus-panel .focus-link {
-  border-color: #424242;
+  border-color: #43544a;
+  color: #a9dcbc;
+}
+
+.dashboard-overview .focus-panel .focus-link:hover {
+  color: #fff;
+}
+
+.dashboard-overview .holdings-table .numeric.positive,
+.dashboard-overview .return-drivers strong.positive {
+  color: #245f40;
+}
+
+.dashboard-overview .holdings-table .numeric.negative,
+.dashboard-overview .return-drivers strong.negative {
+  color: var(--data-negative);
+}
+
+.dashboard-overview .metric-drawdown strong {
+  color: var(--data-negative);
+}
+
+.dashboard-overview .metric-drawdown small {
+  color: var(--muted);
 }
 
 .dashboard-overview .live-quotes {
