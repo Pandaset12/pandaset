@@ -78,7 +78,6 @@ test("Overview holdings sort by allocation or descending signed return contribut
       analysis,
       holdings: ["SPY", "AAPL", "JPM"].map(workspaceAsset),
       onEdit: () => {},
-      onAsk: () => {},
       onBrief: () => {},
       onMethod: () => {},
     }),
@@ -118,7 +117,6 @@ function renderOverview(snapshot: AnalysisResponse, symbols: string[]) {
       analysis: snapshot,
       holdings: symbols.map(workspaceAsset),
       onEdit: () => {},
-      onAsk: () => {},
       onBrief: () => {},
       onMethod: () => {},
     }),
@@ -207,10 +205,8 @@ test("Alpaca Overview uses the saved symbols, weights, session and available ben
   );
   assert.match(view.container.textContent ?? "", /TSLA/);
   assert.equal(screen.queryByText("VTI history"), null);
-  assert.match(
-    view.container.textContent ?? "",
-    /Curated background reading for your holdings/,
-  );
+  assert.equal(screen.queryByText("On your radar"), null);
+  assert.equal(screen.queryByText(/Return contribution comes from/), null);
   assert.doesNotMatch(
     view.container.textContent ?? "",
     /This holding uses the backend's sample/,
@@ -231,7 +227,6 @@ test("Alpaca Overview uses the saved symbols, weights, session and available ben
       analysis: withVti,
       holdings: ["TSLA", "VTI"].map(workspaceAsset),
       onEdit: () => {},
-      onAsk: () => {},
       onBrief: () => {},
       onMethod: () => {},
     }),
