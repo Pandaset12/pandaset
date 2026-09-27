@@ -12,6 +12,7 @@ import {
   ArrowTopRightOnSquareIcon,
   ArrowUpIcon,
   ArrowUpRightIcon,
+  Bars3Icon,
   BookOpenIcon,
   ChatBubbleLeftRightIcon,
   CheckIcon,
@@ -47,6 +48,7 @@ export const ArrowRight = sized(ArrowRightIcon);
 export const ArrowTopRightOnSquare = sized(ArrowTopRightOnSquareIcon);
 export const ArrowUp = sized(ArrowUpIcon);
 export const ArrowUpRight = sized(ArrowUpRightIcon);
+export const Bars3 = sized(Bars3Icon);
 export const BookOpen = sized(BookOpenIcon);
 export const ChatBubbleLeftRight = sized(ChatBubbleLeftRightIcon);
 export const Check = sized(CheckIcon);

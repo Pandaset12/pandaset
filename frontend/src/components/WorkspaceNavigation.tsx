@@ -1,3 +1,5 @@
+import { useEffect, useRef, useState } from "react";
+import { Bars3, XMark } from "./icons";
 import { Brand } from "./UI";
 
 const destinations = [
@@ -14,30 +16,74 @@ export function WorkspaceNavigation({
   route: string;
   onSignOut: () => Promise<void>;
 }) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuButton = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => setMenuOpen(false), [route]);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setMenuOpen(false);
+      menuButton.current?.focus();
+    };
+    document.addEventListener("keydown", closeOnEscape);
+    return () => document.removeEventListener("keydown", closeOnEscape);
+  }, [menuOpen]);
+
   return (
-    <aside className="workspace-navigation">
+    <aside className={`workspace-navigation${menuOpen ? " is-open" : ""}`}>
       <div className="workspace-navigation-brand">
         <Brand />
+        <button
+          ref={menuButton}
+          className="workspace-menu-toggle"
+          type="button"
+          aria-label={menuOpen ? "Close navigation" : "Open navigation"}
+          aria-controls="workspace-navigation-panel"
+          aria-expanded={menuOpen}
+          onClick={() => setMenuOpen((open) => !open)}
+        >
+          {menuOpen ? <XMark size={22} /> : <Bars3 size={22} />}
+          <span>Menu</span>
+        </button>
       </div>
-      <nav className="workspace-navigation-links" aria-label="Main navigation">
-        {destinations.map(([to, label]) => (
-          <a
-            key={to}
-            href={`#${to}`}
-            className={route === to ? "active" : ""}
-            aria-current={route === to ? "page" : undefined}
-          >
-            {label}
-          </a>
-        ))}
-      </nav>
       <button
-        className="workspace-navigation-signout"
+        className="workspace-navigation-backdrop"
         type="button"
-        onClick={() => void onSignOut()}
+        tabIndex={-1}
+        aria-hidden="true"
+        onClick={() => setMenuOpen(false)}
+      />
+      <div
+        className="workspace-navigation-panel"
+        id="workspace-navigation-panel"
       >
-        Sign out
-      </button>
+        <nav
+          className="workspace-navigation-links"
+          aria-label="Main navigation"
+        >
+          {destinations.map(([to, label]) => (
+            <a
+              key={to}
+              href={`#${to}`}
+              className={route === to ? "active" : ""}
+              aria-current={route === to ? "page" : undefined}
+              onClick={() => setMenuOpen(false)}
+            >
+              {label}
+            </a>
+          ))}
+        </nav>
+        <button
+          className="workspace-navigation-signout"
+          type="button"
+          onClick={() => void onSignOut()}
+        >
+          Sign out
+        </button>
+      </div>
     </aside>
   );
 }
