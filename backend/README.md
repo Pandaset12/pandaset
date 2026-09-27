@@ -14,8 +14,9 @@ uses Tavily retrieval and DeepSeek fact extraction.
 
 ## Authenticated event lab (`/api/v2`)
 
-The event lab is disabled by default. Copy `backend/.env.example` to the ignored
-`backend/.env`, then set `EVENT_LAB_ENABLED=true`, the Supabase project origin and
+The event lab is enabled by default, but remains unavailable until its required
+services are configured. Copy `backend/.env.example` to the ignored
+`backend/.env`, then set the Supabase project origin and
 publishable key, `SUPABASE_SIGNING_MODE`, Mongo URI, Alpaca key and secret,
 `ALPACA_HISTORY_FEED`, Gemini key,
 `TAVILY_API_KEY`, and `DEEPSEEK_API_KEY`. All v2 routes verify a bearer access

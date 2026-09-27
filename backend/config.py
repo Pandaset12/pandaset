@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     )
     storage_path: Path = Path(__file__).parent / "data" / "portfoliolens.sqlite3"
     gemini_timeout_seconds: float = Field(default=45, gt=0, le=120)
-    event_lab_enabled: bool = False
+    event_lab_enabled: bool = True
     event_lab_public_enabled: bool = False
     event_lab_probability_enabled: bool = False
     event_lab_allowed_user_ids: str = ""

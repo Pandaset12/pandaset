@@ -1,6 +1,6 @@
 # Event-aware What-if Lab release gates
 
-The feature is disabled by default. Internal checks may enable `EVENT_LAB_ENABLED` with credentials, but `EVENT_LAB_PUBLIC_ENABLED` must remain false until every gate below has a recorded owner, date, and evidence.
+The event lab is enabled by default, but remains unavailable without its required credentials and an invited-user allowlist. Internal checks may set `EVENT_LAB_ENABLED=false` to turn it off. `EVENT_LAB_PUBLIC_ENABLED` must remain false until every gate below has a recorded owner, date, and evidence.
 
 ## Data rights and provenance
 

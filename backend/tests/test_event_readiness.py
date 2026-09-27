@@ -11,6 +11,15 @@ from backend.config import Settings
 from backend.main import create_app
 
 
+def test_event_lab_defaults_on_without_bypassing_readiness_or_public_gates():
+    settings = Settings(_env_file=None)
+    assert settings.event_lab_enabled is True
+    assert settings.event_lab_ready is False
+    assert settings.event_lab_public_enabled is False
+    assert settings.event_lab_public_ready is False
+    assert Settings(_env_file=None, event_lab_enabled=False).event_lab_enabled is False
+
+
 def event_settings(tmp_path, **overrides):
     values = {
         "storage_path": tmp_path / "event-health.sqlite3",
