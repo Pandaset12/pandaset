@@ -5,6 +5,25 @@ export function observationCount(analysis: AnalysisResponse) {
   return analysis.observation_count ?? analysis.lookback_days;
 }
 
+export function historySourceLabel(analysis: AnalysisResponse) {
+  if (analysis.data_mode === "demo") return "Fictional sample history";
+  if (analysis.data_quality.source === "alpaca_adjusted_daily")
+    return "Alpaca adjusted daily history";
+  return "Market daily history";
+}
+
+export function historySessionLabel(analysis: AnalysisResponse) {
+  if (!analysis.as_of) return "Date unavailable";
+  const date = new Date(analysis.as_of);
+  if (Number.isNaN(date.getTime())) return "Date unavailable";
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+}
+
 export function SampleContext({ analysis }: { analysis: AnalysisResponse }) {
   const count = observationCount(analysis);
   return (
@@ -18,8 +37,7 @@ export function SampleContext({ analysis }: { analysis: AnalysisResponse }) {
       </strong>
       <span>
         {" · "}
-        {count} {analysis.data_mode === "demo" ? "fictional " : ""}daily return
-        observations
+        {historySourceLabel(analysis)} · {count} daily return observations
       </span>
       {!showAnnualizedReturn(count) && (
         <span> · Short history; estimates may change substantially.</span>
@@ -38,12 +56,13 @@ export function AnalysisDetails({ analysis }: { analysis: AnalysisResponse }) {
             ? "Illustrative sample"
             : "Modeled analysis"}
           {" · "}
-          {observationCount(analysis)} daily return observations
+          {observationCount(analysis)} daily return observations through{" "}
+          {historySessionLabel(analysis)}
         </p>
         <dl>
           <div>
             <dt>Source</dt>
-            <dd>{analysis.data_quality.source}</dd>
+            <dd>{historySourceLabel(analysis)}</dd>
           </div>
           <div>
             <dt>Freshness</dt>

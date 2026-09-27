@@ -21,7 +21,7 @@ export function MethodologyModal({
         </p>
       </div>
       <dl className="method-list">
-        <dt>Sample period</dt>
+        <dt>Analysis period</dt>
         <dd>
           {analysis
             ? `${observationCount(analysis)} daily return observations in the active ${analysis.data_mode === "demo" ? "fictional" : "modeled"} analysis. Research history can cover a different period.`
@@ -34,15 +34,15 @@ export function MethodologyModal({
         </dd>
         <dt>Risk & correlation</dt>
         <dd>
-          Volatility uses the sample covariance matrix, annualized by 252
-          trading days. Risk contributions sum to 100%; they can be negative for
-          diversifying positions.
+          Volatility uses the historical return covariance matrix, annualized by
+          252 trading days. Risk contributions sum to 100%; they can be negative
+          for diversifying positions.
         </dd>
         <dt>Returns & drawdown</dt>
         <dd>
           Returns compound daily. Return contribution uses each day’s allocation
           and preceding portfolio growth. Drawdown is the largest decline from
-          an earlier peak in the sample.
+          an earlier peak in the available history.
         </dd>
         <dt>Research & explanations</dt>
         <dd>

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { after, test } from "node:test";
+import { after, afterEach, test } from "node:test";
 import { JSDOM } from "jsdom";
 import type { AnalysisResponse } from "../src/api/portfolio";
 import { workspaceAsset } from "../src/workspace/holdings";
@@ -13,21 +13,37 @@ Object.assign(globalThis, {
   location: dom.window.location,
   HTMLElement: dom.window.HTMLElement,
   MutationObserver: dom.window.MutationObserver,
+  ResizeObserver: class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  },
+});
+Object.defineProperty(document, "visibilityState", {
+  configurable: true,
+  value: "visible",
 });
 
 const { createElement } = await import("react");
-const { cleanup, fireEvent, render, screen } =
+const { cleanup, fireEvent, render, screen, waitFor } =
   await import("@testing-library/react");
+const { setApiAccessToken } = await import("../src/api/portfolio");
 const { default: Overview } = await import("../src/pages/Overview");
+const originalFetch = globalThis.fetch;
 
-after(() => {
+afterEach(() => {
   cleanup();
+  setApiAccessToken(null);
+  globalThis.fetch = originalFetch;
+});
+after(() => {
   dom.window.close();
 });
 
 const analysis = {
   analysis_id: "analysis_fixture",
   portfolio_id: "saved",
+  as_of: "2026-09-25T00:00:00Z",
   data_mode: "demo",
   data_quality: {
     source: "synthetic_fixture",
@@ -94,4 +110,173 @@ test("Overview holdings sort by allocation or descending signed return contribut
     "JPMorgan Chase & Co.",
   );
   cleanup();
+});
+
+function renderOverview(snapshot: AnalysisResponse, symbols: string[]) {
+  return render(
+    createElement(Overview, {
+      analysis: snapshot,
+      holdings: symbols.map(workspaceAsset),
+      onEdit: () => {},
+      onAsk: () => {},
+      onBrief: () => {},
+      onMethod: () => {},
+    }),
+  );
+}
+
+test("sample Overview keeps modeled metrics separate from Alpaca IEX prices", async () => {
+  globalThis.fetch = (async () =>
+    new Response(
+      JSON.stringify({
+        source: "alpaca",
+        feed: "IEX",
+        quotes: [
+          {
+            symbol: "SPY",
+            last_price: 420,
+            last_trade_at: "2026-09-25T19:59:00Z",
+            bid: null,
+            ask: null,
+            quote_at: null,
+          },
+        ],
+      }),
+    )) as typeof fetch;
+  setApiAccessToken("test-session");
+  const sample = {
+    ...analysis,
+    weights: { SPY: 1 },
+    risk_contribution: { SPY: 1 },
+    return_contribution: { SPY: 0.07 },
+  };
+  const view = renderOverview(sample, ["SPY"]);
+  await waitFor(() => assert.ok(screen.getByText("$420.00")));
+  assert.match(view.container.textContent ?? "", /Fictional sample history/);
+  assert.match(view.container.textContent ?? "", /\+7\.00%/);
+  assert.match(view.container.textContent ?? "", /Alpaca IEX/);
+  assert.doesNotMatch(
+    view.container.textContent ?? "",
+    /Alpaca adjusted daily history/,
+  );
+});
+
+test("Alpaca Overview uses the saved symbols, weights, session and available benchmark", () => {
+  globalThis.fetch = (async () =>
+    new Response(
+      JSON.stringify({
+        error: { code: "ALPACA_NOT_CONFIGURED", message: "Quotes unavailable" },
+      }),
+      { status: 503 },
+    )) as typeof fetch;
+  const live = {
+    ...analysis,
+    data_mode: "live" as const,
+    data_quality: {
+      source: "alpaca_adjusted_daily",
+      freshness: "fresh" as const,
+      warnings: ["Alpaca IEX adjusted daily closes; not intraday quotes."],
+    },
+    weights: { TSLA: 0.75, SPY: 0.25 },
+    risk_contribution: { TSLA: 0.75, SPY: 0.25 },
+    return_contribution: { TSLA: 0.06, SPY: 0.01 },
+    series: {
+      dates: ["2026-09-23", "2026-09-24", "2026-09-25"],
+      portfolio_index: [1, 1.03, 1.07],
+      asset_index: { TSLA: [1, 1.04, 1.08], SPY: [1, 1.01, 1.02] },
+      return_contribution: { TSLA: 0.06, SPY: 0.01 },
+    },
+  } as AnalysisResponse;
+  const view = renderOverview(live, ["TSLA", "SPY"]);
+  assert.match(
+    view.container.textContent ?? "",
+    /Alpaca adjusted daily history/,
+  );
+  assert.match(view.container.textContent ?? "", /Sep 25, 2026/);
+  assert.match(
+    view.container.textContent ?? "",
+    /Alpaca IEX adjusted daily closes/,
+  );
+  assert.doesNotMatch(
+    view.container.textContent ?? "",
+    /short sample|available sample|sample dates/,
+  );
+  assert.match(
+    view.container.querySelector(".metric-strip")?.textContent ?? "",
+    /Largest allocation75%TSLA/,
+  );
+  assert.match(view.container.textContent ?? "", /TSLA/);
+  assert.equal(screen.queryByText("VTI history"), null);
+  assert.match(
+    view.container.textContent ?? "",
+    /Curated background reading for your holdings/,
+  );
+  assert.doesNotMatch(
+    view.container.textContent ?? "",
+    /This holding uses the backend's sample/,
+  );
+
+  const withVti = {
+    ...live,
+    weights: { TSLA: 0.2, VTI: 0.8 },
+    risk_contribution: { TSLA: 0.2, VTI: 0.8 },
+    return_contribution: { TSLA: 0.02, VTI: 0.05 },
+    series: {
+      ...live.series!,
+      asset_index: { TSLA: [1, 1.04, 1.08], VTI: [1, 1.02, 1.06] },
+    },
+  } as AnalysisResponse;
+  view.rerender(
+    createElement(Overview, {
+      analysis: withVti,
+      holdings: ["TSLA", "VTI"].map(workspaceAsset),
+      onEdit: () => {},
+      onAsk: () => {},
+      onBrief: () => {},
+      onMethod: () => {},
+    }),
+  );
+  assert.match(
+    view.container.querySelector(".metric-strip")?.textContent ?? "",
+    /Largest allocation80%VTI/,
+  );
+  assert.ok(screen.getByText("VTI history"));
+});
+
+test("missing historical metrics and missing IEX trades stay unavailable", async () => {
+  globalThis.fetch = (async () =>
+    new Response(
+      JSON.stringify({
+        source: "alpaca",
+        feed: "IEX",
+        quotes: [
+          {
+            symbol: "SPY",
+            last_price: null,
+            last_trade_at: null,
+            bid: null,
+            ask: null,
+            quote_at: null,
+          },
+        ],
+      }),
+    )) as typeof fetch;
+  setApiAccessToken("test-session");
+  const missing = {
+    ...analysis,
+    weights: { SPY: 1 },
+    risk_contribution: { SPY: null },
+    return_contribution: { SPY: null },
+    portfolio_return: null,
+    annualized_return: null,
+    max_drawdown: null,
+  } as AnalysisResponse;
+  const view = renderOverview(missing, ["SPY"]);
+  await waitFor(() => assert.ok(screen.getByText("No IEX trade available")));
+  assert.match(
+    view.container.textContent ?? "",
+    /Dated portfolio history is unavailable/,
+  );
+  assert.match(view.container.textContent ?? "", /Unavailable/);
+  assert.equal(screen.queryByText("$0.00"), null);
 });

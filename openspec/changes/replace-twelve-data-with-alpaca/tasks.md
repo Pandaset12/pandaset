@@ -22,7 +22,7 @@
 - [x] 4.1 Replace `backend/tests/test_twelve_data.py` and vendor cases in `test_market_event_data.py` with mocked Alpaca history tests for request parameters, pagination across symbols, incomplete sessions, normalization, adjustment/feed provenance, invalid bars, insufficient and misaligned history, 401/403/429, and outages.
 - [x] 4.2 Update `backend/tests/test_ownership.py`, `test_review_fixes.py`, `test_event_api.py`, and cache tests for Alpaca selection, health, event snapshots, rights, and old-record readability.
 - [x] 4.3 Update frontend vendor fixtures including `frontend/tests/event-lab-model.test.ts`; test the standard and event What-if source labels and ensure the live-quotes strip remains separate from calculated results.
-- [ ] 4.4 Run backend tests, `npm test`, and `npm run build`; perform opt-in Alpaca credential/entitlement checks for representative holdings and factor ETFs before vendor-backed release, recording feed, coverage, and quota observations without logging secrets.
+- [x] 4.4 Run backend tests, `npm test`, and `npm run build`; perform opt-in Alpaca credential/entitlement checks for representative holdings and factor ETFs before vendor-backed release, recording feed, coverage, and quota observations without logging secrets.
 
 ## 5. Cleanup, documentation, and rollout
 

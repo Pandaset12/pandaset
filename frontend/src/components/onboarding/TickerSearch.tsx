@@ -73,8 +73,9 @@ export function TickerSearch({
   const canAddManual =
     allowDirectEntry &&
     status !== "loading" &&
+    results.length === 0 &&
     isValidSymbol(manualSymbol) &&
-    !results.some((result) => result.symbol === manualSymbol);
+    !selectedSymbols.includes(manualSymbol);
   if (canAddManual) options.push({ symbol: manualSymbol });
   const expanded = open && Boolean(query.trim()) && !disabled;
 
@@ -169,7 +170,7 @@ export function TickerSearch({
       </div>
       <p id={inputId + "-help"} className="po-help">
         {allowDirectEntry
-          ? "Search by name, or add a ticker directly. Use arrows and Enter to select."
+          ? "Search by company name or symbol. Direct entry requires the exact ticker. Use arrows and Enter to select."
           : "Search supported instruments. Use arrows and Enter to select."}
       </p>
       {expanded && (
@@ -179,11 +180,11 @@ export function TickerSearch({
               ? "Searching tickers…"
               : status === "error"
                 ? allowDirectEntry
-                  ? "Search is unavailable. You can still add a ticker directly."
+                  ? "Search is unavailable. Add a holding only if you know its exact ticker."
                   : "Search is unavailable. Try again in a moment."
                 : !results.length
                   ? allowDirectEntry
-                    ? "No matching companies found. Check the ticker before adding it."
+                    ? "No matching stock found. Direct entry requires the exact ticker."
                     : "No supported instruments match this search."
                   : results.length +
                     (results.length === 1 ? " match" : " matches")}
@@ -208,7 +209,9 @@ export function TickerSearch({
                 >
                   <span className="po-result-symbol">{option.symbol}</span>
                   <span className="po-result-name">
-                    {manual ? "Add ticker directly" : option.name || "Ticker"}
+                    {manual
+                      ? "Add exact ticker without a search match"
+                      : option.name || "Ticker"}
                   </span>
                   {exists ? (
                     <small>Added</small>
