@@ -33,10 +33,7 @@ test("backend portfolio symbols, including SPY, define the workspace holdings", 
 
 test("unknown holding metadata does not invent a market-data source", () => {
   const [holding] = workspaceAssets(portfolio([{ symbol: "SPY", weight: 1 }]));
-  assert.equal(
-    holding.description,
-    "Price history comes from the configured market-data provider. See the chart for source and freshness.",
-  );
+  assert.doesNotMatch(holding.description, /sample|fictional|live|alpaca/i);
 });
 
 test("fractional backend weights stay exact and immediately valid", () => {
@@ -78,10 +75,11 @@ test("thirds reconcile to editable six-decimal percentages totaling exactly 100"
 
 test("unsupported saved tickers remain visible and can be replaced without local allowlisting", () => {
   const saved = portfolio([{ symbol: "TSLA", weight: 1 }]);
-  assert.deepEqual(
-    workspaceAssets(saved).map(({ symbol }) => symbol),
-    ["TSLA"],
-  );
+  const [holding] = workspaceAssets(saved);
+  assert.equal(holding.symbol, "TSLA");
+  assert.equal(holding.name, "TSLA");
+  assert.equal(holding.sector, "Unclassified");
+  assert.doesNotMatch(holding.description, /sample|live|Alpaca/i);
   assert.deepEqual(
     portfolioFromPercentages("replacement", ["SPY"], [100]).holdings,
     [{ symbol: "SPY", weight: 1 }],

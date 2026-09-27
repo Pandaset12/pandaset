@@ -1,5 +1,8 @@
 from datetime import datetime
+from functools import lru_cache
+import json
 import math
+from pathlib import Path
 import re
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -7,9 +10,11 @@ from pydantic import ValidationError
 from starlette.concurrency import run_in_threadpool
 
 from .alpaca_quotes import AlpacaQuotesUnavailable, fetch_alpaca_quotes
+from .alpaca_assets import AssetLookupUnavailable, search_alpaca_assets, search_catalog
 from .alpaca_history import RateLimitError
 from .config import Settings, get_settings
 from .auth import current_user_id
+from .instruments import SUPPORTED_INSTRUMENTS
 from .observability import log_failure
 from .gemini_service import (
     GeminiNotConfigured,
@@ -55,6 +60,41 @@ def get_store(request: Request) -> PortfolioStore:
 
 def api_error(status: int, code: str, message: str) -> HTTPException:
     return HTTPException(status_code=status, detail={"code": code, "message": message})
+
+
+@lru_cache(maxsize=1)
+def _sample_assets() -> list[dict[str, str]]:
+    fixture = Path(__file__).parent / "drafts" / "data_pipeline" / "sample_prices.json"
+    symbols = json.loads(fixture.read_text("utf-8"))["prices"]
+    return [
+        {"symbol": symbol, "name": SUPPORTED_INSTRUMENTS[symbol].name}
+        for symbol in symbols if symbol in SUPPORTED_INSTRUMENTS
+    ]
+
+
+@router.get("/assets/search")
+async def search_assets(
+    q: str = Query(min_length=1, max_length=64),
+    settings: Settings = Depends(get_settings),
+    _user_id: str = Depends(current_user_id),
+) -> dict[str, list[dict[str, str]]]:
+    if settings.market_data_provider == "sample":
+        return {"results": search_catalog(_sample_assets(), q)}
+    if not settings.has_alpaca_keys:
+        raise api_error(503, "ALPACA_NOT_CONFIGURED", "Stock search needs Alpaca credentials on the backend.")
+    try:
+        results = await run_in_threadpool(
+            search_alpaca_assets,
+            q,
+            settings.alpaca_api_key.get_secret_value().strip(),
+            settings.alpaca_api_secret.get_secret_value().strip(),
+            settings.alpaca_assets_base_url,
+            min(settings.market_data_timeout_seconds, 10),
+        )
+    except AssetLookupUnavailable as exc:
+        log_failure("ALPACA_ASSET_SEARCH_UNAVAILABLE", exc)
+        raise api_error(502, "ALPACA_ASSET_SEARCH_UNAVAILABLE", str(exc)) from exc
+    return {"results": results}
 
 
 @router.get("/quotes")

@@ -12,6 +12,8 @@ import { researchNotes, type Asset } from "../../../quant/data";
 import { pct, showAnnualizedReturn, signedPct } from "../../../quant/analytics";
 import {
   AnalysisDetails,
+  historySessionLabel,
+  historySourceLabel,
   observationCount,
   SampleContext,
 } from "../components/AnalysisContext";
@@ -78,26 +80,27 @@ export default function Overview({
   const topAsset = portfolioAssets.find(
     (asset) => asset.symbol === topRisk?.[0],
   );
+  const largestHolding = Object.entries(analysis.weights)
+    .filter(([, weight]) => weight > 0)
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0];
   const chartValues = analysis.series?.portfolio_index;
   const chartDates = analysis.series?.dates ?? [];
-  const portfolioSeries = chartValues?.every(
-    (value): value is number => value !== null,
-  )
-    ? chartValues
-    : null;
+  const portfolioSeries =
+    chartValues?.length === chartDates.length &&
+    chartValues?.every((value): value is number => value !== null)
+      ? chartValues
+      : null;
   const benchmark = analysis.series?.asset_index.VTI;
-  const benchmarkSeries = benchmark?.every(
-    (value): value is number => value !== null,
-  )
-    ? benchmark
-    : undefined;
-  const sectors = Object.entries(
-    portfolioAssets.reduce<Record<string, number>>((grouped, asset) => {
-      grouped[asset.sector] =
-        (grouped[asset.sector] ?? 0) + (analysis.weights[asset.symbol] ?? 0);
-      return grouped;
-    }, {}),
-  ).filter(([, value]) => value > 0);
+  const benchmarkSeries =
+    benchmark?.length === chartDates.length &&
+    benchmark?.every((value): value is number => value !== null)
+      ? benchmark
+      : undefined;
+  const matchedNotes = researchNotes
+    .filter((note) =>
+      note.symbols.some((symbol) => (analysis.weights[symbol] ?? 0) > 0),
+    )
+    .slice(0, 3);
   const returnContributions = Object.values(analysis.return_contribution ?? {});
   const contributionRange = Math.max(
     0.0001,
@@ -131,7 +134,9 @@ export default function Overview({
           <div className="performance-head">
             <div>
               <div className="eyebrow" id="performance-title">
-                PORTFOLIO RETURN{" "}
+                {analysis.data_mode === "demo"
+                  ? "ILLUSTRATIVE PORTFOLIO RETURN"
+                  : "MODELED PORTFOLIO RETURN"}{" "}
                 <button
                   className="inline-icon"
                   aria-label="About portfolio data"
@@ -156,11 +161,11 @@ export default function Overview({
                     <ArrowDownRight size={17} />
                   )}
                   {signedPct(analysis.annualized_return)} annualized
-                  <span className="muted"> over the available sample</span>
+                  <span className="muted"> over the available history</span>
                 </div>
               ) : (
                 <p className="return-caption muted">
-                  Annualized return withheld for this short sample.
+                  Annualized return withheld for this short history.
                 </p>
               )}
               <SampleContext analysis={analysis} />
@@ -182,7 +187,8 @@ export default function Overview({
           )}
           <div className="performance-bottom">
             <span>
-              Normalized portfolio value · based on the available sample dates
+              Normalized portfolio index · {historySourceLabel(analysis)} ·
+              through {historySessionLabel(analysis)}
             </span>
             <button className="text-button" onClick={onMethod}>
               Data & methodology
@@ -266,23 +272,23 @@ export default function Overview({
           </strong>
         </div>
         <div>
-          <span>Direct technology allocation</span>
+          <span>Largest allocation</span>
           <strong>
-            {pct(
-              (analysis.weights.NVDA ?? 0) +
-                (analysis.weights.MSFT ?? 0) +
-                (analysis.weights.AAPL ?? 0) +
-                (analysis.weights.AMD ?? 0),
-              0,
-            )}
-            <small>Direct holdings only</small>
+            {largestHolding
+              ? allocationPercent(largestHolding[1])
+              : "Unavailable"}
+            <small>
+              {largestHolding
+                ? `${largestHolding[0]} · saved weight`
+                : "No holding"}
+            </small>
           </strong>
         </div>
         <div>
           <span>Holdings</span>
           <strong>
             {Object.keys(analysis.weights).length.toString().padStart(2, "0")}
-            <small>Across {sectors.length} categories</small>
+            <small>In the saved portfolio</small>
           </strong>
         </div>
       </div>
@@ -442,32 +448,28 @@ export default function Overview({
           <SectionTitle eyebrow="CONNECT THE DOTS" title="On your radar">
             <TextLink to="#/research">Research</TextLink>
           </SectionTitle>
-          {researchNotes
-            .filter((note) =>
-              note.symbols.some(
-                (symbol) => (analysis.weights[symbol] ?? 0) > 0,
-              ),
-            )
-            .slice(0, 3)
-            .map((note, index) => (
-              <a
-                className="briefing-item"
-                key={note.id}
-                href={`#/research?note=${note.id}`}
-              >
-                <span className="note-index">0{index + 1}</span>
-                <div>
-                  <div className="eyebrow">EDITORIAL PRIMER</div>
-                  <h3>{note.title}</h3>
-                  <div className="briefing-meta">
-                    {note.symbols.slice(0, 3).map((symbol) => (
-                      <span key={symbol}>{symbol}</span>
-                    ))}
-                    <ArrowUpRight size={16} />
-                  </div>
+          <p className="table-footnote">
+            Curated background reading for your holdings.
+          </p>
+          {matchedNotes.map((note, index) => (
+            <a
+              className="briefing-item"
+              key={note.id}
+              href={`#/research?note=${note.id}`}
+            >
+              <span className="note-index">0{index + 1}</span>
+              <div>
+                <div className="eyebrow">EDITORIAL PRIMER</div>
+                <h3>{note.title}</h3>
+                <div className="briefing-meta">
+                  {note.symbols.slice(0, 3).map((symbol) => (
+                    <span key={symbol}>{symbol}</span>
+                  ))}
+                  <ArrowUpRight size={16} />
                 </div>
-              </a>
-            ))}
+              </div>
+            </a>
+          ))}
           <div className="analyst-callout">
             <ChatBubbleLeftRight size={20} />
             <div>

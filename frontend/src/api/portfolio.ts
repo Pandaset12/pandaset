@@ -75,6 +75,9 @@ export type LiveQuotesResponse = {
   source: "alpaca";
   quotes: LiveQuote[];
 };
+export type AssetSearchResponse = {
+  results: { symbol: string; name: string }[];
+};
 export type AskResponse = {
   analyst_mode: "demo" | "gemini";
   status: "complete" | "demo" | "unavailable";
@@ -188,7 +191,9 @@ export function setApiAccessToken(token: string | null) {
 function request<T>(url: string, init: RequestInit = {}): Promise<T> {
   const token = accessToken;
   const protectedRoute =
-    url.startsWith("/api/v1/portfolios") || url.startsWith("/api/v1/quotes");
+    url.startsWith("/api/v1/portfolios") ||
+    url.startsWith("/api/v1/quotes") ||
+    url.startsWith("/api/v1/assets/search");
   const headers = new Headers(init.headers);
   if (protectedRoute && token) headers.set("Authorization", `Bearer ${token}`);
   const key = `${protectedRoute ? tokenVersion : "public"} ${init.method ?? "GET"} ${url} ${typeof init.body === "string" ? init.body : ""}`;
@@ -290,10 +295,23 @@ export async function getAnalysis(portfolioId: string, analysisId: string) {
   );
 }
 
-export function getMarketHistory(symbols: string[], lookbackDays = 252) {
+export function searchAssets(query: string, signal?: AbortSignal) {
+  return request<AssetSearchResponse>(
+    `/api/v1/assets/search?q=${encodeURIComponent(query)}`,
+    { signal },
+  );
+}
+
+export function getMarketHistory(
+  symbols: string[],
+  lookbackDays = 252,
+  signal?: AbortSignal,
+) {
   const query = new URLSearchParams({ lookback_days: String(lookbackDays) });
   symbols.forEach((symbol) => query.append("symbols", symbol));
-  return request<MarketHistoryResponse>(`/api/v1/market-history?${query}`);
+  return request<MarketHistoryResponse>(`/api/v1/market-history?${query}`, {
+    signal,
+  });
 }
 
 export async function verifyPortfolioHistory(
@@ -303,10 +321,31 @@ export async function verifyPortfolioHistory(
   for (const holding of holdings) {
     if (signal?.aborted) throw new DOMException("Cancelled", "AbortError");
     try {
-      await getMarketHistory([holding.symbol], 2);
-    } catch {
+      await getMarketHistory([holding.symbol], 2, signal);
+    } catch (cause) {
+      if (signal?.aborted) throw new DOMException("Cancelled", "AbortError");
+      let detail =
+        cause instanceof ApiError
+          ? cause.message
+          : "Check the ticker or try again.";
+      if (
+        cause instanceof ApiError &&
+        cause.code === "MARKET_HISTORY_UNAVAILABLE"
+      ) {
+        try {
+          const { results } = await searchAssets(holding.symbol, signal);
+          if (!results.some((item) => item.symbol === holding.symbol)) {
+            const suggestion = results[0];
+            if (suggestion)
+              detail += ` Search by company name and select ${suggestion.symbol} (${suggestion.name}) if that is the holding you meant.`;
+          }
+        } catch {
+          if (signal?.aborted)
+            throw new DOMException("Cancelled", "AbortError");
+        }
+      }
       throw new Error(
-        `Could not verify price history for ${holding.symbol} with the configured market-data provider. Try again or choose another ticker.`,
+        `Could not verify price history for ${holding.symbol}. ${detail}`,
       );
     }
   }

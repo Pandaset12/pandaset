@@ -188,6 +188,100 @@ def test_alpaca_preflight_is_reused_by_analysis_when_cache_rights_confirmed(clie
     assert calls == [("SPY",)]
 
 
+def test_alpaca_analysis_uses_each_saved_portfolios_symbols_and_weights(client, monkeypatch):
+    import pandas as pd
+    from backend.alpaca_history import AlpacaHistoryProvider
+
+    api, _ = client
+    settings = api.app.dependency_overrides[get_settings]().model_copy(update={
+        "market_data_provider": "alpaca",
+        "alpaca_api_key": SecretStr("test-key"),
+        "alpaca_api_secret": SecretStr("test-secret"),
+        "alpaca_history_feed": "iex",
+    })
+    monkeypatch.setitem(api.app.dependency_overrides, get_settings, lambda: settings)
+    calls = []
+
+    def fetch(self, symbols, start, end, page_token):
+        calls.append(tuple(symbols))
+        dates = pd.bdate_range(end="2026-09-25", periods=253)
+        return {"bars": {symbol: [
+            {"t": day.strftime("%Y-%m-%dT12:00:00Z"),
+             "c": 100 + index * (1 if symbol == "SPY" else 2)}
+            for index, day in enumerate(dates)
+        ] for symbol in symbols}, "next_page_token": None}
+
+    monkeypatch.setattr(AlpacaHistoryProvider, "_fetch", fetch)
+    headers = {"Authorization": "Bearer owner"}
+    portfolios = [
+        [{"symbol": "SPY", "weight": 1.0}],
+        [{"symbol": "SPY", "weight": 0.25}, {"symbol": "TLT", "weight": 0.75}],
+    ]
+    analyses = []
+    for index, holdings in enumerate(portfolios):
+        created = api.post("/api/v1/portfolios", json={
+            "name": f"Saved {index}", "holdings": holdings,
+        }, headers=headers)
+        assert created.status_code == 201, created.text
+        response = api.post(
+            f"/api/v1/portfolios/{created.json()['portfolio_id']}/analysis",
+            headers=headers,
+        )
+        assert response.status_code == 200, response.text
+        analyses.append(response.json())
+
+    assert calls == [("SPY",), ("SPY", "TLT")]
+    assert analyses[0]["weights"] == {"SPY": 1.0}
+    assert analyses[1]["weights"] == {"SPY": 0.25, "TLT": 0.75}
+    assert set(analyses[0]["series"]["asset_index"]) == {"SPY"}
+    assert set(analyses[1]["series"]["asset_index"]) == {"SPY", "TLT"}
+    assert analyses[0]["portfolio_return"] != analyses[1]["portfolio_return"]
+    assert all(result["data_mode"] == "live" for result in analyses)
+    assert all(result["data_quality"]["source"] == "alpaca_adjusted_daily" for result in analyses)
+    assert all(any("IEX" in note for note in result["data_quality"]["warnings"])
+               for result in analyses)
+
+
+@pytest.mark.parametrize("failure,status,code", [
+    ("missing_config", 502, "PROVIDER_UNAVAILABLE"),
+    ("rate_limit", 429, "PROVIDER_RATE_LIMIT"),
+    ("incomplete", 404, "MARKET_HISTORY_NOT_FOUND"),
+])
+def test_alpaca_analysis_failures_never_save_sample_results(client, monkeypatch, failure, status, code):
+    from backend.alpaca_history import AlpacaHistoryProvider, CoverageError, RateLimitError
+
+    api, _ = client
+    settings = api.app.dependency_overrides[get_settings]().model_copy(update={
+        "market_data_provider": "alpaca",
+        "alpaca_api_key": SecretStr("" if failure == "missing_config" else "test-key"),
+        "alpaca_api_secret": SecretStr("test-secret"),
+        "alpaca_history_feed": "iex",
+    })
+    monkeypatch.setitem(api.app.dependency_overrides, get_settings, lambda: settings)
+
+    def fetch(self, symbols, start, end, page_token):
+        if failure == "missing_config":
+            pytest.fail("Unconfigured Alpaca analysis must not contact the provider")
+        if failure == "rate_limit":
+            raise RateLimitError("Alpaca history rate limit was reached.")
+        raise CoverageError("Alpaca history is incomplete.")
+
+    monkeypatch.setattr(AlpacaHistoryProvider, "_fetch", fetch)
+    headers = {"Authorization": "Bearer owner"}
+    created = api.post("/api/v1/portfolios", json={
+        "name": "Unavailable", "holdings": [{"symbol": "SPY", "weight": 1.0}],
+    }, headers=headers)
+    assert created.status_code == 201
+    response = api.post(
+        f"/api/v1/portfolios/{created.json()['portfolio_id']}/analysis",
+        headers=headers,
+    )
+    assert response.status_code == status, response.text
+    assert response.json()["error"]["code"] == code
+    with api.app.state.store.connection() as db:
+        assert db.execute("SELECT COUNT(*) FROM analyses").fetchone()[0] == 0
+
+
 def test_what_if_uses_aligned_alpaca_history_for_added_holding(client, monkeypatch):
     import pandas as pd
     from backend.alpaca_history import AlpacaHistoryProvider
