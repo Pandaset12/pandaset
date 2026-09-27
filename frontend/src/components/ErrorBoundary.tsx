@@ -11,7 +11,7 @@ export class ErrorBoundary extends Component<
     return { error: true };
   }
   componentDidCatch(error: Error, info: ErrorInfo) {
-    console.error("PandaSet rendering error", error, info.componentStack);
+    console.error("Pandaset rendering error", error, info.componentStack);
   }
   render() {
     return this.state.error ? (
@@ -19,7 +19,7 @@ export class ErrorBoundary extends Component<
         <h1>Something didn’t load.</h1>
         <p>Your sample portfolio can be restored by reloading the page.</p>
         <button className="button dark" onClick={() => location.reload()}>
-          Reload PandaSet
+          Reload Pandaset
           <RotateCcw size={16} />
         </button>
       </main>

@@ -49,10 +49,10 @@ export function PandaMark({ className }: { className?: string }) {
 
 export function Brand() {
   return (
-    <a href="#/" className="brand" aria-label="PandaSet home">
+    <a href="#/" className="brand" aria-label="Pandaset home">
       <PandaMark className="panda-mark" />
       <span>
-        Panda<span className="brand-light">Set</span>
+        Panda<span className="brand-light">set</span>
       </span>
     </a>
   );

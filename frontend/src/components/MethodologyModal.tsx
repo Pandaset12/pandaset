@@ -7,7 +7,7 @@ export function MethodologyModal({ onClose }: { onClose: () => void }) {
       <div className="method-intro">
         <Info size={20} />
         <p>
-          PandaSet is an interactive interface demo. Prices, returns, and
+          Pandaset is an interactive interface demo. Prices, returns, and
           portfolio values are illustrative, not live market data.
         </p>
       </div>

@@ -84,9 +84,9 @@ export default function Landing() {
         Skip to content
       </a>
       <header className="lp-header">
-        <a className="lp-brand" href="./" aria-label="PandaSet home">
+        <a className="lp-brand" href="./" aria-label="Pandaset home">
           <PandaMark />
-          <span>PandaSet</span>
+          <span>Pandaset</span>
         </a>
         <button
           className="lp-menu-button"
@@ -216,7 +216,7 @@ export default function Landing() {
             <span>Understanding them is another.</span>
           </h2>
           <p>
-            A list of tickers only tells part of the story. PandaSet connects
+            A list of tickers only tells part of the story. Pandaset connects
             the dots between what you hold, how it behaves, and what could
             change.
           </p>
@@ -449,7 +449,7 @@ export default function Landing() {
           <footer className="lp-footer lp-wrap">
             <a className="lp-brand" href="./">
               <PandaMark />
-              <span>PandaSet</span>
+              <span>Pandaset</span>
             </a>
             <p>
               Built for understanding.

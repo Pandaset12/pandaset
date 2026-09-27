@@ -161,7 +161,7 @@ function request<T>(url: string, init: RequestInit = {}): Promise<T> {
       throw new ApiError(
         typeof error?.message === "string"
           ? error.message
-          : `PandaSet API request failed (${response.status}).`,
+          : `Pandaset API request failed (${response.status}).`,
         response.status,
         typeof error?.request_id === "string" ? error.request_id : undefined,
       );
@@ -204,7 +204,7 @@ export async function analyzePortfolio(weights: number[]) {
     )
   ) {
     throw new Error(
-      "PandaSet API returned an analysis for a different portfolio allocation.",
+      "Pandaset API returned an analysis for a different portfolio allocation.",
     );
   }
   return { portfolio, analysis };

@@ -439,7 +439,7 @@ export default function WhatIf({
           onClose={applying ? () => undefined : () => setConfirm(false)}
         >
           <p className="note-body">
-            PandaSet will create and analyze the new sample allocation, then
+            Pandaset will create and analyze the new sample allocation, then
             replace the active portfolio after the backend confirms it. This
             does not place trades or connect to a brokerage.
           </p>

@@ -114,7 +114,7 @@ function Application() {
     : "/";
   const query = new URLSearchParams(search);
   useEffect(() => {
-    document.title = `${route === "/" ? "Overview" : route === "/risk" ? "Risk & exposure" : route === "/research" ? "Research" : "Scenario lab"} — PandaSet`;
+    document.title = `${route === "/" ? "Overview" : route === "/risk" ? "Risk & exposure" : route === "/research" ? "Research" : "Scenario lab"} — Pandaset`;
   }, [route]);
 
   const nav = [
@@ -281,7 +281,7 @@ function Application() {
       </main>
       <footer className="site-footer">
         <span>
-          PandaSet<span className="footer-slash">/</span>A clearer view of what
+          Pandaset<span className="footer-slash">/</span>A clearer view of what
           you own.
         </span>
         <button className="text-button" onClick={() => setMethod(true)}>

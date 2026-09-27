@@ -1,6 +1,6 @@
-# PandaSet
+# Pandaset
 
-**A clearer view of what you own.** PandaSet is an interactive portfolio research demo built with React, TypeScript, and Vite. Explore performance, risk, company research, and allocation scenarios through one shared sample portfolio.
+**A clearer view of what you own.** Pandaset is an interactive portfolio research demo built with React, TypeScript, and Vite. Explore performance, risk, company research, and allocation scenarios through one shared sample portfolio.
 
 ## Explore the app
 
@@ -22,7 +22,7 @@ npm install
 npm run dev
 ```
 
-Open the local URL printed by Vite for the black-and-white PandaSet landing page. **Explore the demo** opens `app.html`, where the dashboard keeps its existing hash routes. Previously shared root hash routes also redirect to the dashboard. Run all commands from the repository root.
+Open the local URL printed by Vite for the black-and-white Pandaset landing page. **Explore the demo** opens `app.html`, where the dashboard keeps its existing hash routes. Previously shared root hash routes also redirect to the dashboard. Run all commands from the repository root.
 
 | Command           | Purpose                                                       |
 | ----------------- | ------------------------------------------------------------- |
@@ -61,6 +61,6 @@ The root `package.json` provides the development, test, and build commands. The 
 
 `quant/analytics.ts` calculates compounded returns, linked return contributions, annualized volatility, correlations, risk contributions, and drawdown. The model assumes constant daily weights and excludes fees, taxes, deposits, and withdrawals. The methodology dialog in the app explains these assumptions alongside the results.
 
-Research links open external issuer and public-disclosure pages. A user can request an on-demand summary of the selected official issuer page when Gemini is configured; PandaSet does not crawl or ingest those pages in the background. The backend analyzes fictional sample prices. Ask Panda and the contextual explanations share one Gemini adapter, with workflow-specific prompts and tool access. API credentials must stay out of the browser bundle.
+Research links open external issuer and public-disclosure pages. A user can request an on-demand summary of the selected official issuer page when Gemini is configured; Pandaset does not crawl or ingest those pages in the background. The backend analyzes fictional sample prices. Ask Panda and the contextual explanations share one Gemini adapter, with workflow-specific prompts and tool access. API credentials must stay out of the browser bundle.
 
 See the [backend guide](backend/README.md), [Python quant guide](quant_engine/README.md), [design notes](docs/design-system.md), and [verification notes](docs/verification.md) for more detail. Font licenses are in `frontend/public/fonts/`.

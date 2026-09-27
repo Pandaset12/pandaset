@@ -33,7 +33,7 @@ for (const [name, width, height, reducedMotion] of [
   await page.goto(url);
   await page.waitForSelector("html.sc-ready");
   await page.evaluate(() => document.fonts.ready);
-  assert.match(await page.title(), /PandaSet/);
+  assert.match(await page.title(), /Pandaset/);
   assert.equal(
     await page.locator("h1").innerText(),
     "Less noise.\nMore insight.",
