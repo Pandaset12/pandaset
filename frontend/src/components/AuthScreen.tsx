@@ -73,7 +73,6 @@ export function AuthScreen({
       </header>
       <main className="auth-main" id="main-content">
         <section className="auth-intro">
-          <span className="auth-eyebrow">PANDASET / INVESTOR ACCESS</span>
           <h1>A clearer view of what you own.</h1>
           <p>
             Explore performance, risk, research, and scenarios in one focused
@@ -87,7 +86,6 @@ export function AuthScreen({
         <section className="auth-card" aria-labelledby="auth-title">
           {confirmation ? (
             <>
-              <span className="auth-eyebrow">ONE MORE STEP</span>
               <h2 id="auth-title">Check your email</h2>
               <p>
                 We sent a confirmation link to {email.trim()}. Follow it to
@@ -102,7 +100,6 @@ export function AuthScreen({
             </>
           ) : (
             <>
-              <span className="auth-eyebrow">YOUR WORKSPACE</span>
               <h2 id="auth-title">
                 {mode === "signin" ? "Welcome back" : "Create your account"}
               </h2>
