@@ -1,0 +1,11 @@
+{
+  "chartArrival": true,
+  "pointerPixelChange": true,
+  "pointerReset": true,
+  "scrollWordEmphasis": true,
+  "keyboardReveal": true,
+  "liveReducedMotion": true,
+  "noInfiniteAnimation": true,
+  "touchFallback": true,
+  "consoleErrors": []
+}

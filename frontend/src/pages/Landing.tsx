@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { PandaMark } from "../components/UI";
+import { useLandingMotion } from "../hooks/useLandingMotion";
 import { LandingPanda } from "../components/LandingPanda";
 import { analyze, pct } from "../../../quant/analytics";
 import { assets, initialWeights } from "../../../quant/data";
@@ -30,6 +31,7 @@ function DemoLink({ light = false }: { light?: boolean }) {
 
 export default function Landing() {
   const root = useRef<HTMLDivElement>(null);
+  useLandingMotion(root);
   const mounted = useRef(false);
   const manualPerspective = useRef(false);
   const [perspective, setPerspective] = useState<"capital" | "risk">("capital");
@@ -162,7 +164,9 @@ export default function Landing() {
               data-sc-parallax="-0.15"
             />
             <div className="lp-mascot-plane" data-sc-parallax="0.5">
-              <LandingPanda />
+              <div className="lp-panda-arrival">
+                <LandingPanda />
+              </div>
             </div>
             <div
               className="lp-paper-plane"
@@ -173,13 +177,21 @@ export default function Landing() {
                 <span>THE BIGGER PICTURE</span>
                 <svg viewBox="0 0 370 125" fill="none">
                   <path d="M0 30h370M0 65h370M0 100h370" stroke="#e4e4e4" />
-                  <path
-                    d="m0 100 28-9 27 5 26-31 27 10 28-26 27 8 27-29 29 9 28-22 29 7 30-17 39 4"
-                    stroke="#171717"
-                    strokeWidth="3"
-                    strokeLinejoin="round"
-                  />
-                  <circle cx="345" cy="14" r="5" fill="#171717" />
+                  <g className="lp-chart-ink">
+                    <path
+                      d="m0 100 28-9 27 5 26-31 27 10 28-26 27 8 27-29 29 9 28-22 29 7 30-17 39 4"
+                      stroke="#171717"
+                      strokeWidth="3"
+                      strokeLinejoin="round"
+                    />
+                    <circle
+                      className="lp-chart-tip"
+                      cx="345"
+                      cy="14"
+                      r="5"
+                      fill="#171717"
+                    />
+                  </g>
                 </svg>
                 <div>
                   <span>Zoom out.</span>
@@ -207,13 +219,21 @@ export default function Landing() {
           aria-labelledby="recognition-heading"
         >
           <PandaMark className="lp-small-panda" />
-          <h2
-            id="recognition-heading"
-            data-sc-cue="0 1 0 0"
-            data-sc-kinetic="words"
-          >
-            Owning investments is one thing. <br />
-            <span>Understanding them is another.</span>
+          <h2 id="recognition-heading">
+            {"Owning investments is one thing."
+              .split(" ")
+              .map((word, index) => (
+                <span key={index} className="lp-recognition-word">
+                  {word}{" "}
+                </span>
+              ))}
+            <br />
+            {"Understanding them is another.".split(" ").map((word, index) => (
+              <span key={index} className="lp-recognition-word">
+                {word}
+                {index < 3 ? " " : ""}
+              </span>
+            ))}
           </h2>
           <p>
             A list of tickers only tells part of the story. Pandaset connects
@@ -377,7 +397,7 @@ export default function Landing() {
             data-sc-reveal="up"
             data-sc-reveal-at="0.05 0.3"
           >
-            <a href={demo}>
+            <a href={demo} data-lp-arrival>
               <span className="lp-tool-symbol" aria-hidden="true">
                 ↗
               </span>
@@ -388,7 +408,7 @@ export default function Landing() {
               <span className="lp-tool-name">Overview</span>
               <Arrow />
             </a>
-            <a href="./app.html#/risk">
+            <a href="./app.html#/risk" data-lp-arrival>
               <span className="lp-tool-symbol" aria-hidden="true">
                 ◎
               </span>
@@ -402,7 +422,7 @@ export default function Landing() {
               <span className="lp-tool-name">Risk & exposure</span>
               <Arrow />
             </a>
-            <a href="./app.html#/research">
+            <a href="./app.html#/research" data-lp-arrival>
               <span
                 className="lp-tool-symbol lp-symbol-research"
                 aria-hidden="true"
@@ -416,7 +436,7 @@ export default function Landing() {
               <span className="lp-tool-name">Research</span>
               <Arrow />
             </a>
-            <a href="./app.html#/what-if">
+            <a href="./app.html#/what-if" data-lp-arrival>
               <span className="lp-tool-symbol" aria-hidden="true">
                 ⇄
               </span>
@@ -434,7 +454,7 @@ export default function Landing() {
           data-sc-act="flow"
           aria-labelledby="close-heading"
         >
-          <div className="lp-close-inner lp-wrap">
+          <div className="lp-close-inner lp-wrap" data-lp-arrival>
             <div className="lp-close-mark">
               <PandaMark />
             </div>

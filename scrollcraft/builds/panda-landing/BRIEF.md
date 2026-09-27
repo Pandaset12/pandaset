@@ -53,3 +53,11 @@ Four device families: parallax, kinetic, pin, reveal (plus natural flow). Peak s
 ## Layer contract
 
 Far: pale plotting grid and orbital line, minimal displacement. Subject: full-body vector panda, moderate displacement, aligned to its seat. Foreground: tilted line-chart sheet, stronger displacement, occluding lower body. Typography and CTA: stable, never beneath moving art. Atmosphere: none needed in an ink illustration. Opening: panda watches a chart; midway: paper lifts to reveal the panda's paws; exit: layers pass into the quiet recognition line. Mobile: heading above a separately sized scene, chart framing retained; no pinning.
+
+## Motion refinement, September 26
+
+User: “add some cool animations”, explicitly invoking scroll-craft. The earlier creative delegation, monochrome palette, Pandaset capitalization, and separate feature worktree remain in force. This is a refinement of the existing build, not a new site: the existing fingerprint is retained rather than claiming four new structural dimensions.
+
+Feeling before motion: curiosity becomes personal when Panda acknowledges the pointer; recognition stays calm as the explanatory words sharpen; discovery remains the capital-versus-risk peak; confidence builds through a short toolkit sequence; readiness ends with a small panda nod and a held invitation.
+
+Motion score: a single short hero arrival, a left-to-right chart reveal, limited pointer head/eye tracking and paper tilt, scroll-progress word emphasis, staggered toolkit arrivals, and a single closing nod. No indefinite ambient animation, video, new scroll length, or hidden essential controls. The hero chart is decorative artwork, not a new numerical claim. Pointer motion is additive and unavailable on touch; all content remains complete with reduced motion, including preference changes while the page is open. Existing engine files remain byte-identical.

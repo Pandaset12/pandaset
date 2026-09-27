@@ -44,3 +44,15 @@ All chart values come from the existing TypeScript analytics and sample weights.
 Screenshots and final machine reports are in `evidence/`. Full intermediate frames remain in ignored `lab/`. Reproduce interaction checks after `npm install --no-save --package-lock=false playwright-core` with `LANDING_URL=http://127.0.0.1:45274 node scrollcraft/builds/panda-landing/verify.mjs`. The script uses installed macOS Chrome; change its executable path on other systems.
 
 Not verified: a physical phone or Safari, external hosting, or optional Gemini integration. No live-market or brokerage claim is made. No pointer-only interaction or video decoder is required.
+
+## Motion refinement
+
+Pandaset now has a finite hero arrival, a line chart that draws across the paper, pointer-driven panda gaze and head tilt, a brief blink on pointer entry, subtle paper perspective, progressive word emphasis while scrolling, staggered toolkit entrances, and a closing panda nod. The page keeps the companion field-guide grammar, existing journey, signature comparison, and peak span. This is a revision of the existing fingerprint, not a new build claiming structural uniqueness. No new assets or services were needed.
+
+The choreography lives in `useLandingMotion.ts` and landing styles; the shared engine remains unchanged. Pointer effects require a fine mouse pointer. The new hook batches scroll/pointer writes through requestAnimationFrame, skips offscreen scene updates, removes its observers/listeners/timers on cleanup, and responds to live reduced-motion changes. No ambient effect loops indefinitely. Keyboard focus reveals toolkit links immediately, including the parent clip.
+
+Verification of the final production bundle: all 19 tests, build, formatting, existing desktop/phone/compact/reduced functional checks, and three 25-frame scroll captures passed. The separate `verify-motion.mjs` confirms actual scene pixels change between pointer positions, chart arrival changes the rendered clip, gaze resets on exit, text resolves with scroll, keyboard links become visible, live reduced motion stops the custom choreography, touch does not activate pointer tracking, and no animations continue running after the finite arrivals finish. No page errors were recorded.
+
+Visual review: curious → recognition → discovery → confidence → readiness. The new acknowledgement by Panda makes curiosity more personal, while the dark capital/risk section remains the peak. The first motion pass needed no layout repair. Word emphasis uses a visible 0.6 opacity floor and resolves fully before the sentence leaves. The cue-only contrast harness no longer measures that bespoke sentence; its appearance was inspected directly rather than treating the absence of cue warnings as a contrast audit.
+
+Final motion screenshots and the interaction report are in `evidence/motion/`; these supersede the earlier static presentation evidence. Reproduce with `node scrollcraft/builds/panda-landing/verify-motion.mjs` against the production preview. Real-device Safari/iPhone testing remains unverified.
