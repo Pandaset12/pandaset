@@ -70,7 +70,6 @@ export function AuthScreen({
     <div className="auth-page">
       <header className="auth-header">
         <Brand />
-        <span>Investor workspace</span>
       </header>
       <main className="auth-main" id="main-content">
         <section className="auth-intro">

@@ -28,10 +28,6 @@
 .auth-header .brand {
   color: var(--auth-ink);
 }
-.auth-header > span {
-  color: var(--auth-muted);
-  font-size: 0.8rem;
-}
 .auth-main {
   flex: 1;
   width: min(1440px, 100%);
