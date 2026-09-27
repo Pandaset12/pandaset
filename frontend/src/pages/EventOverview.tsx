@@ -22,12 +22,14 @@ import type { AnalysisResponse } from "../api/portfolio";
 import type { PortfolioAsset } from "../types/portfolioAsset";
 
 export default function Overview({
+  portfolioName,
   analysis,
   assets,
   onEdit,
   onBrief,
   onMethod,
 }: {
+  portfolioName: string;
   analysis: AnalysisResponse;
   assets: PortfolioAsset[];
   onEdit: () => void;
@@ -92,7 +94,7 @@ export default function Overview({
 
   return (
     <>
-      <PageHeading title="Portfolio overview">
+      <PageHeading title={portfolioName}>
         <button className="button subtle" onClick={onEdit}>
           <SlidersHorizontal size={16} />
           Edit portfolio
@@ -102,11 +104,6 @@ export default function Overview({
           Brief this portfolio
         </button>
       </PageHeading>
-      <LiveQuotesPanel
-        symbols={Object.keys(analysis.weights).filter(
-          (symbol) => analysis.weights[symbol] > 0,
-        )}
-      />
       <section className="backend-analysis" aria-label="Saved backend analysis">
         <div>
           <strong>
@@ -245,6 +242,11 @@ export default function Overview({
           </a>
         </aside>
       </div>
+      <LiveQuotesPanel
+        symbols={Object.keys(analysis.weights).filter(
+          (symbol) => analysis.weights[symbol] > 0,
+        )}
+      />
       <div className="metric-strip">
         <div>
           <span>Annualized volatility</span>

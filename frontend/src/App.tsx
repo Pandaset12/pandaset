@@ -21,6 +21,7 @@ import { EditPortfolio } from "./components/EditPortfolio";
 import { MethodologyModal } from "./components/MethodologyModal";
 import { AuthScreen } from "./components/AuthScreen";
 import { AuthBoundary } from "./components/AuthBoundary";
+import { WorkspaceNavigation } from "./components/WorkspaceNavigation";
 import { PortfolioOnboarding } from "./components/onboarding/PortfolioOnboarding";
 import { EventApplication } from "./EventApplication";
 import {
@@ -237,15 +238,9 @@ export function Application({ onSignOut }: { onSignOut: () => Promise<void> }) {
     : "/";
   const query = new URLSearchParams(search);
   useEffect(() => {
-    document.title = `${route === "/" ? "Overview" : route === "/risk" ? "Risk & exposure" : route === "/research" ? "Research" : "Scenario lab"} — Pandaset`;
-  }, [route]);
+    document.title = `${route === "/" ? (selectedPortfolio?.name ?? "Overview") : route === "/risk" ? "Risk & exposure" : route === "/research" ? "Research" : "Scenario lab"} — Pandaset`;
+  }, [route, selectedPortfolio?.name]);
 
-  const nav = [
-    ["/", "Overview"],
-    ["/risk", "Risk & exposure"],
-    ["/research", "Research"],
-    ["/what-if", "What-if lab"],
-  ];
   const workspaceHoldings = selectedPortfolio
     ? workspaceAssets(selectedPortfolio)
     : [];
@@ -314,229 +309,220 @@ export function Application({ onSignOut }: { onSignOut: () => Promise<void> }) {
       >
         Skip to content
       </a>
-      <header className="site-header">
-        <div className="header-inner">
-          <Brand />
-          <nav aria-label="Main navigation">
-            {nav.map(([to, label]) => (
-              <a
-                key={to}
-                href={`#${to}`}
-                className={route === to ? "active" : ""}
-                aria-current={route === to ? "page" : undefined}
-              >
-                {label}
-              </a>
-            ))}
-          </nav>
-          <button
-            className="text-button sign-out-button"
-            onClick={() => void onSignOut()}
-          >
-            Sign out
-          </button>
-        </div>
-      </header>
-      <div className="workspace-bar">
-        <div>
-          <div
-            className="portfolio-picker"
-            onKeyDown={(event) => {
-              if (event.key === "Escape") setPortfolioMenuOpen(false);
-            }}
-          >
-            <button
-              className="portfolio-selector"
-              aria-expanded={portfolioMenuOpen}
-              aria-controls="saved-portfolios"
-              onClick={() => setPortfolioMenuOpen((open) => !open)}
+      <div
+        className={`dashboard-shell${route === "/" && active ? " dashboard-shell-overview" : ""}`}
+      >
+        <WorkspaceNavigation route={route} onSignOut={onSignOut} />
+        <div className="workspace-bar">
+          <div>
+            <div
+              className="portfolio-picker"
+              onKeyDown={(event) => {
+                if (event.key === "Escape") setPortfolioMenuOpen(false);
+              }}
             >
-              <span className="portfolio-initial">
-                {selectedPortfolio?.name.slice(0, 1).toUpperCase() ?? "P"}
-              </span>
-              <span
-                className="portfolio-selector-name"
-                title={selectedPortfolio?.name}
+              <button
+                className="portfolio-selector"
+                aria-label={`Select portfolio: ${selectedPortfolio?.name ?? "Choose portfolio"}`}
+                aria-expanded={portfolioMenuOpen}
+                aria-controls="saved-portfolios"
+                onClick={() => setPortfolioMenuOpen((open) => !open)}
               >
-                {selectedPortfolio?.name ?? "Choose portfolio"}
-              </span>
-              <ChevronDown size={14} />
-            </button>
-            {portfolioMenuOpen && (
-              <div
-                id="saved-portfolios"
-                className="portfolio-menu"
-                aria-label="Saved portfolios"
-              >
-                {portfolios.map((portfolio) => (
-                  <div
-                    className="portfolio-menu-row"
-                    key={portfolio.portfolio_id}
-                  >
-                    <button
-                      type="button"
-                      className="portfolio-menu-choice"
-                      aria-current={
-                        portfolio.portfolio_id ===
-                        selectedPortfolio?.portfolio_id
-                          ? "true"
-                          : undefined
-                      }
-                      title={portfolio.name}
-                      onClick={() => selectPortfolio(portfolio)}
-                    >
-                      {portfolio.name}
-                    </button>
-                    <button
-                      type="button"
-                      className="portfolio-menu-delete"
-                      aria-label={`Delete ${portfolio.name}`}
-                      title={`Delete ${portfolio.name}`}
-                      onClick={() => {
-                        setPortfolioMenuOpen(false);
-                        setDeleteError("");
-                        setPortfolioToDelete(portfolio);
-                      }}
-                    >
-                      Delete
-                    </button>
-                  </div>
-                ))}
-                <button
-                  type="button"
-                  className="portfolio-menu-new"
-                  onClick={() => {
-                    setPortfolioMenuOpen(false);
-                    setShowOnboarding(true);
-                  }}
+                <span className="portfolio-initial">
+                  {selectedPortfolio?.name.slice(0, 1).toUpperCase() ?? "P"}
+                </span>
+                <span
+                  className="portfolio-selector-name"
+                  title={selectedPortfolio?.name}
                 >
-                  + New portfolio
-                </button>
-              </div>
-            )}
+                  {selectedPortfolio?.name ?? "Choose portfolio"}
+                </span>
+                <ChevronDown size={14} />
+              </button>
+              {portfolioMenuOpen && (
+                <div
+                  id="saved-portfolios"
+                  className="portfolio-menu"
+                  aria-label="Saved portfolios"
+                >
+                  {portfolios.map((portfolio) => (
+                    <div
+                      className="portfolio-menu-row"
+                      key={portfolio.portfolio_id}
+                    >
+                      <button
+                        type="button"
+                        className="portfolio-menu-choice"
+                        aria-current={
+                          portfolio.portfolio_id ===
+                          selectedPortfolio?.portfolio_id
+                            ? "true"
+                            : undefined
+                        }
+                        title={portfolio.name}
+                        onClick={() => selectPortfolio(portfolio)}
+                      >
+                        {portfolio.name}
+                      </button>
+                      <button
+                        type="button"
+                        className="portfolio-menu-delete"
+                        aria-label={`Delete ${portfolio.name}`}
+                        title={`Delete ${portfolio.name}`}
+                        onClick={() => {
+                          setPortfolioMenuOpen(false);
+                          setDeleteError("");
+                          setPortfolioToDelete(portfolio);
+                        }}
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    className="portfolio-menu-new"
+                    onClick={() => {
+                      setPortfolioMenuOpen(false);
+                      setShowOnboarding(true);
+                    }}
+                  >
+                    + New portfolio
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
-      </div>
-      <main id="main-content" className="main-content" tabIndex={-1}>
-        {analysisLoading && !active ? (
-          <section className="api-state" role="status">
-            <strong>Loading portfolio analysis…</strong>
-            <p>Connecting to the backend and calculating this portfolio.</p>
-          </section>
-        ) : analysisError && !active ? (
-          <section className="api-state api-state-featured" role="alert">
-            <span className="api-state-kicker">PORTFOLIO ANALYSIS</span>
-            <h1>We couldn’t load the portfolio analysis.</h1>
-            <p>
-              Your saved portfolio is still available. Try again, choose another
-              portfolio above, or create a replacement with supported prices.
-            </p>
-            <button
-              className="button dark"
-              onClick={() =>
-                selectedPortfolio && void loadAnalysis(selectedPortfolio)
-              }
-              disabled={analysisLoading}
-            >
-              Retry analysis
-            </button>
-            <button
-              className="button subtle"
-              onClick={() => setShowOnboarding(true)}
-            >
-              Create another portfolio
-            </button>
-            <button className="text-button" onClick={() => setMethod(true)}>
-              Data & methodology
-            </button>
-            <details>
-              <summary>Technical details</summary>
-              <p>{analysisError}</p>
-            </details>
-          </section>
-        ) : active ? (
-          <ErrorBoundary>
-            {route === "/" ? (
-              <Overview
-                holdings={workspaceHoldings}
-                analysis={active.analysis}
-                onEdit={() => setEdit(true)}
-                onBrief={() => setAiWorkflow({ workflow: "analysis_briefing" })}
-                onMethod={() => setMethod(true)}
-              />
-            ) : route === "/risk" ? (
-              <Risk
-                holdings={workspaceHoldings}
-                analysis={active.analysis}
-                onExplain={() =>
-                  setAiWorkflow({
-                    workflow: "risk_explanation",
-                    question:
-                      "Explain the main risk contributions and concentrations in this saved analysis.",
-                  })
-                }
-                onMethod={() => setMethod(true)}
-              />
-            ) : route === "/research" ? (
-              <Research
-                key={hash}
-                holdings={workspaceHoldings}
-                weights={weights}
-                onSummarizeSource={(symbol) =>
-                  setAiWorkflow({ workflow: "research_summary", symbol })
-                }
-                query={query}
-              />
-            ) : (
-              <WhatIf
-                key={`${hash}:${active.analysis.analysis_id}`}
-                holdings={workspaceHoldings}
-                analysis={active.analysis}
-                weights={weights}
-                onApply={(w, symbols) => apply(w, "scenario", symbols)}
-                onExplainScenario={(proposedWeights, symbols) =>
-                  setAiWorkflow({
-                    workflow: "scenario_explanation",
-                    proposedWeights,
-                    symbols,
-                  })
-                }
-                query={query}
-              />
-            )}
-            {analysisLoading && (
-              <p className="analysis-saving" role="status">
-                Saving the new allocation and calculating its analysis…
+        <main
+          id="main-content"
+          className={`main-content dashboard-${route === "/" ? "overview" : route.slice(1)}`}
+          tabIndex={-1}
+        >
+          {analysisLoading && !active ? (
+            <section className="api-state" role="status">
+              <strong>Loading portfolio analysis…</strong>
+              <p>Connecting to the backend and calculating this portfolio.</p>
+            </section>
+          ) : analysisError && !active ? (
+            <section className="api-state api-state-featured" role="alert">
+              <span className="api-state-kicker">PORTFOLIO ANALYSIS</span>
+              <h1>We couldn’t load the portfolio analysis.</h1>
+              <p>
+                Your saved portfolio is still available. Try again, choose
+                another portfolio in the workspace selector, or create a
+                replacement with supported prices.
               </p>
-            )}
-            {analysisError && (
-              <div className="analysis-saving error" role="alert">
-                The analysis couldn’t be updated. Your active portfolio is
-                unchanged.{" "}
-                <button
-                  className="text-button"
-                  onClick={() =>
-                    selectedPortfolio && void loadAnalysis(selectedPortfolio)
+              <button
+                className="button dark"
+                onClick={() =>
+                  selectedPortfolio && void loadAnalysis(selectedPortfolio)
+                }
+                disabled={analysisLoading}
+              >
+                Retry analysis
+              </button>
+              <button
+                className="button subtle"
+                onClick={() => setShowOnboarding(true)}
+              >
+                Create another portfolio
+              </button>
+              <button className="text-button" onClick={() => setMethod(true)}>
+                Data & methodology
+              </button>
+              <details>
+                <summary>Technical details</summary>
+                <p>{analysisError}</p>
+              </details>
+            </section>
+          ) : active ? (
+            <ErrorBoundary>
+              {route === "/" ? (
+                <Overview
+                  portfolioName={active.portfolio.name}
+                  holdings={workspaceHoldings}
+                  analysis={active.analysis}
+                  onEdit={() => setEdit(true)}
+                  onBrief={() =>
+                    setAiWorkflow({ workflow: "analysis_briefing" })
                   }
-                >
-                  Retry
-                </button>
-                <details>
-                  <summary>Technical details</summary>
-                  {analysisError}
-                </details>
-              </div>
-            )}
-          </ErrorBoundary>
-        ) : null}
-      </main>
-      <footer className="site-footer">
-        <span>
-          Pandaset<span className="footer-slash">/</span>A clearer view of what
-          you own.
-        </span>
-        <LogoAttribution />
-      </footer>
+                  onMethod={() => setMethod(true)}
+                />
+              ) : route === "/risk" ? (
+                <Risk
+                  holdings={workspaceHoldings}
+                  analysis={active.analysis}
+                  onExplain={() =>
+                    setAiWorkflow({
+                      workflow: "risk_explanation",
+                      question:
+                        "Explain the main risk contributions and concentrations in this saved analysis.",
+                    })
+                  }
+                  onMethod={() => setMethod(true)}
+                />
+              ) : route === "/research" ? (
+                <Research
+                  key={hash}
+                  holdings={workspaceHoldings}
+                  weights={weights}
+                  onSummarizeSource={(symbol) =>
+                    setAiWorkflow({ workflow: "research_summary", symbol })
+                  }
+                  query={query}
+                />
+              ) : (
+                <WhatIf
+                  key={`${hash}:${active.analysis.analysis_id}`}
+                  holdings={workspaceHoldings}
+                  analysis={active.analysis}
+                  weights={weights}
+                  onApply={(w, symbols) => apply(w, "scenario", symbols)}
+                  onExplainScenario={(proposedWeights, symbols) =>
+                    setAiWorkflow({
+                      workflow: "scenario_explanation",
+                      proposedWeights,
+                      symbols,
+                    })
+                  }
+                  query={query}
+                />
+              )}
+              {analysisLoading && (
+                <p className="analysis-saving" role="status">
+                  Saving the new allocation and calculating its analysis…
+                </p>
+              )}
+              {analysisError && (
+                <div className="analysis-saving error" role="alert">
+                  The analysis couldn’t be updated. Your active portfolio is
+                  unchanged.{" "}
+                  <button
+                    className="text-button"
+                    onClick={() =>
+                      selectedPortfolio && void loadAnalysis(selectedPortfolio)
+                    }
+                  >
+                    Retry
+                  </button>
+                  <details>
+                    <summary>Technical details</summary>
+                    {analysisError}
+                  </details>
+                </div>
+              )}
+            </ErrorBoundary>
+          ) : null}
+        </main>
+        <footer className="site-footer">
+          <span>
+            Pandaset<span className="footer-slash">/</span>A clearer view of
+            what you own.
+          </span>
+          <LogoAttribution />
+        </footer>
+      </div>
       {edit && active && (
         <EditPortfolio
           holdings={workspaceHoldings}

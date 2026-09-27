@@ -23,13 +23,20 @@ import { LiveQuotesPanel } from "../components/LiveQuotesPanel";
 import { allocationPercent } from "../workspace/holdings";
 import type { AnalysisResponse } from "../api/portfolio";
 
+function returnTone(value: number | null | undefined) {
+  if (value == null) return "";
+  return value > 0 ? "positive" : value < 0 ? "negative" : "";
+}
+
 export default function Overview({
+  portfolioName,
   analysis,
   holdings: portfolioAssets,
   onEdit,
   onBrief,
   onMethod,
 }: {
+  portfolioName: string;
   analysis: AnalysisResponse;
   holdings: Asset[];
   onEdit: () => void;
@@ -98,7 +105,7 @@ export default function Overview({
 
   return (
     <>
-      <PageHeading title="Portfolio overview">
+      <PageHeading title={portfolioName}>
         <button className="button subtle" onClick={onEdit}>
           <SlidersHorizontal size={16} />
           Edit portfolio
@@ -108,7 +115,6 @@ export default function Overview({
           Brief this portfolio
         </button>
       </PageHeading>
-      <LiveQuotesPanel symbols={symbols} />
       <div className="overview-top">
         <section
           className="performance-panel"
@@ -128,7 +134,9 @@ export default function Overview({
                   <Info size={13} />
                 </button>
               </div>
-              <div className="large-value">
+              <div
+                className={`large-value ${returnTone(analysis.portfolio_return)}`}
+              >
                 {analysis.portfolio_return === null
                   ? "Unavailable"
                   : signedPct(analysis.portfolio_return)}
@@ -236,6 +244,7 @@ export default function Overview({
           </a>
         </aside>
       </div>
+      <LiveQuotesPanel symbols={symbols} />
       <AnalysisDetails analysis={analysis} />
       <div className="metric-strip">
         <div>
@@ -245,7 +254,11 @@ export default function Overview({
             <small>Backend estimate</small>
           </strong>
         </div>
-        <div>
+        <div
+          className={
+            (analysis.max_drawdown ?? 0) > 0 ? "metric-drawdown" : undefined
+          }
+        >
           <span>Largest drawdown</span>
           <strong>
             {analysis.max_drawdown === null
@@ -347,7 +360,9 @@ export default function Overview({
                       <td className="align-right">
                         {allocationPercent(weight)}
                       </td>
-                      <td className="align-right numeric">
+                      <td
+                        className={`align-right numeric ${returnTone(analysis.return_contribution?.[asset.symbol])}`}
+                      >
                         {analysis.return_contribution?.[asset.symbol] == null
                           ? "Unavailable"
                           : signedPct(
@@ -407,7 +422,7 @@ export default function Overview({
                           }}
                         />
                       </div>
-                      <strong>
+                      <strong className={returnTone(contribution)}>
                         {contribution == null
                           ? "Unavailable"
                           : signedPct(contribution)}

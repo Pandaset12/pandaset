@@ -90,8 +90,16 @@ export function LineChart({
             x2="0"
             y2="1"
           >
-            <stop offset="0%" stopColor="var(--bamboo)" stopOpacity=".13" />
-            <stop offset="100%" stopColor="var(--bamboo)" stopOpacity=".015" />
+            <stop
+              offset="0%"
+              stopColor="var(--chart-primary, var(--bamboo))"
+              stopOpacity=".13"
+            />
+            <stop
+              offset="100%"
+              stopColor="var(--chart-primary, var(--bamboo))"
+              stopOpacity=".015"
+            />
           </linearGradient>
         </defs>
         {[0, 1, 2, 3].map((i) => {
@@ -126,7 +134,7 @@ export function LineChart({
           <path
             d={path(secondary)}
             fill="none"
-            stroke="var(--comparison)"
+            stroke="var(--chart-comparison, var(--comparison))"
             strokeWidth="1.7"
             strokeDasharray="5 5"
           />
@@ -134,7 +142,7 @@ export function LineChart({
         <path
           d={path(series)}
           fill="none"
-          stroke="var(--bamboo)"
+          stroke="var(--chart-primary, var(--bamboo))"
           strokeWidth="2.6"
           strokeLinejoin="round"
         />
@@ -172,14 +180,14 @@ export function LineChart({
               x2={x(index)}
               y1={pad.top}
               y2={height - pad.bottom}
-              stroke="var(--comparison)"
+              stroke="var(--chart-comparison, var(--comparison))"
               strokeDasharray="4 4"
             />
             <circle
               cx={x(index)}
               cy={y(series[index])}
               r="5"
-              fill="var(--bamboo)"
+              fill="var(--chart-primary, var(--bamboo))"
               stroke="var(--ink)"
               strokeWidth="2"
             />

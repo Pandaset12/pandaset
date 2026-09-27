@@ -173,7 +173,7 @@ export default function Risk({
           </div>
           <p className="muted small-text">
             Risk contribution is an estimate based on the available daily return
-            sample. Red bars mark negative contributions. Undefined values
+            sample. Negative contributions carry a minus sign. Undefined values
             remain unavailable.
           </p>
         </section>
@@ -193,7 +193,15 @@ export default function Risk({
               <Info size={17} />
             </button>
           </SectionTitle>
-          {!analysis.correlation_matrix ? (
+          {active.length < 2 ? (
+            <div className="correlation-empty">
+              <strong>Compare how holdings move together.</strong>
+              <p>
+                Add another holding to your portfolio to see pairwise
+                correlation in this saved analysis.
+              </p>
+            </div>
+          ) : !analysis.correlation_matrix ? (
             <p className="api-state" role="status">
               Correlation matrix unavailable for this analysis.
             </p>
@@ -235,7 +243,7 @@ export default function Risk({
                               ? "var(--panel-deep)"
                               : value < 0
                                 ? `color-mix(in srgb, var(--negative) ${intensity}%, var(--surface))`
-                                : `color-mix(in srgb, var(--bamboo) ${intensity}%, var(--surface))`;
+                                : `color-mix(in srgb, var(--data-primary, var(--bamboo)) ${intensity}%, var(--surface))`;
                           return (
                             <td
                               key={column.symbol}
