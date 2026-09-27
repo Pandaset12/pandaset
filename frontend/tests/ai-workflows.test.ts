@@ -5,7 +5,7 @@ import {
   requestScenarioExplanation,
 } from "../src/api/portfolio.ts";
 
-test("scenario explanation sends the selected analysis and exact positive draft weights", async () => {
+test("scenario explanation sends the selected portfolio revision and exact positive draft weights", async () => {
   const originalFetch = globalThis.fetch;
   const calls: Array<{ url: string; options: RequestInit }> = [];
   globalThis.fetch = async (url, options) => {
@@ -14,13 +14,14 @@ test("scenario explanation sends the selected analysis and exact positive draft 
   };
   const draft = [20, 20, 16, 16, 18, 10, 0, 0];
   try {
-    await requestScenarioExplanation("portfolio id", "analysis-1", draft);
+    await requestScenarioExplanation("portfolio id", 3, draft);
     assert.equal(
       calls[0].url,
       "/api/v1/portfolios/portfolio%20id/what-if/explanation",
     );
     const body = JSON.parse(String(calls[0].options.body));
-    assert.equal(body.analysis_id, "analysis-1");
+    assert.equal(body.portfolio_revision, 3);
+    assert.equal("analysis_id" in body, false);
     assert.deepEqual(body.proposed_weights, {
       NVDA: 0.2,
       MSFT: 0.2,

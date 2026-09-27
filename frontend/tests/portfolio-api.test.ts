@@ -3,7 +3,7 @@ import { after, test } from "node:test";
 import { assets, initialWeights } from "../../quant/data";
 import {
   ApiError,
-  analyzePortfolio,
+  analyzeExistingPortfolio,
   comparePortfolio,
   createRequestGuard,
   getMarketHistory,
@@ -191,24 +191,23 @@ test("portfolio payload converts percentages to decimal holdings and omits zero 
   assert.throws(() => portfolioInput([20, 20]), /total 100%/);
 });
 
-test("analysis creation sends weights and rejects a mismatched backend allocation", async () => {
+test("current metrics request uses the saved portfolio ID", async () => {
   const portfolio = {
     portfolio_id: "portfolio_test",
     name: "Long-term portfolio",
     created_at: "now",
+    revision: 2,
     holdings: portfolioInput(initialWeights).holdings,
   };
-  let call = 0;
-  stubFetch(() => {
-    call += 1;
-    return call === 1
-      ? portfolio
-      : { portfolio_id: portfolio.portfolio_id, weights: { NVDA: 0.3 } };
+  let path = "";
+  stubFetch((url) => {
+    path = url;
+    return { portfolio_id: portfolio.portfolio_id, portfolio_revision: 2 };
   });
-  await assert.rejects(
-    analyzePortfolio(initialWeights),
-    /different portfolio allocation/,
-  );
+  const result = await analyzeExistingPortfolio(portfolio);
+  assert.equal(path, "/api/v1/portfolios/portfolio_test/metrics");
+  assert.equal(result.portfolio, portfolio);
+  assert.equal(result.analysis.portfolio_revision, 2);
 });
 
 test("market history keeps repeated symbol query parameters", async () => {

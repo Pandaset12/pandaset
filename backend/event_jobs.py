@@ -73,10 +73,12 @@ async def process_draft(store: MongoPortfolioStore, settings: Settings, job: dic
                         worker_id: str) -> dict:
     owner = job["owner_id"]
     request = job["request"]
-    record = await run_in_threadpool(store.get_analysis_record, owner,
-                                     job["portfolio_id"], request["analysis_id"])
-    if record is None:
-        raise ValueError("The saved analysis is unavailable.")
+    context = job.get("context")
+    if context is None:
+        raise ValueError("Event draft inputs need migration before research can continue.")
+    record = {"allocation_snapshot": context["allocation_snapshot"],
+              "price_snapshot": context["price_snapshot"],
+              "metrics": context["analysis_snapshot"]}
     template = get_event_template(request["template_id"], request.get("template_version"))
     allocation = record["allocation_snapshot"]
     symbols = sorted(allocation["holdings"][index]["symbol"]
@@ -150,7 +152,6 @@ async def process_run(store: MongoPortfolioStore, settings: Settings, job: dict,
         "current_weights": current,
         "proposed_weights": proposed,
         "price_provenance": job["price_snapshot"].get("provenance", {}),
-        "analysis_id": job["analysis_id"],
         "disclaimer": "Hypothetical event-conditioned estimates; not live quotes, forecasts, or financial advice.",
     }
     return await run_in_threadpool(store.complete_run, job["owner_id"], job["id"], result,

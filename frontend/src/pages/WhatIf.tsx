@@ -22,6 +22,7 @@ import {
 } from "../api/portfolio";
 import { AssetMark, PageHeading, SectionTitle, Modal } from "../components/UI";
 import { LineChart } from "../components/LineChart";
+import { EventResearch } from "../components/EventResearch";
 import { parsePercentageDraft, workspaceAsset } from "../workspace/holdings";
 import {
   PERCENT_SCALE,
@@ -44,7 +45,11 @@ export default function WhatIf({
   holdings: Asset[];
   weights: number[];
   onApply: (weights: number[], symbols: string[]) => Promise<boolean>;
-  onExplainScenario: (weights: number[], symbols: string[]) => void;
+  onExplainScenario: (
+    weights: number[],
+    symbols: string[],
+    comparison: WhatIfResponse,
+  ) => void;
   query: URLSearchParams;
 }) {
   const [scenarioAssets, setScenarioAssets] = useState(holdings);
@@ -223,17 +228,43 @@ export default function WhatIf({
     setApplying(false);
   }
 
+  function goToPath(id: string) {
+    const target = document.getElementById(id);
+    if (!target) return;
+    target.scrollIntoView({
+      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+        ? "auto"
+        : "smooth",
+      block: "start",
+    });
+    target.focus({ preventScroll: true });
+  }
+
   return (
     <>
       <PageHeading
-        title="Scenario comparison"
-        description="Try a different allocation. Compare modeled results across the same available dates."
+        title="What-if Lab"
+        description="Compare a new allocation, or add a researched event to see how it could affect the same portfolio."
       >
         <span className="scenario-badge">
           <span />
           Hypothetical portfolio
         </span>
       </PageHeading>
+      <nav className="whatif-path-chooser" aria-label="Explore What-if">
+        <button type="button" onClick={() => goToPath("allocation-comparison")}>
+          <span className="whatif-path-index">01 / ALLOCATION</span>
+          <strong>Compare an allocation</strong>
+          <span>Adjust your mix and compare modeled results.</span>
+          <ArrowRight size={18} aria-hidden="true" />
+        </button>
+        <button type="button" onClick={() => goToPath("event-research-panel")}>
+          <span className="whatif-path-index">02 / EVENT RESEARCH</span>
+          <strong>Explore an event</strong>
+          <span>Add sourced evidence and review assumptions for that mix.</span>
+          <ArrowRight size={18} aria-hidden="true" />
+        </button>
+      </nav>
       <div className="scenario-presets">
         <span>START WITH A QUESTION</span>
         <button
@@ -277,7 +308,11 @@ export default function WhatIf({
           </ul>
         </div>
       )}
-      <div className="scenario-workspace">
+      <div
+        className="scenario-workspace"
+        id="allocation-comparison"
+        tabIndex={-1}
+      >
         <section className="scenario-editor">
           <SectionTitle eyebrow="01 / ADJUST" title="Build your scenario">
             <button
@@ -573,7 +608,9 @@ export default function WhatIf({
                 <button
                   className="text-button"
                   disabled={busy || stale || !comparison || !valid}
-                  onClick={() => onExplainScenario(draft, symbols)}
+                  onClick={() =>
+                    available && onExplainScenario(draft, symbols, available)
+                  }
                 >
                   <Scale size={16} />
                   Explain the trade-offs
@@ -653,6 +690,18 @@ export default function WhatIf({
           </div>
         </section>
       </div>
+      <EventResearch
+        key={analysis.portfolio_id}
+        portfolioId={analysis.portfolio_id}
+        portfolioRevision={analysis.portfolio_revision ?? 1}
+        proposedWeights={Object.fromEntries(
+          scenarioAssets.map((asset, index) => [
+            asset.symbol,
+            draft[index] / 100,
+          ]),
+        )}
+        validAllocation={valid && combinedSymbols.size <= MAX_COMBINED_SYMBOLS}
+      />
       {confirm && comparison && (
         <Modal
           title="Use this allocation?"

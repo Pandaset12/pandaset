@@ -8,7 +8,7 @@ from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validato
 
 DISCLAIMER = "For educational purposes only; not financial advice."
 MAX_PORTFOLIO_SYMBOLS = 8
-# Quotes also serve Event Lab portfolios (up to 25 holdings), not just v1 risk analysis.
+# The quote endpoint permits a larger watch list than portfolio analytics.
 MAX_QUOTE_SYMBOLS = 25
 
 
@@ -213,7 +213,7 @@ AI_WORKFLOWS = Literal[
 class AnalysisWorkflowRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    analysis_id: str = Field(min_length=1, max_length=80)
+    portfolio_revision: int = Field(ge=1)
     question: str = Field(default="Summarize the most useful findings.", min_length=1, max_length=1000)
 
     @field_validator("question")
@@ -255,7 +255,9 @@ class AIWorkflowResponse(BaseModel):
     analyst_mode: Literal["demo", "gemini"]
     status: Literal["complete", "demo", "unavailable"]
     answer: str
-    analysis_id: str | None = None
+    portfolio_revision: int | None = None
+    metrics: dict[str, Any] | None = None
+    comparison: dict[str, Any] | None = None
     symbol: str | None = None
     source_url: str | None = None
     citations: list[MetricCitation] = Field(default_factory=list)
@@ -320,8 +322,12 @@ class PortfolioInput(AllocationInput):
 
 
 class Portfolio(PortfolioInput):
+    # Legacy event portfolios can contain up to 25 holdings. They remain
+    # visible after migration, but new/editable main allocations stay at 8.
+    holdings: list[Holding] = Field(min_length=1, max_length=25)
     portfolio_id: str
     created_at: datetime
+    revision: int = Field(default=1, ge=1)
 
 
 class DataQuality(BaseModel):
@@ -335,11 +341,13 @@ class Concentration(BaseModel):
     largest_weight: float
 
 
-class AnalysisResponse(BaseModel):
+class CurrentMetricsResponse(BaseModel):
+    """On-demand metrics without a standalone saved-analysis identity."""
+
     model_config = ConfigDict(allow_inf_nan=False)
-    analysis_id: str
     portfolio_id: str
-    created_at: datetime
+    portfolio_revision: int = Field(ge=1)
+    calculated_at: AwareDatetime
     as_of: datetime | None
     lookback_days: int
     portfolio_return: float | None

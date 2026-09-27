@@ -23,11 +23,6 @@ import { AuthScreen } from "./components/AuthScreen";
 import { AuthBoundary } from "./components/AuthBoundary";
 import { WorkspaceNavigation } from "./components/WorkspaceNavigation";
 import { PortfolioOnboarding } from "./components/onboarding/PortfolioOnboarding";
-import { EventApplication } from "./EventApplication";
-import {
-  EventLabError,
-  listPortfolios as listEventPortfolios,
-} from "./api/eventLab";
 import {
   AIWorkflowModal,
   type AIWorkflowAction,
@@ -88,9 +83,14 @@ export function Application({ onSignOut }: { onSignOut: () => Promise<void> }) {
     const request = analysisRequest.current.begin();
     setAnalysisLoading(true);
     setAnalysisError("");
+    setActive(null);
+    setWeights(portfolioPercentages(portfolio));
     try {
       const result = await analyzeExistingPortfolio(portfolio);
       if (!analysisRequest.current.isCurrent(request)) return false;
+      if (result.analysis.portfolio_revision !== portfolio.revision) {
+        throw new Error("Portfolio changed during calculation. Try again.");
+      }
       setActive(result);
       setWeights(portfolioPercentages(portfolio));
       return true;
@@ -177,6 +177,21 @@ export function Application({ onSignOut }: { onSignOut: () => Promise<void> }) {
       analysisRequest.current.invalidate();
     };
   }, []);
+
+  useEffect(() => {
+    const refreshOnReturn = () => {
+      if (!selectedPortfolio || document.visibilityState !== "visible") return;
+      if (
+        !active?.analysis.calculated_at ||
+        Date.now() - Date.parse(active.analysis.calculated_at) > 15 * 60_000
+      ) {
+        void loadAnalysis(selectedPortfolio);
+      }
+    };
+    document.addEventListener("visibilitychange", refreshOnReturn);
+    return () =>
+      document.removeEventListener("visibilitychange", refreshOnReturn);
+  }, [selectedPortfolio, active?.analysis.calculated_at]);
 
   async function apply(
     nextWeights: number[],
@@ -401,17 +416,18 @@ export function Application({ onSignOut }: { onSignOut: () => Promise<void> }) {
         >
           {analysisLoading && !active ? (
             <section className="api-state" role="status">
-              <strong>Loading portfolio analysis…</strong>
+              <strong>Calculating portfolio metrics…</strong>
               <p>Connecting to the backend and calculating this portfolio.</p>
             </section>
           ) : analysisError && !active ? (
             <section className="api-state api-state-featured" role="alert">
-              <span className="api-state-kicker">PORTFOLIO ANALYSIS</span>
-              <h1>We couldn’t load the portfolio analysis.</h1>
+              <span className="api-state-kicker">PORTFOLIO METRICS</span>
+              <h1>We couldn’t calculate this portfolio.</h1>
               <p>
                 Your saved portfolio is still available. Try again, choose
                 another portfolio in the workspace selector, or create a
-                replacement with supported prices.
+                replacement with supported prices. Portfolios imported with more
+                than eight holdings need an edit before analysis.
               </p>
               <button
                 className="button dark"
@@ -420,7 +436,10 @@ export function Application({ onSignOut }: { onSignOut: () => Promise<void> }) {
                 }
                 disabled={analysisLoading}
               >
-                Retry analysis
+                Retry calculation
+              </button>
+              <button className="button subtle" onClick={() => setEdit(true)}>
+                Edit portfolio
               </button>
               <button
                 className="button subtle"
@@ -457,7 +476,7 @@ export function Application({ onSignOut }: { onSignOut: () => Promise<void> }) {
                     setAiWorkflow({
                       workflow: "risk_explanation",
                       question:
-                        "Explain the main risk contributions and concentrations in this saved analysis.",
+                        "Explain the main risk contributions and concentrations in this modeled portfolio.",
                     })
                   }
                   onMethod={() => setMethod(true)}
@@ -474,16 +493,17 @@ export function Application({ onSignOut }: { onSignOut: () => Promise<void> }) {
                 />
               ) : (
                 <WhatIf
-                  key={`${hash}:${active.analysis.analysis_id}`}
+                  key={`${hash}:${active.portfolio.portfolio_id}:${active.portfolio.revision}`}
                   holdings={workspaceHoldings}
                   analysis={active.analysis}
                   weights={weights}
                   onApply={(w, symbols) => apply(w, "scenario", symbols)}
-                  onExplainScenario={(proposedWeights, symbols) =>
+                  onExplainScenario={(proposedWeights, symbols, comparison) =>
                     setAiWorkflow({
                       workflow: "scenario_explanation",
                       proposedWeights,
                       symbols,
+                      comparison,
                     })
                   }
                   query={query}
@@ -491,13 +511,13 @@ export function Application({ onSignOut }: { onSignOut: () => Promise<void> }) {
               )}
               {analysisLoading && (
                 <p className="analysis-saving" role="status">
-                  Saving the new allocation and calculating its analysis…
+                  Calculating the current portfolio metrics…
                 </p>
               )}
               {analysisError && (
                 <div className="analysis-saving error" role="alert">
-                  The analysis couldn’t be updated. Your active portfolio is
-                  unchanged.{" "}
+                  Current metrics are unavailable. Your portfolio is still
+                  saved.{" "}
                   <button
                     className="text-button"
                     onClick={() =>
@@ -523,7 +543,7 @@ export function Application({ onSignOut }: { onSignOut: () => Promise<void> }) {
           <LogoAttribution />
         </footer>
       </div>
-      {edit && active && (
+      {edit && selectedPortfolio && (
         <EditPortfolio
           holdings={workspaceHoldings}
           weights={weights}
@@ -549,8 +569,8 @@ export function Application({ onSignOut }: { onSignOut: () => Promise<void> }) {
           }
         >
           <p>
-            Delete <strong>{portfolioToDelete.name}</strong> and its saved
-            analyses? This cannot be undone.
+            Delete <strong>{portfolioToDelete.name}</strong>? This cannot be
+            undone.
           </p>
           {deleteError && (
             <p className="field-error" role="alert">
@@ -579,7 +599,12 @@ export function Application({ onSignOut }: { onSignOut: () => Promise<void> }) {
         <AIWorkflowModal
           action={aiWorkflow}
           portfolioId={active.portfolio.portfolio_id}
-          analysisId={active.analysis.analysis_id}
+          portfolioRevision={active.portfolio.revision}
+          onMetrics={(metrics) => {
+            if (metrics.portfolio_revision === active.portfolio.revision) {
+              setActive({ portfolio: active.portfolio, analysis: metrics });
+            }
+          }}
           onClose={() => setAiWorkflow(null)}
         />
       )}
@@ -627,73 +652,5 @@ function AuthenticatedApplication({
   onSignOut: () => Promise<void>;
 }) {
   setApiAccessToken(session.access_token);
-  const [mode, setMode] = useState<"loading" | "standard" | "event" | "error">(
-    "loading",
-  );
-  const [modeError, setModeError] = useState("");
-  const [retry, setRetry] = useState(0);
-
-  useEffect(() => {
-    let active = true;
-    setMode("loading");
-    setModeError("");
-    const selectMode = async () => {
-      try {
-        try {
-          await listEventPortfolios();
-          if (active) setMode("event");
-        } catch (cause) {
-          if (
-            cause instanceof EventLabError &&
-            ([
-              "EVENT_LAB_NOT_INVITED",
-              "EVENT_LAB_UNAVAILABLE",
-              "AUTH_UNAVAILABLE",
-            ].includes(cause.code) ||
-              cause.status >= 500)
-          ) {
-            if (active) setMode("standard");
-          } else {
-            throw cause;
-          }
-        }
-      } catch (cause) {
-        if (!active) return;
-        setModeError(
-          cause instanceof Error
-            ? cause.message
-            : "The portfolio service is unavailable.",
-        );
-        setMode("error");
-      }
-    };
-    void selectMode();
-    return () => {
-      active = false;
-    };
-  }, [session.user.id, retry]);
-
-  if (mode === "loading")
-    return (
-      <main className="auth-loading" role="status">
-        Opening your workspace…
-      </main>
-    );
-  if (mode === "error")
-    return (
-      <main className="auth-loading" role="alert">
-        <p>{modeError}</p>
-        <button
-          className="button dark"
-          onClick={() => setRetry((value) => value + 1)}
-        >
-          Retry
-        </button>
-      </main>
-    );
-  return mode === "event" ? (
-    <EventApplication key={session.user.id} onSignOut={onSignOut} />
-  ) : (
-    <Application key={session.user.id} onSignOut={onSignOut} />
-  );
+  return <Application key={session.user.id} onSignOut={onSignOut} />;
 }

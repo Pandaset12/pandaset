@@ -5,10 +5,8 @@ import pytest
 from pydantic import ValidationError
 
 from backend import api_v1
-from backend.api_v1 import scenario_matches_snapshot
 from backend.config import Settings
 from backend.main import create_app
-from backend.providers import demo_metrics
 from backend.research_sources import RESEARCH_SOURCES, curated_research_source
 from backend.schemas import ScenarioExplanationRequest
 from backend.gemini_service import GeminiUnavailable
@@ -17,8 +15,7 @@ from backend.gemini_service import GeminiUnavailable
 def test_workflow_endpoints_return_scoped_demo_responses(tmp_path):
     settings = Settings(_env_file=None, analyst_mode="demo", storage_path=tmp_path / "workflows.sqlite3")
     with TestClient(create_app(settings)) as client:
-        analysis = client.post("/api/v1/portfolios/demo/analysis").json()
-        analysis_id = analysis["analysis_id"]
+        metrics = client.get("/api/v1/portfolios/demo/metrics").json()
 
         for route, workflow in (
             ("briefing", "analysis_briefing"),
@@ -26,12 +23,13 @@ def test_workflow_endpoints_return_scoped_demo_responses(tmp_path):
         ):
             response = client.post(
                 f"/api/v1/portfolios/demo/{route}",
-                json={"analysis_id": analysis_id},
+                json={"portfolio_revision": metrics["portfolio_revision"]},
             )
             assert response.status_code == 200
             assert response.json()["workflow"] == workflow
             assert response.json()["status"] == "demo"
-            assert response.json()["analysis_id"] == analysis_id
+            assert response.json()["portfolio_revision"] == metrics["portfolio_revision"]
+            assert response.json()["metrics"]["portfolio_id"] == "demo"
             assert "not called" in " ".join(response.json()["warnings"]).lower()
 
         research = client.post(
@@ -58,8 +56,7 @@ def test_unavailable_briefing_and_risk_return_different_saved_metrics(tmp_path, 
         AsyncMock(side_effect=GeminiUnavailable("Gemini is busy right now.")),
     )
     with TestClient(create_app(settings)) as client:
-        analysis = client.post("/api/v1/portfolios/demo/analysis").json()
-        payload = {"analysis_id": analysis["analysis_id"]}
+        payload = {"portfolio_revision": 1}
         briefing = client.post("/api/v1/portfolios/demo/briefing", json=payload).json()
         risk = client.post("/api/v1/portfolios/demo/risk/explanation", json=payload).json()
 
@@ -77,14 +74,14 @@ def test_scenario_request_is_validated_and_does_not_mutate_portfolio(tmp_path):
     settings = Settings(_env_file=None, analyst_mode="demo", storage_path=tmp_path / "scenario.sqlite3")
     with TestClient(create_app(settings)) as client:
         before = client.get("/api/v1/portfolios/demo").json()
-        analysis = client.post("/api/v1/portfolios/demo/analysis").json()
-        proposed_weights = dict(analysis["weights"])
+        metrics = client.get("/api/v1/portfolios/demo/metrics").json()
+        proposed_weights = dict(metrics["weights"])
         proposed_weights["NVDA"] -= 0.05
         proposed_weights["JPM"] += 0.05
 
         response = client.post(
             "/api/v1/portfolios/demo/what-if/explanation",
-            json={"analysis_id": analysis["analysis_id"], "proposed_weights": proposed_weights},
+            json={"portfolio_revision": 1, "proposed_weights": proposed_weights},
         )
         assert response.status_code == 200, response.text
         assert response.json()["workflow"] == "scenario_explanation"
@@ -102,39 +99,16 @@ def test_scenario_explanation_enforces_saved_and_proposed_symbol_union(tmp_path)
         })
         assert created.status_code == 201, created.text
         portfolio_id = created.json()["portfolio_id"]
-        analysis = client.post(f"/api/v1/portfolios/{portfolio_id}/analysis")
-        assert analysis.status_code == 200, analysis.text
-
         response = client.post(
             f"/api/v1/portfolios/{portfolio_id}/what-if/explanation",
             json={
-                "analysis_id": analysis.json()["analysis_id"],
+                "portfolio_revision": 1,
                 "proposed_weights": {"SPY": 1.0},
             },
         )
 
     assert response.status_code == 422
     assert response.json()["error"]["code"] == "SYMBOL_LIMIT_EXCEEDED"
-
-
-def test_scenario_evidence_must_match_the_saved_snapshot():
-    metrics = demo_metrics()
-    comparison = {
-        "current_analysis": metrics.model_dump(mode="json"),
-        "proposed_analysis": metrics.model_dump(mode="json"),
-        "delta": {},
-    }
-    assert scenario_matches_snapshot(
-        metrics, comparison, {**metrics.weights, "AMD": 0.0}
-    )
-
-    comparison["current_analysis"]["portfolio_volatility"] += 0.01
-    assert not scenario_matches_snapshot(metrics, comparison, metrics.weights)
-
-    comparison["current_analysis"] = metrics.model_dump(mode="json")
-    comparison["current_analysis"]["risk_contribution"]["NVDA"] += 0.01
-    comparison["current_analysis"]["risk_contribution"]["SPY"] -= 0.01
-    assert not scenario_matches_snapshot(metrics, comparison, metrics.weights)
 
 
 def test_research_sources_are_allowlisted_and_unknown_symbols_are_rejected():
@@ -145,13 +119,13 @@ def test_research_sources_are_allowlisted_and_unknown_symbols_are_rejected():
 
 def test_scenario_weights_are_normalized_but_never_rescaled():
     request = ScenarioExplanationRequest(
-        analysis_id="analysis-1",
+        portfolio_revision=1,
         proposed_weights={" nvda ": 0.5, "JPM": 0.5},
     )
     assert request.proposed_weights == {"NVDA": 0.5, "JPM": 0.5}
     with pytest.raises(ValidationError):
         ScenarioExplanationRequest(
-            analysis_id="analysis-1",
+            portfolio_revision=1,
             proposed_weights={"NVDA": 0.6, "JPM": 0.5},
         )
 

@@ -68,14 +68,6 @@ export function AnalysisDetails({ analysis }: { analysis: AnalysisResponse }) {
             <dt>Freshness</dt>
             <dd>{analysis.data_quality.freshness}</dd>
           </div>
-          <div>
-            <dt>Analysis ID</dt>
-            <dd>{analysis.analysis_id}</dd>
-          </div>
-          <div>
-            <dt>Portfolio ID</dt>
-            <dd>{analysis.portfolio_id}</dd>
-          </div>
         </dl>
         {analysis.data_quality.warnings.map((warning) => (
           <p key={warning}>{warning}</p>

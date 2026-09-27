@@ -412,6 +412,76 @@
 }
 
 /* What-if: restore the two-part workbench and separate prompts from inputs. */
+.dashboard-what-if .whatif-path-chooser {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0 0 22px;
+}
+
+.dashboard-what-if .whatif-path-chooser button {
+  position: relative;
+  display: grid;
+  justify-items: start;
+  gap: 8px;
+  min-height: 132px;
+  padding: 18px 52px 18px 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+  text-align: left;
+  transition:
+    background 160ms ease,
+    border-color 160ms ease,
+    transform 160ms ease;
+}
+
+.dashboard-what-if .whatif-path-chooser button:hover,
+.dashboard-what-if .whatif-path-chooser button:focus-visible {
+  border-color: var(--data-primary);
+  background: var(--data-surface);
+}
+
+.dashboard-what-if .whatif-path-chooser button:hover {
+  transform: translateY(-2px);
+}
+
+.dashboard-what-if .whatif-path-index {
+  color: var(--data-ink);
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+}
+
+.dashboard-what-if .whatif-path-chooser strong {
+  font-size: 1rem;
+}
+
+.dashboard-what-if .whatif-path-chooser button > span:last-of-type {
+  color: var(--muted);
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+.dashboard-what-if .whatif-path-chooser button > svg {
+  position: absolute;
+  top: 19px;
+  right: 18px;
+  color: var(--data-primary);
+}
+
+.dashboard-what-if #allocation-comparison,
+.dashboard-what-if #event-research-panel {
+  scroll-margin-top: 24px;
+}
+
+.dashboard-what-if #allocation-comparison:focus,
+.dashboard-what-if #event-research-panel:focus {
+  outline: none;
+}
+
 .dashboard-what-if .scenario-presets {
   display: flex;
   align-items: center;
@@ -516,6 +586,10 @@
 }
 
 @media (max-width: 720px) {
+  .dashboard-what-if .whatif-path-chooser {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .dashboard-shell .page-heading h1 {
     font-size: clamp(2.2rem, 9vw, 2.8rem);
   }

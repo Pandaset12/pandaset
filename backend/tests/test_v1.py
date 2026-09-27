@@ -28,12 +28,12 @@ def create_demo(client):
 
 
 def analyze(client, portfolio_id="demo"):
-    result = client.post(f"/api/v1/portfolios/{portfolio_id}/analysis")
+    result = client.get(f"/api/v1/portfolios/{portfolio_id}/metrics")
     assert result.status_code == 200, result.text
     return result.json()
 
 
-def test_create_analysis_complete_demo_flow(client):
+def test_current_metrics_complete_demo_flow(client):
     portfolio_id = create_demo(client)
     analysis = analyze(client, portfolio_id)
     assert analysis["concentration"] == {"largest_position": "SPY", "largest_weight": 0.4}
@@ -42,19 +42,20 @@ def test_create_analysis_complete_demo_flow(client):
     assert analysis["correlation_matrix"] is None
     assert analysis["observation_count"] is None
     assert analysis["data_quality"]["source"] == "synthetic_fixture"
-    saved = client.get(f"/api/v1/portfolios/{portfolio_id}/analyses/{analysis['analysis_id']}")
-    assert saved.status_code == 200
-    assert saved.json() == analysis
+    assert "analysis_id" not in analysis
+    with client.app.state.store.connection() as db:
+        assert db.execute("SELECT COUNT(*) FROM analyses").fetchone()[0] == 0
 
 
-def test_snapshot_survives_app_restart(settings):
+def test_portfolio_survives_app_restart_and_metrics_recompute(settings):
     with TestClient(create_app(settings)) as first:
         portfolio_id = create_demo(first)
         analysis = analyze(first, portfolio_id)
     with TestClient(create_app(settings)) as second:
-        result = second.get(f"/api/v1/portfolios/{portfolio_id}/analyses/{analysis['analysis_id']}")
+        result = second.get(f"/api/v1/portfolios/{portfolio_id}/metrics")
         assert result.status_code == 200
-        assert result.json() == analysis
+        assert result.json()["weights"] == analysis["weights"]
+        assert result.json()["portfolio_revision"] == analysis["portfolio_revision"]
 
 
 @pytest.mark.parametrize("holdings", [
@@ -78,7 +79,7 @@ def test_custom_allocation_never_gets_demo_risk_numbers(client):
     assert portfolio.status_code == 201
     assert portfolio.json()["holdings"] == [{"symbol": "AAPL", "weight": 1.0}]
     portfolio_id = portfolio.json()["portfolio_id"]
-    result = client.post(f"/api/v1/portfolios/{portfolio_id}/analysis")
+    result = client.get(f"/api/v1/portfolios/{portfolio_id}/metrics")
     assert result.status_code == 501
     assert result.json()["error"]["code"] == "QUANT_INTEGRATION_PENDING"
 
@@ -94,7 +95,7 @@ def test_v1_what_if_is_explicitly_pending_and_does_not_modify_portfolio(client):
 
 
 @pytest.mark.parametrize("failure", ["wrong_portfolio", "bad_weights", "bad_risk", "provider_error"])
-def test_bad_provider_outputs_are_not_saved_as_valid_analyses(client, failure):
+def test_bad_provider_outputs_are_not_returned_as_valid_metrics(client, failure):
     class BadProvider(DemoQuantProvider):
         def analyze(self, portfolio):
             result = super().analyze(portfolio)
@@ -109,7 +110,7 @@ def test_bad_provider_outputs_are_not_saved_as_valid_analyses(client, failure):
             return result
 
     client.app.dependency_overrides[get_provider] = BadProvider
-    response = client.post("/api/v1/portfolios/demo/analysis")
+    response = client.get("/api/v1/portfolios/demo/metrics")
     assert response.status_code == 502
     assert "private upstream" not in response.text
 

@@ -21,7 +21,6 @@ from backend.mongo_store import (
     RecordNotFound,
     ReservationInProgress,
 )
-from backend.schemas import AnalyticsSnapshot
 
 
 ISSUER = "https://example.supabase.co/auth/v1"
@@ -110,37 +109,52 @@ def store():
 
 def saved_analysis(store):
     portfolio = store.create_portfolio(OWNER, EventPortfolioInput(name="My portfolio", holdings=[{"symbol": "SPY", "weight": 1.0}]))
-    metrics = AnalyticsSnapshot(
-        portfolio_id=portfolio.portfolio_id, data_mode="demo", lookback_trading_days=10,
-        portfolio_volatility=0, weights={"SPY": 1.0}, risk_contribution={},
-    )
     prices = {"source": "adjusted test prices", "dates": ["2026-01-01"], "adjusted_close": {"SPY": [100.0]}}
-    analysis_id, _ = store.save_analysis(OWNER, metrics, price_snapshot=prices, model_version="event-v1")
-    return portfolio, analysis_id, prices
+    return portfolio, "legacy-placeholder", prices
+
+
+def create_pinned_draft(store, owner_id, portfolio_id, request, key=None):
+    portfolio = store.get_portfolio(owner_id, portfolio_id)
+    if portfolio is None:
+        raise RecordNotFound(portfolio_id)
+    context = {
+        "portfolio_revision": portfolio.revision,
+        "allocation_snapshot": portfolio.model_dump(mode="json"),
+        "price_snapshot": {"source": "adjusted test prices", "dates": ["2026-01-01"],
+                           "adjusted_close": {"SPY": [100.0]}},
+        "analysis_snapshot": {"weights": portfolio.weights},
+        "model_version": "event-v1",
+        "proposed_weights": request.get("proposed_weights") or portfolio.weights,
+    }
+    clean_request = {name: value for name, value in request.items() if name != "analysis_id"}
+    return store.create_draft(owner_id, portfolio_id,
+                              {**clean_request, "portfolio_revision": context["portfolio_revision"]},
+                              key, context=context)
 
 
 def test_owner_scope_and_immutable_snapshots(store):
     portfolio, analysis_id, prices = saved_analysis(store)
     assert store.get_portfolio(OTHER, portfolio.portfolio_id) is None
-    assert store.get_analysis_record(OTHER, portfolio.portfolio_id, analysis_id) is None
+    draft = create_pinned_draft(store, OWNER, portfolio.portfolio_id, {"analysis_id": analysis_id})
+    assert store.get_draft(OTHER, draft["id"]) is None
     prices["adjusted_close"]["SPY"][0] = 999
-    record = store.get_analysis_record(OWNER, portfolio.portfolio_id, analysis_id)
-    assert record["price_snapshot"]["adjusted_close"]["SPY"] == [100.0]
+    record = store.get_draft(OWNER, draft["id"])
+    assert record["context"]["price_snapshot"]["adjusted_close"]["SPY"] == [100.0]
     store.update_portfolio(OWNER, portfolio.portfolio_id, EventPortfolioInput(name="Renamed", holdings=[{"symbol": "SPY", "weight": 1.0}]))
-    assert record["allocation_snapshot"]["name"] == "My portfolio"
-    assert store.get_analysis_record(OWNER, portfolio.portfolio_id, analysis_id)["allocation_snapshot"]["name"] == "My portfolio"
+    assert record["context"]["allocation_snapshot"]["name"] == "My portfolio"
+    assert store.get_draft(OWNER, draft["id"])["context"]["allocation_snapshot"]["name"] == "My portfolio"
     assert not store.delete_portfolio(OTHER, portfolio.portfolio_id)
     assert store.delete_portfolio(OWNER, portfolio.portfolio_id)
-    assert store.get_analysis_record(OWNER, portfolio.portfolio_id, analysis_id) is None
+    assert store.get_draft(OWNER, draft["id"]) is None
 
 
 def test_idempotent_draft_run_and_messages_with_leases(store):
     portfolio, analysis_id, _ = saved_analysis(store)
     request = {"analysis_id": analysis_id, "template_id": "rates"}
-    draft = store.create_draft(OWNER, portfolio.portfolio_id, request, "draft-key")
-    assert store.create_draft(OWNER, portfolio.portfolio_id, request, "draft-key")["id"] == draft["id"]
+    draft = create_pinned_draft(store, OWNER, portfolio.portfolio_id, request, "draft-key")
+    assert create_pinned_draft(store, OWNER, portfolio.portfolio_id, request, "draft-key")["id"] == draft["id"]
     with pytest.raises(IdempotencyConflict):
-        store.create_draft(OWNER, portfolio.portfolio_id, {**request, "template_id": "oil"}, "draft-key")
+        create_pinned_draft(store, OWNER, portfolio.portfolio_id, {**request, "template_id": "oil"}, "draft-key")
     claimed = store.claim_draft(OWNER, draft["id"], worker_id="worker-a")
     assert claimed["attempt_count"] == 1 and claimed["lease_owner"] == "worker-a"
     with pytest.raises(InvalidTransition):
@@ -150,8 +164,8 @@ def test_idempotent_draft_run_and_messages_with_leases(store):
     with pytest.raises(InvalidTransition):
         store.confirm_draft(OWNER, draft["id"], {"central": {}}, revision=2)
     store.confirm_draft(OWNER, draft["id"], {"central": {}}, revision=1)
-    run = store.create_run(OWNER, draft["id"], analysis_id, "run-key")
-    assert store.create_run(OWNER, draft["id"], analysis_id, "run-key")["id"] == run["id"]
+    run = store.create_run(OWNER, draft["id"], "run-key")
+    assert store.create_run(OWNER, draft["id"], "run-key")["id"] == run["id"]
     with pytest.raises(RecordNotFound):
         store.save_message(OTHER, run["id"], {"role": "user", "content": "hello"})
     store.claim_run(OWNER, run["id"], worker_id="worker-a")
@@ -174,7 +188,7 @@ def test_portfolio_limit_and_supported_symbols(store):
 
 def test_expired_worker_lease_can_be_reclaimed_and_exhausted(store):
     portfolio, analysis_id, _ = saved_analysis(store)
-    draft = store.create_draft(OWNER, portfolio.portfolio_id, {"analysis_id": analysis_id})
+    draft = create_pinned_draft(store, OWNER, portfolio.portfolio_id, {"analysis_id": analysis_id})
     store.claim_draft(OWNER, draft["id"], max_attempts=2, worker_id="worker-a")
     assert not store.renew_draft_lease(OWNER, draft["id"], "worker-b")
     store.drafts.update_one({"_id": draft["id"]}, {"$set": {"lease_expires_at": datetime.now(timezone.utc) - timedelta(seconds=1)}})
@@ -194,7 +208,7 @@ def test_atomic_owner_job_quota_under_concurrent_draft_requests():
 
     def create(index):
         try:
-            return store.create_draft(OWNER, portfolio.portfolio_id, {
+            return create_pinned_draft(store, OWNER, portfolio.portfolio_id, {
                 "analysis_id": analysis_id, "question": str(index),
             })
         except QuotaExceeded:
@@ -215,13 +229,13 @@ def test_atomic_run_message_quota_and_pinned_proposal():
     database = mongomock.MongoClient()["message_quota_test"]
     store = MongoPortfolioStore(database=database, max_messages_per_run=2)
     portfolio, analysis_id, _ = saved_analysis(store)
-    draft = store.create_draft(OWNER, portfolio.portfolio_id, {
+    draft = create_pinned_draft(store, OWNER, portfolio.portfolio_id, {
         "analysis_id": analysis_id, "proposed_weights": {"SPY": 1.0},
     })
     store.claim_draft(OWNER, draft["id"], worker_id="worker-a")
     store.complete_draft(OWNER, draft["id"], {"evidence": [{"source": "test"}]}, worker_id="worker-a")
     store.confirm_draft(OWNER, draft["id"], {"central": {"rates": 0.01}})
-    run = store.create_run(OWNER, draft["id"], analysis_id)
+    run = store.create_run(OWNER, draft["id"])
     assert run["proposed_weights"] == {"SPY": 1.0}
     assert run["proposal_snapshot"] == {"evidence": [{"source": "test"}]}
     store.claim_run(OWNER, run["id"], worker_id="worker-a")
@@ -255,13 +269,13 @@ def test_reconcile_interrupted_reservation_and_terminal_release():
     assert store.reconcile_quotas() == 1
     assert store.quotas.find_one({"_id": quota_id})["used"] == 0
 
-    draft = store.create_draft(OWNER, portfolio.portfolio_id, {"analysis_id": analysis_id})
+    draft = create_pinned_draft(store, OWNER, portfolio.portfolio_id, {"analysis_id": analysis_id})
     assert store.quotas.find_one({"_id": quota_id})["used"] == 1
     # Simulate a process dying after a durable status change but before slot release.
     store.drafts.update_one({"_id": draft["id"]}, {"$set": {"status": "ready"}})
     assert store.reconcile_quotas() == 1
     assert store.quotas.find_one({"_id": quota_id})["used"] == 0
-    assert store.create_draft(OWNER, portfolio.portfolio_id, {"analysis_id": analysis_id, "question": "second"})
+    assert create_pinned_draft(store, OWNER, portfolio.portfolio_id, {"analysis_id": analysis_id, "question": "second"})
 
 
 def test_reconcile_initializing_job_and_message_after_crash():
@@ -281,11 +295,11 @@ def test_reconcile_initializing_job_and_message_after_crash():
     assert store.drafts.find_one({"_id": draft_id})["status"] == "pending"
     assert store.quotas.find_one({"_id": store._job_quota_id(OWNER)})["reservations"][draft_id]["state"] == "active"
 
-    ready = store.create_draft(OWNER, portfolio.portfolio_id, {"analysis_id": analysis_id})
+    ready = create_pinned_draft(store, OWNER, portfolio.portfolio_id, {"analysis_id": analysis_id})
     store.claim_draft(OWNER, ready["id"], worker_id="worker-a")
     store.complete_draft(OWNER, ready["id"], {"evidence": []}, worker_id="worker-a")
     store.confirm_draft(OWNER, ready["id"], {"central": {}})
-    run = store.create_run(OWNER, ready["id"], analysis_id)
+    run = store.create_run(OWNER, ready["id"])
     store.claim_run(OWNER, run["id"], worker_id="worker-a")
     store.complete_run(OWNER, run["id"], {"return": 0.01}, worker_id="worker-a")
     message_id = "message_interrupted"
@@ -307,12 +321,8 @@ def test_delete_during_admission_releases_only_its_own_slot():
     store = MongoPortfolioStore(database=database, max_active_jobs_per_owner=2)
     survivor, survivor_analysis, _ = saved_analysis(store)
     other = store.create_portfolio(OWNER, EventPortfolioInput(name="Other", holdings=[{"symbol": "SPY", "weight": 1.0}]))
-    other_metrics = AnalyticsSnapshot(
-        portfolio_id=other.portfolio_id, data_mode="demo", lookback_trading_days=10,
-        portfolio_volatility=0, weights={"SPY": 1.0}, risk_contribution={},
-    )
-    other_analysis, _ = store.save_analysis(OWNER, other_metrics, price_snapshot={"source": "test"})
-    survivor_draft = store.create_draft(OWNER, survivor.portfolio_id, {"analysis_id": survivor_analysis})
+    other_analysis = "legacy-placeholder"
+    survivor_draft = create_pinned_draft(store, OWNER, survivor.portfolio_id, {"analysis_id": survivor_analysis})
     original_finish = store._finish_admission
 
     def delete_before_recheck(*args, **kwargs):
@@ -321,51 +331,42 @@ def test_delete_during_admission_releases_only_its_own_slot():
 
     store._finish_admission = delete_before_recheck
     with pytest.raises(RecordNotFound):
-        store.create_draft(OWNER, other.portfolio_id, {"analysis_id": other_analysis})
+        create_pinned_draft(store, OWNER, other.portfolio_id, {"analysis_id": other_analysis})
     store._finish_admission = original_finish
     quota = store.quotas.find_one({"_id": store._job_quota_id(OWNER)})
     assert quota["used"] == 1
     assert set(quota["reservations"]) == {survivor_draft["id"]}
 
 
-def test_list_analyses_is_owner_scoped_newest_first_and_bounded(store):
-    portfolio, first_id, _ = saved_analysis(store)
-    metrics, _ = store.get_analysis(OWNER, portfolio.portfolio_id, first_id)
-    second_id, _ = store.save_analysis(OWNER, metrics, price_snapshot={
-        "source": "second", "provenance": {"provider": "test"}, "adjusted_close": {"SPY": [1.0]}
-    })
-    records = store.list_analyses(OWNER, portfolio.portfolio_id, limit=1)
-    assert len(records) == 1 and records[0]["id"] == second_id
-    assert records[0]["metrics"]["portfolio_id"] == portfolio.portfolio_id
-    assert records[0]["price_snapshot"] == {"provenance": {"provider": "test"}}
-    with pytest.raises(RecordNotFound):
-        store.list_analyses(OTHER, portfolio.portfolio_id)
-    with pytest.raises(ValueError):
-        store.list_analyses(OWNER, portfolio.portfolio_id, limit=51)
+def test_event_store_exposes_no_standalone_analysis_storage(store):
+    assert not hasattr(store, "save_analysis")
+    assert not hasattr(store, "get_analysis")
+    assert not hasattr(store, "list_analyses")
+    assert not hasattr(store, "get_analysis_record")
 
 
 def test_idempotent_retry_recovers_interrupted_draft_and_run_admission(store):
     portfolio, analysis_id, _ = saved_analysis(store)
     request = {"analysis_id": analysis_id}
-    draft = store.create_draft(OWNER, portfolio.portfolio_id, request, "draft-retry")
+    draft = create_pinned_draft(store, OWNER, portfolio.portfolio_id, request, "draft-retry")
     quota_id = store._job_quota_id(OWNER)
     store.drafts.update_one({"_id": draft["id"]}, {"$set": {"status": "initializing"}})
     store.quotas.update_one({"_id": quota_id}, {"$set": {
         f"reservations.{draft['id']}.state": "pending"
     }})
-    recovered = store.create_draft(OWNER, portfolio.portfolio_id, request, "draft-retry")
+    recovered = create_pinned_draft(store, OWNER, portfolio.portfolio_id, request, "draft-retry")
     assert recovered["id"] == draft["id"] and recovered["status"] == "pending"
     assert store.list_drafts(OWNER, portfolio.portfolio_id)[0]["status"] == "pending"
     store.claim_draft(OWNER, draft["id"], worker_id="worker-a")
     store.complete_draft(OWNER, draft["id"], {"evidence": []}, worker_id="worker-a")
     store.confirm_draft(OWNER, draft["id"], {"central": {}})
 
-    run = store.create_run(OWNER, draft["id"], analysis_id, "run-retry")
+    run = store.create_run(OWNER, draft["id"], "run-retry")
     store.runs.update_one({"_id": run["id"]}, {"$set": {"status": "initializing"}})
     store.quotas.update_one({"_id": quota_id}, {"$set": {
         f"reservations.{run['id']}.state": "pending"
     }})
-    recovered_run = store.create_run(OWNER, draft["id"], analysis_id, "run-retry")
+    recovered_run = store.create_run(OWNER, draft["id"], "run-retry")
     assert recovered_run["id"] == run["id"] and recovered_run["status"] == "pending"
     assert store.list_runs(OWNER, portfolio.portfolio_id)[0]["status"] == "pending"
 
@@ -374,11 +375,11 @@ def test_message_slot_blocks_duplicate_generation_and_survives_live_timeout():
     database = mongomock.MongoClient()["message_reservation_test"]
     store = MongoPortfolioStore(database=database, max_messages_per_run=1)
     portfolio, analysis_id, _ = saved_analysis(store)
-    draft = store.create_draft(OWNER, portfolio.portfolio_id, {"analysis_id": analysis_id})
+    draft = create_pinned_draft(store, OWNER, portfolio.portfolio_id, {"analysis_id": analysis_id})
     store.claim_draft(OWNER, draft["id"], worker_id="worker-a")
     store.complete_draft(OWNER, draft["id"], {"evidence": []}, worker_id="worker-a")
     store.confirm_draft(OWNER, draft["id"], {"central": {}})
-    run = store.create_run(OWNER, draft["id"], analysis_id)
+    run = store.create_run(OWNER, draft["id"])
     store.claim_run(OWNER, run["id"], worker_id="worker-a")
     store.complete_run(OWNER, run["id"], {"return": 0.01}, worker_id="worker-a")
 
@@ -414,11 +415,11 @@ def test_message_slot_blocks_duplicate_generation_and_survives_live_timeout():
 
 def test_abandoned_message_claim_is_recovered_after_grace_period(store):
     portfolio, analysis_id, _ = saved_analysis(store)
-    draft = store.create_draft(OWNER, portfolio.portfolio_id, {"analysis_id": analysis_id})
+    draft = create_pinned_draft(store, OWNER, portfolio.portfolio_id, {"analysis_id": analysis_id})
     store.claim_draft(OWNER, draft["id"], worker_id="worker-a")
     store.complete_draft(OWNER, draft["id"], {"evidence": []}, worker_id="worker-a")
     store.confirm_draft(OWNER, draft["id"], {"central": {}})
-    run = store.create_run(OWNER, draft["id"], analysis_id)
+    run = store.create_run(OWNER, draft["id"])
     store.claim_run(OWNER, run["id"], worker_id="worker-a")
     store.complete_run(OWNER, run["id"], {"return": 0.01}, worker_id="worker-a")
     token = store.reserve_message_slot(OWNER, run["id"], "lost-key")

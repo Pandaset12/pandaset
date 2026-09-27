@@ -16,7 +16,7 @@ def test_provider_failure_has_correlated_safe_logs_and_client_request_id(tmp_pat
     app.dependency_overrides[get_provider] = FailingProvider
     with caplog.at_level(logging.WARNING, logger="portfoliolens"):
         with TestClient(app) as api:
-            response = api.post("/api/v1/portfolios/demo/analysis",
+            response = api.get("/api/v1/portfolios/demo/metrics",
                                 headers={"Origin": "http://localhost:5173", "X-Request-ID": "untrusted"})
     assert response.status_code == 502
     request_id = response.headers["X-Request-ID"]

@@ -39,6 +39,7 @@ test("applying a scenario resets comparisons pinned to the previous analysis", a
     portfolio_id: "before",
     name: "Snapshot reset",
     created_at: "2026-09-26T00:00:00Z",
+    revision: 1,
     holdings: [{ symbol: "SPY", weight: 1 }],
   };
   const created = {
@@ -51,7 +52,7 @@ test("applying a scenario resets comparisons pinned to the previous analysis", a
     ],
   };
   const analysis = (portfolio: typeof saved) => ({
-    analysis_id: `analysis_${portfolio.portfolio_id}`,
+    portfolio_revision: 1,
     portfolio_id: portfolio.portfolio_id,
     weights: Object.fromEntries(
       portfolio.holdings.map((h) => [h.symbol, h.weight]),
@@ -82,9 +83,9 @@ test("applying a scenario resets comparisons pinned to the previous analysis", a
     }
     if (path === "/api/v1/portfolios") return response([saved]);
     if (path.includes("/market-history")) return response({});
-    if (path === "/api/v1/portfolios/before/analysis")
+    if (path === "/api/v1/portfolios/before/metrics")
       return response(analysis(saved));
-    if (path === "/api/v1/portfolios/after/analysis")
+    if (path === "/api/v1/portfolios/after/metrics")
       return response(analysis(created));
     if (path === "/api/v1/portfolios/before/what-if")
       return response({
@@ -179,12 +180,14 @@ test("a saved ticker rejected by sample prices offers retry, switching, and repl
     portfolio_id: "failed",
     name: "TSLA portfolio",
     created_at: "2026-09-26T00:00:00Z",
+    revision: 1,
     holdings: [{ symbol: "TSLA", weight: 1 }],
   };
   const other = {
     portfolio_id: "other",
     name: "Other portfolio",
     created_at: saved.created_at,
+    revision: 1,
     holdings: [{ symbol: "SPY", weight: 1 }],
   };
   globalThis.fetch = (async (url: RequestInfo | URL) => {
@@ -199,12 +202,12 @@ test("a saved ticker rejected by sample prices offers retry, switching, and repl
     } as Response;
   }) as typeof fetch;
   render(createElement(Application, { onSignOut: async () => {} }));
-  await screen.findByText("We couldn’t load the portfolio analysis.");
-  assert.ok(screen.getByRole("button", { name: "Retry analysis" }));
+  await screen.findByText("We couldn’t calculate this portfolio.");
+  assert.ok(screen.getByRole("button", { name: "Retry calculation" }));
   fireEvent.click(screen.getByRole("button", { name: /TSLA portfolio/ }));
   assert.ok(screen.getByRole("button", { name: "Other portfolio" }));
   fireEvent.click(screen.getByRole("button", { name: "Other portfolio" }));
-  await screen.findByText("We couldn’t load the portfolio analysis.");
+  await screen.findByText("We couldn’t calculate this portfolio.");
   assert.ok(screen.getByRole("button", { name: /Other portfolio/ }));
   fireEvent.click(
     screen.getByRole("button", { name: "Create another portfolio" }),
@@ -221,6 +224,7 @@ test("workspace selector opens the existing new portfolio flow", async () => {
     portfolio_id: "saved",
     name: "Saved portfolio",
     created_at: "2026-09-26T00:00:00Z",
+    revision: 1,
     holdings: [{ symbol: "SPY", weight: 1 }],
   };
   globalThis.fetch = (async (url: RequestInfo | URL) => {
@@ -243,12 +247,14 @@ test("delete confirmation names the portfolio, selects another, then offers onbo
       portfolio_id: "first",
       name: "First portfolio",
       created_at: "2026-09-26T00:00:00Z",
+      revision: 1,
       holdings: [{ symbol: "SPY", weight: 1 }],
     },
     {
       portfolio_id: "second",
       name: "Second portfolio",
       created_at: "2026-09-26T00:00:00Z",
+      revision: 1,
       holdings: [{ symbol: "TLT", weight: 1 }],
     },
   ];
@@ -262,7 +268,7 @@ test("delete confirmation names the portfolio, selects another, then offers onbo
       deleted.push(path);
       return { ok: true, status: 204, json: async () => null } as Response;
     }
-    if (init?.method === "POST" && path.endsWith("/analysis")) {
+    if (path.endsWith("/metrics")) {
       analyses += 1;
       return {
         ok: false,
@@ -316,6 +322,7 @@ test("SPY and fractional saved allocations remain usable in edit and What-if", (
     portfolio_id: "fractional",
     name: "Fractional",
     created_at: "2026-09-26T00:00:00Z",
+    revision: 1,
     holdings: [
       { symbol: "SPY", weight: 0.255 },
       { symbol: "TLT", weight: 0.745 },
@@ -423,6 +430,7 @@ test("a single-holding SPY scenario can add a second ticker", () => {
     portfolio_id: "spy",
     name: "SPY",
     created_at: "2026-09-26T00:00:00Z",
+    revision: 1,
     holdings: [{ symbol: "SPY", weight: 1 }],
   };
   render(
@@ -487,6 +495,7 @@ test("What-if editor groups holdings, allocations, and add controls", () => {
     portfolio_id: "layout",
     name: "Layout",
     created_at: "2026-09-26T00:00:00Z",
+    revision: 1,
     holdings: [
       { symbol: "SPY", weight: 0.255 },
       { symbol: "TLT", weight: 0.745 },
@@ -544,6 +553,7 @@ test("What-if limits the saved and proposed symbol union to eight", () => {
     portfolio_id: "eight",
     name: "Eight",
     created_at: "2026-09-26T00:00:00Z",
+    revision: 1,
     holdings: symbols.map((symbol) => ({ symbol, weight: 0.125 })),
   };
   render(
@@ -565,7 +575,8 @@ test("What-if limits the saved and proposed symbol union to eight", () => {
   }) as HTMLButtonElement;
   assert.equal(add.disabled, true);
   assert.match(
-    screen.getByRole("status").textContent ?? "",
+    screen.getByText(/What-if supports at most eight distinct symbols/)
+      .textContent ?? "",
     /eight distinct symbols across the saved portfolio and proposed allocation/,
   );
   fireEvent.change(
@@ -589,6 +600,7 @@ test("Edit adds unique holdings, keeps intermediate percentage text, validates 1
     portfolio_id: "spy",
     name: "SPY",
     created_at: "2026-09-26T00:00:00Z",
+    revision: 1,
     holdings: [{ symbol: "SPY", weight: 1 }],
   };
   let submitted: { weights: number[]; symbols: string[] } | null = null;
@@ -845,11 +857,12 @@ test("workspace onboarding searches backend tickers by company name", async () =
   cleanup();
 });
 
-test("repeated workspace edits PUT one selected portfolio and refresh its analysis", async () => {
+test("repeated workspace edits PUT one selected portfolio and refresh its metrics", async () => {
   let saved = {
     portfolio_id: "saved",
     name: "Portfolio",
     created_at: "2026-09-26T00:00:00Z",
+    revision: 1,
     holdings: [{ symbol: "SPY", weight: 1 }],
   };
   let updates = 0;
@@ -869,19 +882,20 @@ test("repeated workspace edits PUT one selected portfolio and refresh its analys
       return response({ symbols: [], dates: [] });
     if (path === "/api/v1/portfolios/saved" && init?.method === "PUT") {
       updates += 1;
-      saved = { ...saved, ...JSON.parse(String(init.body)) };
+      saved = {
+        ...saved,
+        ...JSON.parse(String(init.body)),
+        revision: saved.revision + 1,
+      };
       return response(saved);
     }
-    if (
-      path === "/api/v1/portfolios/saved/analysis" &&
-      init?.method === "POST"
-    ) {
+    if (path === "/api/v1/portfolios/saved/metrics") {
       analyses += 1;
       const weights = Object.fromEntries(
         saved.holdings.map(({ symbol, weight }) => [symbol, weight]),
       );
       return response({
-        analysis_id: `analysis_${analyses}`,
+        portfolio_revision: saved.revision,
         portfolio_id: saved.portfolio_id,
         weights,
         risk_contribution: Object.fromEntries(
@@ -907,7 +921,7 @@ test("repeated workspace edits PUT one selected portfolio and refresh its analys
     throw new Error(`Unexpected request: ${init?.method ?? "GET"} ${path}`);
   }) as typeof fetch;
   render(createElement(Application, { onSignOut: async () => {} }));
-  await screen.findByText("analysis_1");
+  await screen.findByRole("heading", { name: "Portfolio" });
   assert.equal(screen.queryByRole("button", { name: "Ask Panda" }), null);
   assert.equal(screen.queryByRole("link", { name: "Explore a what-if" }), null);
   assert.equal(document.querySelector(".demo-badge"), null);
@@ -934,7 +948,7 @@ test("repeated workspace edits PUT one selected portfolio and refresh its analys
       { target: { value: second } },
     );
     fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
-    await screen.findByText(`analysis_${index + 2}`);
+    await waitFor(() => assert.equal(analyses, index + 2));
   }
   assert.equal(updates, 2);
   assert.equal(creates, 0);

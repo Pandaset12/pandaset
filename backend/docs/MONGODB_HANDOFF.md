@@ -1,61 +1,9 @@
-# MongoDB handoff
+# MongoDB event storage handoff
 
-## Recovered work and current status
+The main owner-scoped portfolio repository in SQLite is authoritative for both standard pages and optional event research. MongoDB stores owner-scoped event drafts, runs, messages, job leases, and their immutable input context. There is no active event portfolio write API or standalone analysis write/read API. All event requests verify the Supabase bearer token and look up the selected portfolio through the main repository.
 
-The earlier data-layer work stopped at the initial provider/schema draft.
-Its design proposed `mongo_store.py` for users/holdings, and its dependency file
-listed `pymongo`. No MongoDB adapter implementation was found in the earlier
-conversation, workspace files or repository history.
+At draft creation, the backend pins the portfolio name and revision, current and proposed allocations, aligned adjusted holding and factor prices, dates, provenance, baseline metrics, and model version. Research and run workers use only these inputs. Saved results remain readable after a later allocation or price update. The separate Mongo `portfolios`, `analyses`, and `analysis_counters` collections are legacy migration sources only; do not use them for new writes.
 
-The recovered Python modules in `backend/drafts/` remain inactive. Current main
-now separately implements `backend/mongo_store.py` for the gated v2 event lab:
-owner-scoped portfolios, immutable analyses, drafts/runs, jobs, and run chat.
-V2 requires configured MongoDB and verifies identity through Supabase. See
-[the v2 contract](../../docs/event-lab-api-contract.md) and
-[release gates](../../docs/event-lab-release-gates.md).
+Before a release serving existing event users, run the [dry-run inventory](../../docs/unified-what-if-inventory.md) and follow the [migration and rollback gates](../../docs/unified-what-if-release.md). The import preserves owner and portfolio IDs, refuses conflicts, and supports retry. The context backfill reports missing/foreign analysis references, active jobs, incomplete price coverage, and invalid completed results without deleting them. Keep recoverable backups until the release owner confirms the retention period and cutover checks.
 
-V1 still uses `backend/storage.py` (SQLite). Enabling v2 does not migrate v1
-records or make its Mongo API a drop-in replacement for the SQLite store.
-
-## Requirements if the team migrates v1 storage
-
-Preserve the behavior of `backend/storage.py` if adding shared storage to v1:
-
-- `seed_demo(metrics)`: idempotently seed the unassigned legacy demo portfolio.
-- `create(PortfolioInput, owner_id) -> Portfolio`: save an owned portfolio.
-- `get(portfolio_id, owner_id) -> Portfolio | None`.
-- `list_for_owner(owner_id) -> list[Portfolio]`.
-- `update(portfolio_id, owner_id, PortfolioInput) -> Portfolio | None`: preserve
-  identity and creation time, and atomically invalidate old analyses on an allocation change.
-- `save_analysis(AnalyticsSnapshot, owner_id) -> (analysis_id, created_at)`:
-  atomically verify ownership/current weights and save an immutable snapshot;
-  raise `StalePortfolio` when the portfolio has changed. Questions never recalculate it.
-- `get_analysis(portfolio_id, analysis_id) -> (AnalyticsSnapshot, created_at)`:
-  require both IDs and report missing/mismatched snapshots consistently.
-
-The API verifies portfolio ownership before snapshot reads. A replacement store
-must preserve that boundary and the atomic update/save behavior, including under
-concurrent requests. Legacy unowned records must not be assigned to arbitrary users.
-
-Suggested collections are `portfolios` and `analyses`, using stable string IDs
-and a lookup index on portfolio/analysis IDs. Keep the source, market timestamp,
-observed period, assumptions and warnings with every snapshot. Return validated
-API models rather than raw database documents.
-
-Historical prices remain the data teammate's Tiger Data responsibility.
-MongoDB storage does not supply price history or implement the quant formulas.
-
-## Coordination still needed
-
-1. Decide whether v1 stays on persistent SQLite or should migrate to shared
-   storage; coordinate schema/collection use with the implemented v2 store.
-2. Preserve the current Supabase-verified user ID and ownership checks; never
-   accept an owner ID supplied by a portfolio request body.
-3. Provide connection configuration through server-side environment variables;
-   never commit actual connection strings, passwords or data exports.
-4. Define v1 migration, failure/timeout behavior, and store selection explicitly.
-   V2 already selects its Mongo store when the event-lab configuration is ready.
-5. Test persistence, snapshot lookup, duplicate handling and unavailable-database
-   behavior against a dedicated test database before claiming live integration.
-
-No MongoDB database, collection, credential or deployment was changed in this review.
+A hosted main SQLite store needs a single writer and durable volume. If the deployment uses multiple writers or ephemeral local disks, move the portfolio repository to a shared transactional store before enabling the unified event path publicly. Keep server-side Mongo, Alpaca, Gemini, Tavily, and DeepSeek credentials in ignored environment configuration.

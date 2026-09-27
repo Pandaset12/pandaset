@@ -73,6 +73,7 @@ function Preview() {
         ...input,
         portfolio_id: "preview-portfolio",
         created_at: new Date().toISOString(),
+        revision: 1,
       };
     },
     [saveMode],
