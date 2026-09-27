@@ -402,7 +402,12 @@ export default function WhatIf({
                   <AssetMark asset={asset} small />
                   <strong>{asset.symbol}</strong>
                 </div>
-                <span className="current-weight">{weights[index] ?? 0}%</span>
+                <span
+                  className="current-weight"
+                  aria-label={`Current allocation for ${asset.symbol}: ${weights[index] ?? 0}%`}
+                >
+                  {weights[index] ?? 0}%
+                </span>
                 <div className="weight-input">
                   <input
                     type="text"
@@ -563,29 +568,47 @@ export default function WhatIf({
                 <tbody>
                   <tr>
                     <th>Sample return</th>
-                    <td>{metric(current.portfolio_return)}</td>
-                    <td>{metric(proposed.portfolio_return)}</td>
-                    <td>{metric(available.delta.portfolio_return)}</td>
+                    <td data-label="Current">
+                      {metric(current.portfolio_return)}
+                    </td>
+                    <td data-label="Proposed">
+                      {metric(proposed.portfolio_return)}
+                    </td>
+                    <td data-label="Change">
+                      {metric(available.delta.portfolio_return)}
+                    </td>
                   </tr>
                   {showAnnualizedReturn(observationCount(analysis)) && (
                     <tr>
                       <th>Annualized return</th>
-                      <td>{metric(current.annualized_return)}</td>
-                      <td>{metric(proposed.annualized_return)}</td>
-                      <td>{metric(available.delta.annualized_return)}</td>
+                      <td data-label="Current">
+                        {metric(current.annualized_return)}
+                      </td>
+                      <td data-label="Proposed">
+                        {metric(proposed.annualized_return)}
+                      </td>
+                      <td data-label="Change">
+                        {metric(available.delta.annualized_return)}
+                      </td>
                     </tr>
                   )}
                   <tr>
                     <th>Largest drawdown</th>
-                    <td>{metric(current.max_drawdown)}</td>
-                    <td>{metric(proposed.max_drawdown)}</td>
-                    <td>{metric(available.delta.max_drawdown)}</td>
+                    <td data-label="Current">{metric(current.max_drawdown)}</td>
+                    <td data-label="Proposed">
+                      {metric(proposed.max_drawdown)}
+                    </td>
+                    <td data-label="Change">
+                      {metric(available.delta.max_drawdown)}
+                    </td>
                   </tr>
                   <tr>
                     <th>Largest holding</th>
-                    <td>{largest(weights, holdings)}</td>
-                    <td>{largest(comparedWeights, scenarioAssets)}</td>
-                    <td>
+                    <td data-label="Current">{largest(weights, holdings)}</td>
+                    <td data-label="Proposed">
+                      {largest(comparedWeights, scenarioAssets)}
+                    </td>
+                    <td data-label="Change">
                       {pp(
                         largestWeight(comparedWeights) - largestWeight(weights),
                       )}

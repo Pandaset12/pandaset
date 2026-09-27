@@ -1,0 +1,334 @@
+/* Phone layouts keep the same information and controls, with room to read and tap. */
+@media (max-width: 720px) {
+  .dashboard-shell > .main-content {
+    min-width: 0;
+    padding-top: 16px;
+  }
+
+  .dashboard-shell > .workspace-bar {
+    width: 100%;
+    min-height: 58px;
+    padding-top: 12px;
+  }
+
+  .dashboard-shell .portfolio-picker {
+    max-width: 100%;
+  }
+
+  .dashboard-shell .portfolio-selector {
+    max-width: min(320px, calc(100vw - 40px));
+    min-height: 44px;
+  }
+
+  .dashboard-shell .page-heading {
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+
+  .dashboard-shell .page-heading > div:first-child {
+    width: 100%;
+    max-width: none;
+  }
+
+  .dashboard-shell .page-heading h1 {
+    max-width: 100%;
+    font-size: clamp(2.15rem, 9vw, 2.8rem);
+    line-height: 1.08;
+    letter-spacing: -0.04em;
+    text-wrap: wrap;
+  }
+
+  .dashboard-shell .heading-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+    gap: 8px;
+  }
+
+  .dashboard-shell .heading-actions > .button {
+    width: 100%;
+    min-height: 44px;
+    padding: 9px 11px;
+    font-size: 0.8125rem;
+    line-height: 1.25;
+    white-space: normal;
+    text-align: center;
+  }
+
+  .dashboard-overview .performance-panel,
+  .dashboard-overview .focus-panel,
+  .dashboard-risk .risk-bars-panel,
+  .dashboard-research .research-workspace,
+  .dashboard-what-if .scenario-editor,
+  .dashboard-what-if .scenario-results,
+  .dashboard-what-if .event-research {
+    min-width: 0;
+  }
+
+  .dashboard-overview .performance-bottom {
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 8px 18px;
+  }
+
+  .dashboard-overview .performance-bottom > span {
+    min-width: 0;
+    flex: 1 1 180px;
+  }
+
+  .dashboard-overview .performance-bottom button {
+    min-height: 44px;
+    text-align: left;
+  }
+
+  .dashboard-overview .table-tools,
+  .dashboard-overview .holdings-actions {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .dashboard-overview .holdings-actions {
+    justify-content: flex-start;
+  }
+
+  .table-scroll,
+  .matrix-scroll,
+  .event-result-table-wrap,
+  .dashboard-research .comparison-table-wrap {
+    max-width: 100%;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .dashboard-risk .risk-bar-row {
+    min-width: 0;
+  }
+
+  .dashboard-risk .risk-ticker {
+    width: 72px;
+  }
+
+  .dashboard-risk .risk-bar-pair > div {
+    min-height: 16px;
+    height: auto;
+  }
+
+  .dashboard-research .company-tabs {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+  }
+
+  .dashboard-research .underlined-tabs {
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .dashboard-research .underlined-tabs button {
+    justify-content: center;
+    flex: 1;
+    min-height: 44px;
+    padding: 10px 4px;
+    font-size: 0.8125rem;
+  }
+
+  .dashboard-research .compare-select {
+    justify-content: flex-end;
+    min-height: 44px;
+    margin-bottom: 0;
+  }
+
+  .dashboard-research .compare-select select {
+    max-width: 100%;
+  }
+
+  .dashboard-research .reading-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .dashboard-research .reading-note {
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+    padding: 18px 0;
+  }
+
+  .dashboard-research .reading-note:nth-child(3) {
+    padding-left: 0;
+  }
+
+  .dashboard-what-if .whatif-mode-switch {
+    width: 100%;
+  }
+
+  .dashboard-what-if .whatif-mode-switch button {
+    min-width: 0;
+    padding: 9px 8px;
+    font-size: 0.8125rem;
+  }
+
+  .dashboard-what-if .scenario-presets {
+    flex-wrap: wrap;
+  }
+
+  .dashboard-what-if .scenario-presets > button {
+    flex: 1 1 125px;
+  }
+
+  .dashboard-what-if .scenario-result-actions > .button {
+    margin-left: 0;
+  }
+
+  .dashboard-what-if .scenario-comparison,
+  .dashboard-what-if .scenario-comparison tbody {
+    display: grid;
+    width: 100%;
+    gap: 10px;
+  }
+
+  .dashboard-what-if .scenario-comparison thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .dashboard-what-if .scenario-comparison tbody tr {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+    padding: 14px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+  }
+
+  .dashboard-what-if .scenario-comparison tbody th {
+    grid-column: 1 / -1;
+    padding: 0 0 9px;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.875rem;
+    text-align: left;
+  }
+
+  .dashboard-what-if .scenario-comparison tbody td {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    min-width: 0;
+    padding: 0;
+    border: 0;
+    font-size: 0.8125rem;
+    text-align: left;
+    overflow-wrap: anywhere;
+  }
+
+  .dashboard-what-if .scenario-comparison tbody td::before {
+    content: attr(data-label);
+    color: var(--muted);
+    font-size: 0.6875rem;
+    font-weight: 600;
+  }
+
+  .event-research-heading,
+  .event-research-review-heading {
+    flex-wrap: wrap;
+  }
+
+  .event-research-evidence a {
+    overflow-wrap: anywhere;
+  }
+
+  .dashboard-shell :is(input, select, textarea),
+  .auth-page :is(input, select, textarea),
+  .onboarding-page :is(input, select, textarea) {
+    font-size: 16px;
+  }
+
+  .modal {
+    width: calc(100vw - 24px);
+    max-height: calc(100dvh - 24px);
+  }
+
+  .modal-inner {
+    padding: 20px;
+  }
+
+  .modal-actions {
+    flex-wrap: wrap;
+  }
+
+  .portfolio-menu button,
+  .event-saved-work button {
+    min-height: 44px;
+  }
+}
+
+@media (max-width: 380px) {
+  .dashboard-shell .heading-actions {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .dashboard-overview .metric-strip {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+  }
+
+  .dashboard-overview .metric-strip > div {
+    padding: 0;
+    border: 0;
+  }
+
+  .dashboard-what-if .scenario-comparison tbody tr {
+    gap: 6px;
+    padding: 11px;
+  }
+
+  .scenario-editor .editor-table-head {
+    display: none;
+  }
+
+  .scenario-editor .editor-row {
+    grid-template-columns: minmax(0, 1fr) 90px;
+    row-gap: 3px;
+    padding: 15px 0;
+  }
+
+  .scenario-editor .editor-asset {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .scenario-editor .current-weight {
+    grid-column: 1;
+    grid-row: 2;
+    text-align: left;
+  }
+
+  .scenario-editor .current-weight::before {
+    content: "Current · ";
+    color: var(--muted);
+  }
+
+  .scenario-editor .weight-input {
+    position: relative;
+    grid-column: 2;
+    grid-row: 1 / 3;
+    align-self: end;
+    width: 90px;
+    margin-top: 17px;
+  }
+
+  .scenario-editor .weight-input::before {
+    position: absolute;
+    top: -19px;
+    left: 0;
+    color: var(--muted);
+    content: "Proposed";
+    font-size: 0.6875rem;
+  }
+}
