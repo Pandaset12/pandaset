@@ -3,11 +3,23 @@
 from __future__ import annotations
 
 import math
+from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from .schemas import check_weights
+from .schemas import Holding, PortfolioInput, check_weights
+
+
+class EventPortfolioInput(PortfolioInput):
+    """Event-lab allocation with the same validation as v1 and a 25-holding cap."""
+
+    holdings: list[Holding] = Field(min_length=1, max_length=25)
+
+
+class EventPortfolio(EventPortfolioInput):
+    portfolio_id: str
+    created_at: datetime
 
 FACTOR_IDS = ("equity", "rates", "gold")
 FACTOR_BOUNDS = (-0.5, 0.5)  # cumulative decimal factor return

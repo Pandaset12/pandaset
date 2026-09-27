@@ -94,7 +94,7 @@ function mountBoundary(client: SupabaseClient) {
   return render(
     createElement(AuthBoundary, {
       client,
-      renderDashboard: (signOut: () => Promise<void>) =>
+      renderDashboard: (_session: Session, signOut: () => Promise<void>) =>
         createElement(
           "div",
           {},
@@ -127,7 +127,7 @@ test("shows the signed-out screen and responds to auth changes and sign-out", as
   render(
     createElement(AuthBoundary, {
       client: mock.client,
-      renderDashboard: (signOut: () => Promise<void>) =>
+      renderDashboard: (_session: Session, signOut: () => Promise<void>) =>
         createElement("button", { onClick: () => void signOut() }, "Sign out"),
       renderSignedOut: () => createElement("span", {}, "Sign in required"),
     }),

@@ -8,7 +8,10 @@ export function AuthBoundary({
   renderSignedOut,
 }: {
   client?: SupabaseClient;
-  renderDashboard: (signOut: () => Promise<void>) => ReactNode;
+  renderDashboard: (
+    session: Session,
+    signOut: () => Promise<void>,
+  ) => ReactNode;
   renderSignedOut: (client: SupabaseClient) => ReactNode;
 }) {
   let authClient: SupabaseClient;
@@ -38,7 +41,10 @@ function AuthSessionBoundary({
   renderSignedOut,
 }: {
   client: SupabaseClient;
-  renderDashboard: (signOut: () => Promise<void>) => ReactNode;
+  renderDashboard: (
+    session: Session,
+    signOut: () => Promise<void>,
+  ) => ReactNode;
   renderSignedOut: (client: SupabaseClient) => ReactNode;
 }) {
   const [session, setSession] = useState<Session | null>(null);
@@ -98,7 +104,7 @@ function AuthSessionBoundary({
           {error}
         </p>
       )}
-      {session ? renderDashboard(signOut) : renderSignedOut(client)}
+      {session ? renderDashboard(session, signOut) : renderSignedOut(client)}
     </>
   );
 }

@@ -1,6 +1,6 @@
 import type { PortfolioInput } from "../../api/portfolio";
 
-export const MAX_HOLDINGS = 25;
+export const MAX_HOLDINGS = 8;
 export const MAX_NAME_LENGTH = 100;
 export const PERCENT_SCALE = 1_000_000;
 export const FULL_ALLOCATION = 100 * PERCENT_SCALE;
@@ -34,11 +34,20 @@ export function portfolioNameError(name: string): string | undefined {
 }
 
 // Integer percentage units avoid rounding 99.999999% up to a valid allocation.
-export function parsePercentage(value: string): number | null {
+export function parsePercentage(
+  value: string,
+  allowZero = false,
+): number | null {
   const trimmed = value.trim();
   if (!/^(?:\d+(?:\.\d{0,6})?|\.\d{1,6})$/.test(trimmed)) return null;
   const number = Number(trimmed);
-  if (!Number.isFinite(number) || number <= 0 || number > 100) return null;
+  if (
+    !Number.isFinite(number) ||
+    number < 0 ||
+    (!allowZero && number === 0) ||
+    number > 100
+  )
+    return null;
   const [whole, fraction = ""] = trimmed.split(".");
   return Number(whole || 0) * PERCENT_SCALE + Number(fraction.padEnd(6, "0"));
 }
@@ -52,13 +61,14 @@ export function formatPercentage(units: number) {
 export function validatePortfolioDraft(
   name: string,
   holdings: readonly HoldingDraft[],
+  maxHoldings = MAX_HOLDINGS,
 ): DraftValidation {
   const errors: DraftErrors = { rows: {} };
   errors.name = portfolioNameError(name);
   if (!holdings.length)
     errors.holdings = "Add at least one holding to continue.";
-  if (holdings.length > MAX_HOLDINGS)
-    errors.holdings = "A portfolio can contain up to 25 holdings.";
+  if (holdings.length > maxHoldings)
+    errors.holdings = `A portfolio can contain up to ${maxHoldings} holdings.`;
 
   let totalUnits = 0;
   const symbols = new Set<string>();

@@ -15,14 +15,10 @@ from urllib.request import Request, urlopen
 
 import pandas as pd
 
-from .instruments import resolve_instrument
+from .market_data_errors import MarketHistoryNotFound, ProviderUnavailable
 
 
-class ProviderUnavailable(Exception):
-    """The market-data vendor or its response is unavailable."""
-
-
-class CoverageError(ProviderUnavailable):
+class CoverageError(MarketHistoryNotFound, ProviderUnavailable):
     """An allowed symbol lacks the requested complete, aligned history."""
 
 
@@ -33,6 +29,7 @@ class RateLimitError(ProviderUnavailable):
 class TwelveDataPriceProvider:
     data_mode = "live"
     data_source = "twelve_data_adjusted_daily"
+    freshness = "unknown"
 
     def __init__(
         self,
@@ -117,6 +114,8 @@ class TwelveDataPriceProvider:
         except HTTPError as exc:
             if exc.code == 429:
                 raise RateLimitError("Twelve Data request quota was reached.") from exc
+            if exc.code == 404:
+                raise CoverageError("Twelve Data has no history for one or more requested symbols.") from exc
             raise ProviderUnavailable("Twelve Data rejected the history request.") from exc
         except (URLError, TimeoutError, OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
             raise ProviderUnavailable("Twelve Data could not be reached or returned invalid data.") from exc
@@ -130,6 +129,8 @@ class TwelveDataPriceProvider:
             return
         code = payload.get("code")
         message = str(payload.get("message", "")).lower()
+        if str(code) == "404":
+            raise CoverageError("Twelve Data has no history for one or more requested symbols.")
         if code in (429, 4290) or "limit" in message or "credit" in message or "quota" in message:
             raise RateLimitError("Twelve Data request quota was reached.")
         raise ProviderUnavailable("Twelve Data rejected the history request.")
@@ -177,9 +178,6 @@ class TwelveDataPriceProvider:
             raise ValueError("History requests require one to 25 unique symbols.")
         if not 1 <= lookback_days <= 1000:
             raise ValueError("Requested history window is outside the supported range.")
-        for symbol in normalized:
-            resolve_instrument(symbol)
-
         count = lookback_days + 1
         by_symbol: dict[str, list[tuple[date, float]]] = {}
         received: dict[str, datetime] = {}

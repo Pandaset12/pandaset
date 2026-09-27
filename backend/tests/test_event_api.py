@@ -28,6 +28,7 @@ def _settings(**changes):
     values = dict(event_lab_enabled=True, supabase_url="https://example.supabase.co",
                   supabase_publishable_key="publishable", mongo_uri=SecretStr("mongodb://unused"),
                   twelve_data_api_key=SecretStr("vendor"), gemini_api_key=SecretStr("gemini"),
+                  tavily_api_key=SecretStr("tavily"), deepseek_api_key=SecretStr("deepseek"),
                   event_lab_allowed_user_ids="owner-a,owner-b")
     values.update(changes)
     return Settings(**values)

@@ -5,7 +5,6 @@ import {
   InformationCircle as Info,
   RectangleStack as Layers,
 } from "../components/icons";
-import type { Asset } from "../../../quant/data";
 import { pct } from "../../../quant/analytics";
 import {
   AssetMark,
@@ -14,22 +13,22 @@ import {
   NextStep,
 } from "../components/UI";
 import type { AnalysisResponse } from "../api/portfolio";
-import { allocationPercent } from "../workspace/holdings";
+import type { PortfolioAsset } from "../types/portfolioAsset";
 
 export default function Risk({
   analysis,
-  holdings,
+  assets,
   onExplain,
   onMethod,
 }: {
   analysis: AnalysisResponse;
-  holdings: Asset[];
+  assets: PortfolioAsset[];
   onExplain: () => void;
   onMethod: () => void;
 }) {
   const [pair, setPair] = useState<[string, string] | null>(null);
   const [view, setView] = useState<"sectors" | "holdings">("sectors");
-  const active = holdings
+  const active = assets
     .map((asset) => ({
       asset,
       weight: analysis.weights[asset.symbol] ?? 0,
@@ -58,7 +57,8 @@ export default function Risk({
     ) * 1.12;
   const categories = Object.entries(
     active.reduce<Record<string, number>>((grouped, { asset, weight }) => {
-      grouped[asset.sector] = (grouped[asset.sector] ?? 0) + weight;
+      const category = asset.sector ?? "Unclassified";
+      grouped[category] = (grouped[category] ?? 0) + weight;
       return grouped;
     }, {}),
   ).sort((a, b) => b[1] - a[1]);
@@ -68,7 +68,7 @@ export default function Risk({
           label,
           value,
           color:
-            holdings.find((asset) => asset.sector === label)?.color ?? "#888",
+            assets.find((asset) => asset.sector === label)?.color ?? "#888",
         }))
       : active.map(({ asset, weight }) => ({
           label: asset.symbol,
@@ -163,7 +163,7 @@ export default function Risk({
                       className="capital-bar"
                       style={{ width: `${((weight * 100) / max) * 100}%` }}
                     />
-                    <span>{allocationPercent(weight)}</span>
+                    <span>{pct(weight, 0)}</span>
                   </div>
                   <div>
                     <i
@@ -178,6 +178,11 @@ export default function Risk({
                 <ArrowUpRight size={15} />
               </a>
             ))}
+            {active.length === 0 && (
+              <p className="api-state" role="status">
+                No saved holdings are available for this analysis.
+              </p>
+            )}
           </div>
           <p className="muted small-text">
             Risk contribution is an estimate based on the backend’s daily return
@@ -199,7 +204,7 @@ export default function Risk({
               <Info size={17} />
             </button>
           </SectionTitle>
-          {!analysis.correlation_matrix ? (
+          {!analysis.correlation_matrix || active.length === 0 ? (
             <p className="api-state" role="status">
               Correlation matrix unavailable for this analysis.
             </p>
@@ -382,8 +387,9 @@ export default function Risk({
           <div className="note-panel">
             <Info size={18} />
             <p>
-              <strong>Look beyond the label.</strong> Funds are grouped as their
-              own category; this view does not look through underlying holdings.
+              <strong>Look beyond the label.</strong> Categories come from the
+              available instrument classification. This view does not look
+              through fund holdings.
             </p>
           </div>
         </section>

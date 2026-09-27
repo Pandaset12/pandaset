@@ -165,12 +165,12 @@ def test_weight_tolerance_matches_engine_without_normalization(client):
 
 def test_missing_sample_history_fails_instead_of_fabricating_prices(client):
     portfolio_id = create(client, {"UNKNOWN": 1.0})
-    assert client.post(f"/api/v1/portfolios/{portfolio_id}/analysis").status_code == 502
+    assert client.post(f"/api/v1/portfolios/{portfolio_id}/analysis").status_code == 404
     response = client.post("/api/v1/portfolios/demo/what-if", json={
         "holdings": [{"symbol": "UNKNOWN", "weight": 1.0}],
     })
-    assert response.status_code == 502
-    assert response.json()["error"]["code"] == "PROVIDER_UNAVAILABLE"
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "MARKET_HISTORY_NOT_FOUND"
 
 
 def test_market_history_is_aligned_limited_and_explicitly_demo(client):
@@ -195,6 +195,23 @@ def test_market_history_rejects_unsupported_and_malformed_requests(client):
     assert unsupported.json()["error"]["code"] == "MARKET_HISTORY_UNAVAILABLE"
     duplicate = client.get("/api/v1/market-history", params={"symbols": ["nvda", "NVDA"]})
     assert duplicate.status_code == 422
+
+
+def test_symbol_limit_includes_what_if_union_and_portfolio_creation(client):
+    nine_symbols = {f"S{i}": 1 / 9 for i in range(9)}
+    create_response = client.post("/api/v1/portfolios", json={
+        "name": "Too many", "holdings": [
+            {"symbol": symbol, "weight": weight} for symbol, weight in nine_symbols.items()
+        ],
+    })
+    assert create_response.status_code == 422
+
+    portfolio_id = create(client, {f"A{i}": .125 for i in range(8)})
+    response = client.post(f"/api/v1/portfolios/{portfolio_id}/what-if", json={
+        "holdings": [{"symbol": "NEW", "weight": 1.0}],
+    })
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "SYMBOL_LIMIT_EXCEEDED"
 
 
 def test_short_market_history_returns_available_rows_without_extrapolation(client):

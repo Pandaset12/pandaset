@@ -1,211 +1,203 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowUpRight, Check, XMark as X } from "./components/icons";
+import { useEffect, useRef, useState } from "react";
+import type { Session } from "@supabase/supabase-js";
+import {
+  ArrowUpRight,
+  ChatBubbleLeftRight,
+  Check,
+  ChevronDown,
+  InformationCircle as Info,
+  XMark as X,
+} from "./components/icons";
+import { assets } from "../../quant/data";
+import {
+  analyzeExistingPortfolio,
+  createPortfolio,
+  createRequestGuard,
+  verifyPortfolioHistory,
+  listPortfolios,
+  setApiAccessToken,
+  updatePortfolio,
+  type AnalysisResponse,
+  type Portfolio,
+} from "./api/portfolio";
 import { Brand } from "./components/UI";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { EditPortfolio } from "./components/EditPortfolio";
+import { MethodologyModal } from "./components/MethodologyModal";
+import { Analyst } from "./components/Analyst";
+import { AuthScreen } from "./components/AuthScreen";
+import { AuthBoundary } from "./components/AuthBoundary";
+import { PortfolioOnboarding } from "./components/onboarding/PortfolioOnboarding";
+import { EventApplication } from "./EventApplication";
+import {
+  EventLabError,
+  listPortfolios as listEventPortfolios,
+} from "./api/eventLab";
 import {
   AIWorkflowModal,
   type AIWorkflowAction,
 } from "./components/AIWorkflowModal";
-import { AuthScreen } from "./components/AuthScreen";
-import { AuthBoundary } from "./components/AuthBoundary";
-import { PortfolioOnboarding } from "./components/onboarding/PortfolioOnboarding";
-import {
-  asAnalysisResponse,
-  analysisMatchesPortfolio,
-  createAnalysis,
-  createPortfolio,
-  editablePercentages,
-  listAnalyses,
-  listPortfolios,
-  searchInstruments,
-  updatePortfolio,
-  validPercentAllocation,
-  type SavedAnalysis,
-} from "./api/eventLab";
-import { createRequestGuard, type Portfolio } from "./api/portfolio";
-import { assetsForPortfolio, type Instrument } from "./types/portfolioAsset";
 import Overview from "./pages/Overview";
 import Risk from "./pages/Risk";
 import Research from "./pages/Research";
 import WhatIf from "./pages/WhatIf";
+import {
+  portfolioFromPercentages,
+  portfolioPercentages,
+  workspaceAssets,
+} from "./workspace/holdings";
 
-function Application({ onSignOut }: { onSignOut: () => Promise<void> }) {
+type ActiveAnalysis = { portfolio: Portfolio; analysis: AnalysisResponse };
+
+export function Application({ onSignOut }: { onSignOut: () => Promise<void> }) {
   const [hash, setHash] = useState(location.hash || "#/");
-  const [portfolios, setPortfolios] = useState<Portfolio[]>([]);
-  const [listState, setListState] = useState<"loading" | "ready" | "error">(
-    "loading",
-  );
-  const [listError, setListError] = useState("");
-  const [selectedId, setSelectedId] = useState("");
-  const [savedAnalysis, setSavedAnalysis] = useState<SavedAnalysis | null>(
+  const [weights, setWeights] = useState<number[]>([]);
+  const [edit, setEdit] = useState(false);
+  const [method, setMethod] = useState(false);
+  const [analyst, setAnalyst] = useState<string | null>(null);
+  const [aiWorkflow, setAiWorkflow] = useState<AIWorkflowAction | null>(null);
+  const [toast, setToast] = useState("");
+  const [active, setActive] = useState<ActiveAnalysis | null>(null);
+  const [analysisLoading, setAnalysisLoading] = useState(false);
+  const [analysisError, setAnalysisError] = useState("");
+  const [portfolioState, setPortfolioState] = useState<
+    "loading" | "empty" | "error" | "ready"
+  >("loading");
+  const [selectedPortfolio, setSelectedPortfolio] = useState<Portfolio | null>(
     null,
   );
-  const [analysisBusy, setAnalysisBusy] = useState(false);
-  const [analysisError, setAnalysisError] = useState("");
-  const [instruments, setInstruments] = useState<Instrument[]>([]);
-  const [onboarding, setOnboarding] = useState(false);
-  const [edit, setEdit] = useState(false);
-  const [toast, setToast] = useState("");
-  const [aiAction, setAiAction] = useState<AIWorkflowAction | null>(null);
-  const listGuard = useRef(createRequestGuard());
-  const analysisGuard = useRef(createRequestGuard());
+  const [portfolios, setPortfolios] = useState<Portfolio[]>([]);
+  const [portfolioMenuOpen, setPortfolioMenuOpen] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const analysisRequest = useRef(createRequestGuard());
 
   useEffect(() => {
-    const update = () => {
+    const fn = () => {
       setHash(location.hash || "#/");
       window.scrollTo({ top: 0 });
     };
-    window.addEventListener("hashchange", update);
-    return () => window.removeEventListener("hashchange", update);
+    window.addEventListener("hashchange", fn);
+    return () => window.removeEventListener("hashchange", fn);
   }, []);
   useEffect(() => {
     if (!toast) return;
-    const timer = setTimeout(() => setToast(""), 4500);
-    return () => clearTimeout(timer);
+    const id = setTimeout(() => setToast(""), 4500);
+    return () => clearTimeout(id);
   }, [toast]);
 
-  const loadPortfolios = useCallback(async () => {
-    const request = listGuard.current.begin();
-    setListState("loading");
-    setListError("");
-    try {
-      const result = await listPortfolios();
-      if (!listGuard.current.isCurrent(request)) return;
-      setPortfolios(result);
-      setSelectedId((old) =>
-        result.some((p) => p.portfolio_id === old)
-          ? old
-          : (result[0]?.portfolio_id ?? ""),
-      );
-      setListState("ready");
-    } catch (cause) {
-      if (!listGuard.current.isCurrent(request)) return;
-      setListError(
-        cause instanceof Error
-          ? cause.message
-          : "Your portfolios are unavailable.",
-      );
-      setListState("error");
-    }
-  }, []);
-  useEffect(() => {
-    void loadPortfolios();
-    return () => {
-      listGuard.current.invalidate();
-      analysisGuard.current.invalidate();
-    };
-  }, [loadPortfolios]);
-
-  const selected =
-    portfolios.find((p) => p.portfolio_id === selectedId) ?? null;
-  const loadAnalysis = useCallback(
-    async (portfolioId: string, refresh = false) => {
-      const request = analysisGuard.current.begin();
-      setSavedAnalysis((old) =>
-        refresh && old?.portfolio_id === portfolioId ? old : null,
-      );
-      setAnalysisBusy(true);
-      setAnalysisError("");
-      try {
-        const result = refresh
-          ? await createAnalysis(portfolioId)
-          : ((await listAnalyses(portfolioId))[0] ??
-            (await createAnalysis(portfolioId)));
-        if (analysisGuard.current.isCurrent(request)) setSavedAnalysis(result);
-        return analysisGuard.current.isCurrent(request);
-      } catch (cause) {
-        if (analysisGuard.current.isCurrent(request))
-          setAnalysisError(
-            cause instanceof Error
-              ? cause.message
-              : "The analysis is unavailable.",
-          );
-        return false;
-      } finally {
-        if (analysisGuard.current.isCurrent(request)) setAnalysisBusy(false);
-      }
-    },
-    [],
-  );
-  useEffect(() => {
-    if (selectedId && listState === "ready") void loadAnalysis(selectedId);
-    return () => analysisGuard.current.invalidate();
-  }, [selectedId, listState, loadAnalysis]);
-  useEffect(() => setAiAction(null), [selectedId]);
-  useEffect(() => setAiAction(null), [hash]);
-
-  useEffect(() => {
-    if (!selected) {
-      setInstruments([]);
-      return;
-    }
-    let cancelled = false;
-    void Promise.all(
-      selected.holdings.map(({ symbol }) =>
-        searchInstruments(symbol)
-          .then((items) => items.find((item) => item.symbol === symbol))
-          .catch(() => undefined),
-      ),
-    ).then((items) => {
-      if (!cancelled)
-        setInstruments(
-          items.filter((item): item is Instrument => Boolean(item)),
-        );
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [selected]);
-
-  async function apply(weights: number[]) {
-    if (
-      !selected ||
-      weights.length !== selected.holdings.length ||
-      !validPercentAllocation(weights)
-    )
-      return false;
-    analysisGuard.current.invalidate();
-    setAnalysisBusy(true);
+  async function loadAnalysis(portfolio: Portfolio) {
+    const request = analysisRequest.current.begin();
+    setAnalysisLoading(true);
     setAnalysisError("");
     try {
-      const updated = await updatePortfolio(selected.portfolio_id, {
-        name: selected.name,
-        holdings: selected.holdings
-          .map((holding, index) => ({
-            symbol: holding.symbol,
-            weight: weights[index] / 100,
-          }))
-          .filter((holding) => holding.weight > 0),
-      });
-      setSavedAnalysis(null);
-      setPortfolios((old) =>
-        old.map((p) => (p.portfolio_id === updated.portfolio_id ? updated : p)),
-      );
-      const created = await createAnalysis(updated.portfolio_id);
-      setSavedAnalysis(created);
-      setEdit(false);
-      setToast("Allocation applied. A new analysis snapshot was saved.");
+      const result = await analyzeExistingPortfolio(portfolio);
+      if (!analysisRequest.current.isCurrent(request)) return false;
+      setActive(result);
+      setWeights(portfolioPercentages(portfolio));
       return true;
-    } catch (cause) {
-      setAnalysisError(
-        cause instanceof Error
-          ? cause.message
-          : "The allocation could not be saved.",
-      );
+    } catch (error) {
+      if (analysisRequest.current.isCurrent(request)) {
+        setAnalysisError(
+          error instanceof Error
+            ? error.message
+            : "The analysis service is unavailable.",
+        );
+      }
       return false;
     } finally {
-      setAnalysisBusy(false);
+      if (analysisRequest.current.isCurrent(request)) setAnalysisLoading(false);
     }
   }
 
-  function openPortfolio(portfolio: Portfolio) {
-    setPortfolios((old) => [
-      portfolio,
-      ...old.filter((p) => p.portfolio_id !== portfolio.portfolio_id),
-    ]);
-    setSelectedId(portfolio.portfolio_id);
-    setOnboarding(false);
+  async function loadPortfolios() {
+    setPortfolioState("loading");
+    try {
+      const portfolios = await listPortfolios();
+      setPortfolios(portfolios);
+      if (!portfolios.length) setPortfolioState("empty");
+      else {
+        setSelectedPortfolio(portfolios[0]);
+        setPortfolioState("ready");
+        void loadAnalysis(portfolios[0]);
+      }
+    } catch {
+      setPortfolioState("error");
+    }
+  }
+
+  function selectPortfolio(portfolio: Portfolio) {
+    setPortfolioMenuOpen(false);
+    if (portfolio.portfolio_id === selectedPortfolio?.portfolio_id) return;
+    setSelectedPortfolio(portfolio);
+    setActive(null);
+    setAnalysisError("");
+    setEdit(false);
+    setAnalyst(null);
+    setAiWorkflow(null);
+    setShowOnboarding(false);
+    void loadAnalysis(portfolio);
+  }
+
+  useEffect(() => {
+    void loadPortfolios();
+    return () => {
+      analysisRequest.current.invalidate();
+    };
+  }, []);
+
+  async function apply(
+    nextWeights: number[],
+    source: "edit" | "scenario" = "edit",
+    symbols = selectedPortfolio?.holdings.map(({ symbol }) => symbol) ?? [],
+  ) {
+    try {
+      if (!selectedPortfolio) return false;
+      const input = portfolioFromPercentages(
+        source === "edit"
+          ? selectedPortfolio.name
+          : `${selectedPortfolio.name} scenario`,
+        symbols,
+        nextWeights,
+      );
+      await verifyPortfolioHistory(input.holdings);
+      if (source === "edit") {
+        const updated = await updatePortfolio(
+          selectedPortfolio.portfolio_id,
+          input,
+        );
+        setSelectedPortfolio(updated);
+        setPortfolios((current) =>
+          current.map((portfolio) =>
+            portfolio.portfolio_id === updated.portfolio_id
+              ? updated
+              : portfolio,
+          ),
+        );
+        setActive(null);
+        setWeights(portfolioPercentages(updated));
+        setEdit(false);
+        setAnalyst(null);
+        setAiWorkflow(null);
+        if (!(await loadAnalysis(updated))) return false;
+      } else {
+        const created = await createPortfolio(input);
+        setPortfolios((current) => [created, ...current]);
+        if (!(await loadAnalysis(created))) return false;
+        setSelectedPortfolio(created);
+      }
+    } catch (error) {
+      setAnalysisError(
+        error instanceof Error ? error.message : "Could not save portfolio.",
+      );
+      return false;
+    }
+    setEdit(false);
+    setToast(
+      source === "scenario"
+        ? "Scenario saved as the active sample portfolio."
+        : "Portfolio updated.",
+    );
+    return true;
   }
 
   const [path, search = ""] = hash.replace(/^#/, "").split("?");
@@ -214,46 +206,73 @@ function Application({ onSignOut }: { onSignOut: () => Promise<void> }) {
     : "/";
   const query = new URLSearchParams(search);
   useEffect(() => {
-    document.title = `${route === "/" ? "Overview" : route === "/risk" ? "Risk & exposure" : route === "/research" ? "Research" : "What-if lab"} — PandaSet`;
+    document.title = `${route === "/" ? "Overview" : route === "/risk" ? "Risk & exposure" : route === "/research" ? "Research" : "Scenario lab"} — PandaSet`;
   }, [route]);
-  const analysisMismatch = Boolean(
-    savedAnalysis &&
-    selected &&
-    !analysisMatchesPortfolio(savedAnalysis, selected),
-  );
-  const visibleAnalysisError =
-    analysisError ||
-    (analysisMismatch
-      ? "The saved analysis uses a different allocation. Refresh it before starting a new scenario."
-      : "");
-  const analysis =
-    savedAnalysis &&
-    selected &&
-    !analysisMismatch &&
-    savedAnalysis.portfolio_id === selected.portfolio_id
-      ? asAnalysisResponse(savedAnalysis)
-      : null;
-  const weights = editablePercentages(
-    selected?.holdings.map(
-      (holding) => analysis?.weights[holding.symbol] ?? holding.weight,
-    ) ?? [],
-  );
-  const assets = selected ? assetsForPortfolio(selected, instruments) : [];
-  const asOf = analysis?.as_of
-    ? new Date(analysis.as_of).toLocaleDateString("en-US", {
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-        timeZone: "UTC",
-      })
-    : "Unavailable";
+
   const nav = [
     ["/", "Overview"],
     ["/risk", "Risk & exposure"],
     ["/research", "Research"],
     ["/what-if", "What-if lab"],
   ];
+  const asOf = active?.analysis.as_of
+    ? new Date(active.analysis.as_of).toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+        timeZone: "UTC",
+      })
+    : "Unavailable";
+  const workspaceHoldings = selectedPortfolio
+    ? workspaceAssets(selectedPortfolio)
+    : [];
+  const searchTickers = async (query: string) =>
+    assets
+      .filter((asset) =>
+        asset.symbol.toLowerCase().includes(query.toLowerCase()),
+      )
+      .map((asset) => ({ symbol: asset.symbol, name: asset.name }));
 
+  if (portfolioState !== "ready" || showOnboarding)
+    return (
+      <>
+        <button
+          className="text-button sign-out-button"
+          onClick={() => void onSignOut()}
+        >
+          Sign out
+        </button>
+        {showOnboarding && (
+          <button
+            className="text-button"
+            onClick={() => setShowOnboarding(false)}
+          >
+            Back to saved portfolios
+          </button>
+        )}
+        <PortfolioOnboarding
+          loadState={
+            showOnboarding || portfolioState === "ready"
+              ? "empty"
+              : portfolioState
+          }
+          hasExistingPortfolios={portfolios.length > 0}
+          onRetryLoad={() => void loadPortfolios()}
+          searchTickers={searchTickers}
+          createPortfolio={async (input, options) => {
+            await verifyPortfolioHistory(input.holdings, options.signal);
+            return createPortfolio(input, options.signal);
+          }}
+          onOpenPortfolio={(portfolio) => {
+            setSelectedPortfolio(portfolio);
+            setPortfolios((current) => [portfolio, ...current]);
+            setPortfolioState("ready");
+            setShowOnboarding(false);
+            void loadAnalysis(portfolio);
+          }}
+        />
+      </>
+    );
   return (
     <>
       <a
@@ -282,6 +301,15 @@ function Application({ onSignOut }: { onSignOut: () => Promise<void> }) {
             ))}
           </nav>
           <button
+            className="analyst-button"
+            onClick={() => setAnalyst("")}
+            disabled={!active}
+          >
+            <ChatBubbleLeftRight size={17} />
+            <span>Ask Panda</span>
+            <span className="key-hint">↗</span>
+          </button>
+          <button
             className="text-button sign-out-button"
             onClick={() => void onSignOut()}
           >
@@ -290,46 +318,54 @@ function Application({ onSignOut }: { onSignOut: () => Promise<void> }) {
         </div>
       </header>
       <div className="workspace-bar">
-        <div className="workspace-portfolio-controls">
-          {portfolios.length > 0 && (
-            <label className="portfolio-select-label">
-              Portfolio{" "}
-              <select
-                aria-label="Select portfolio"
-                value={selectedId}
-                onChange={(e) => {
-                  setSelectedId(e.target.value);
-                  setOnboarding(false);
-                }}
-                disabled={listState !== "ready" || analysisBusy}
-              >
-                {portfolios.map((p) => (
-                  <option key={p.portfolio_id} value={p.portfolio_id}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
-          {listState === "ready" && portfolios.length > 0 && (
-            <button className="text-button" onClick={() => setOnboarding(true)}>
-              New portfolio
-            </button>
-          )}
-          {selected && (
+        <div>
+          <div
+            className="portfolio-picker"
+            onKeyDown={(event) => {
+              if (event.key === "Escape") setPortfolioMenuOpen(false);
+            }}
+          >
             <button
-              className="text-button"
-              disabled={analysisBusy}
-              onClick={() => void loadAnalysis(selected.portfolio_id, true)}
+              className="portfolio-selector"
+              aria-expanded={portfolioMenuOpen}
+              aria-controls="saved-portfolios"
+              onClick={() => setPortfolioMenuOpen((open) => !open)}
             >
-              {analysisBusy
-                ? "Loading analysis…"
-                : analysis
-                  ? "Refresh analysis"
-                  : "Create analysis"}
+              <span className="portfolio-initial">
+                {selectedPortfolio?.name.slice(0, 1).toUpperCase() ?? "P"}
+              </span>
+              {selectedPortfolio?.name ?? "Choose portfolio"}
+              <ChevronDown size={14} />
             </button>
-          )}
-          {analysis && <span className="demo-badge">LIVE DATA</span>}
+            {portfolioMenuOpen && (
+              <div
+                id="saved-portfolios"
+                className="portfolio-menu"
+                aria-label="Saved portfolios"
+              >
+                {portfolios.map((portfolio) => (
+                  <button
+                    key={portfolio.portfolio_id}
+                    type="button"
+                    aria-current={
+                      portfolio.portfolio_id === selectedPortfolio?.portfolio_id
+                        ? "true"
+                        : undefined
+                    }
+                    onClick={() => selectPortfolio(portfolio)}
+                  >
+                    {portfolio.name}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <button className="demo-badge" onClick={() => setMethod(true)}>
+            {active?.analysis.data_mode === "live"
+              ? "LIVE DATA"
+              : "SAMPLE DATA"}
+            <Info size={12} />
+          </button>
         </div>
         <span className="as-of">
           As of {asOf}
@@ -337,124 +373,106 @@ function Application({ onSignOut }: { onSignOut: () => Promise<void> }) {
         </span>
       </div>
       <main id="main-content" className="main-content" tabIndex={-1}>
-        {listState === "loading" ? (
+        {analysisLoading && !active ? (
           <section className="api-state" role="status">
-            <strong>Loading your portfolios…</strong>
+            <strong>Loading portfolio analysis…</strong>
+            <p>
+              Connecting to the backend and calculating the sample portfolio.
+            </p>
           </section>
-        ) : listState === "error" ? (
+        ) : analysisError && !active ? (
           <section className="api-state" role="alert">
-            <strong>Portfolios are unavailable.</strong>
-            <p>{listError}</p>
+            <strong>Portfolio analysis is unavailable.</strong>
+            <p>{analysisError}</p>
+            <p>
+              The saved portfolio is still available. Try again, choose another
+              portfolio above, or create a replacement with supported sample
+              prices.
+            </p>
             <button
               className="button dark"
-              onClick={() => void loadPortfolios()}
-            >
-              Retry
-            </button>
-          </section>
-        ) : onboarding || portfolios.length === 0 ? (
-          <PortfolioOnboarding
-            key={onboarding ? "new" : "first"}
-            searchTickers={(q, options) => searchInstruments(q, options.signal)}
-            createPortfolio={(input, options) =>
-              createPortfolio(input, options.signal)
-            }
-            onOpenPortfolio={openPortfolio}
-            onCancel={
-              portfolios.length ? () => setOnboarding(false) : undefined
-            }
-          />
-        ) : route === "/what-if" && selected ? (
-          <ErrorBoundary>
-            <WhatIf
-              key={selected.portfolio_id}
-              portfolio={selected}
-              analysis={analysis}
-              analysisBusy={analysisBusy}
-              analysisError={visibleAnalysisError}
-              onRefreshAnalysis={() =>
-                void loadAnalysis(selected.portfolio_id, true)
+              onClick={() =>
+                selectedPortfolio && void loadAnalysis(selectedPortfolio)
               }
-              assets={assets}
-              weights={weights}
-              onApply={apply}
-              query={query}
-            />
-          </ErrorBoundary>
-        ) : analysisBusy && !analysis ? (
-          <section className="api-state" role="status">
-            <strong>Analyzing {selected?.name}…</strong>
-            <p>Retrieving adjusted price history for the saved allocation.</p>
-          </section>
-        ) : visibleAnalysisError && !analysis ? (
-          <section className="api-state" role="alert">
-            <strong>Analysis is unavailable.</strong>
-            <p>{visibleAnalysisError}</p>
-            <button
-              className="button dark"
-              onClick={() => selectedId && void loadAnalysis(selectedId, true)}
+              disabled={analysisLoading}
             >
               Retry analysis
             </button>
+            <button
+              className="button subtle"
+              onClick={() => setShowOnboarding(true)}
+            >
+              Create another portfolio
+            </button>
           </section>
-        ) : analysis && selected ? (
+        ) : active ? (
           <ErrorBoundary>
             {route === "/" ? (
               <Overview
-                analysis={analysis}
-                assets={assets}
+                holdings={workspaceHoldings}
+                analysis={active.analysis}
                 onEdit={() => setEdit(true)}
-                onAsk={() =>
-                  setToast(
-                    "Portfolio chat is available in a completed event run.",
-                  )
-                }
-                onBrief={() => setAiAction({ workflow: "analysis_briefing" })}
-                onMethod={() =>
-                  setToast(
-                    "This analysis uses saved adjusted-price history and the displayed data source.",
-                  )
-                }
+                onAsk={(q) => setAnalyst(q || "")}
+                onBrief={() => setAiWorkflow({ workflow: "analysis_briefing" })}
+                onMethod={() => setMethod(true)}
               />
             ) : route === "/risk" ? (
               <Risk
-                analysis={analysis}
-                assets={assets}
+                holdings={workspaceHoldings}
+                analysis={active.analysis}
                 onExplain={() =>
-                  setAiAction({
+                  setAiWorkflow({
                     workflow: "risk_explanation",
                     question:
-                      "Explain the main sources of risk in this saved portfolio analysis.",
+                      "Explain the main risk contributions and concentrations in this saved analysis.",
                   })
                 }
-                onMethod={() =>
-                  setToast(
-                    "Risk estimates use the saved adjusted-price history.",
-                  )
-                }
+                onMethod={() => setMethod(true)}
               />
             ) : route === "/research" ? (
               <Research
                 key={hash}
-                analysis={analysis}
-                assets={assets}
+                holdings={workspaceHoldings}
                 weights={weights}
-                onAsk={() =>
-                  setToast(
-                    "Portfolio chat is available in a completed event run.",
-                  )
-                }
-                onSummarizeSource={() =>
-                  setToast(
-                    "Issuer source summaries are unavailable for this saved analysis.",
-                  )
+                onAsk={(q) => setAnalyst(q || "")}
+                onSummarizeSource={(symbol) =>
+                  setAiWorkflow({ workflow: "research_summary", symbol })
                 }
                 query={query}
               />
-            ) : null}
+            ) : (
+              <WhatIf
+                key={hash}
+                holdings={workspaceHoldings}
+                analysis={active.analysis}
+                weights={weights}
+                onApply={(w, symbols) => apply(w, "scenario", symbols)}
+                onExplainScenario={(proposedWeights, symbols) =>
+                  setAiWorkflow({
+                    workflow: "scenario_explanation",
+                    proposedWeights,
+                    symbols,
+                  })
+                }
+                query={query}
+              />
+            )}
+            {analysisLoading && (
+              <p className="analysis-saving" role="status">
+                Saving the new allocation and calculating its analysis…
+              </p>
+            )}
             {analysisError && (
               <p className="analysis-saving error" role="alert">
-                {analysisError}
+                The active analysis is unchanged. {analysisError}{" "}
+                <button
+                  className="text-button"
+                  onClick={() =>
+                    selectedPortfolio && void loadAnalysis(selectedPortfolio)
+                  }
+                >
+                  Retry
+                </button>
               </p>
             )}
           </ErrorBoundary>
@@ -465,29 +483,37 @@ function Application({ onSignOut }: { onSignOut: () => Promise<void> }) {
           PandaSet<span className="footer-slash">/</span>A clearer view of what
           you own.
         </span>
-        <span>
-          Hypothetical analysis. No brokerage connection or trades.
+        <button className="text-button" onClick={() => setMethod(true)}>
+          Sample data & methodology
           <ArrowUpRight size={13} />
-        </span>
+        </button>
       </footer>
-      {edit && selected && (
+      {edit && active && (
         <EditPortfolio
-          assets={assets}
+          holdings={workspaceHoldings}
           weights={weights}
-          busy={analysisBusy}
+          searchTickers={searchTickers}
+          busy={analysisLoading}
           error={analysisError}
           onClose={() => setEdit(false)}
-          onSave={apply}
+          onSave={(w, symbols) => apply(w, "edit", symbols)}
         />
       )}
-      {aiAction && selected && analysis && (
+      {method && <MethodologyModal onClose={() => setMethod(false)} />}
+      {analyst !== null && active && (
+        <Analyst
+          portfolioId={active.portfolio.portfolio_id}
+          analysis={active.analysis}
+          question={analyst}
+          onClose={() => setAnalyst(null)}
+        />
+      )}
+      {aiWorkflow && active && (
         <AIWorkflowModal
-          key={`${analysis.analysis_id}-${aiAction.workflow}`}
-          action={aiAction}
-          portfolioId={selected.portfolio_id}
-          analysisId={analysis.analysis_id}
-          authenticated
-          onClose={() => setAiAction(null)}
+          action={aiWorkflow}
+          portfolioId={active.portfolio.portfolio_id}
+          analysisId={active.analysis.analysis_id}
+          onClose={() => setAiWorkflow(null)}
         />
       )}
       {toast && (
@@ -511,9 +537,95 @@ export default function App() {
   return (
     <ErrorBoundary>
       <AuthBoundary
-        renderDashboard={(signOut) => <Application onSignOut={signOut} />}
-        renderSignedOut={(client) => <AuthScreen client={client} />}
+        renderDashboard={(currentSession, signOut) => (
+          <AuthenticatedApplication
+            session={currentSession}
+            onSignOut={signOut}
+          />
+        )}
+        renderSignedOut={(client) => {
+          setApiAccessToken(null);
+          return <AuthScreen client={client} />;
+        }}
       />
     </ErrorBoundary>
+  );
+}
+
+function AuthenticatedApplication({
+  session,
+  onSignOut,
+}: {
+  session: Session;
+  onSignOut: () => Promise<void>;
+}) {
+  setApiAccessToken(session.access_token);
+  const [mode, setMode] = useState<"loading" | "standard" | "event" | "error">(
+    "loading",
+  );
+  const [modeError, setModeError] = useState("");
+  const [retry, setRetry] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+    setMode("loading");
+    setModeError("");
+    const selectMode = async () => {
+      try {
+        try {
+          await listEventPortfolios();
+          if (active) setMode("event");
+        } catch (cause) {
+          if (
+            cause instanceof EventLabError &&
+            [
+              "EVENT_LAB_NOT_INVITED",
+              "EVENT_LAB_UNAVAILABLE",
+              "AUTH_UNAVAILABLE",
+            ].includes(cause.code)
+          ) {
+            if (active) setMode("standard");
+          } else {
+            throw cause;
+          }
+        }
+      } catch (cause) {
+        if (!active) return;
+        setModeError(
+          cause instanceof Error
+            ? cause.message
+            : "The portfolio service is unavailable.",
+        );
+        setMode("error");
+      }
+    };
+    void selectMode();
+    return () => {
+      active = false;
+    };
+  }, [session.user.id, session.access_token, retry]);
+
+  if (mode === "loading")
+    return (
+      <main className="auth-loading" role="status">
+        Opening your workspace…
+      </main>
+    );
+  if (mode === "error")
+    return (
+      <main className="auth-loading" role="alert">
+        <p>{modeError}</p>
+        <button
+          className="button dark"
+          onClick={() => setRetry((value) => value + 1)}
+        >
+          Retry
+        </button>
+      </main>
+    );
+  return mode === "event" ? (
+    <EventApplication key={session.user.id} onSignOut={onSignOut} />
+  ) : (
+    <Application key={session.user.id} onSignOut={onSignOut} />
   );
 }

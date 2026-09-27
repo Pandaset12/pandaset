@@ -146,18 +146,41 @@ export function portfolioInput(
   };
 }
 
-function allocation(weights: number[]) {
-  return portfolioInput(weights).holdings;
+function allocation(weights: number[], symbols?: string[]) {
+  if (!symbols) return portfolioInput(weights).holdings;
+  if (
+    weights.length !== symbols.length ||
+    !weights.every(
+      (weight) => Number.isFinite(weight) && weight >= 0 && weight <= 100,
+    ) ||
+    Math.abs(weights.reduce((sum, weight) => sum + weight, 0) - 100) >= 0.000001
+  ) {
+    throw new Error("Allocations must total 100%.");
+  }
+  return symbols.flatMap((symbol, index) =>
+    weights[index] > 0 ? [{ symbol, weight: weights[index] / 100 }] : [],
+  );
 }
 
 const requestsInFlight = new Map<string, Promise<unknown>>();
+let accessToken: string | null = null;
+let tokenVersion = 0;
+
+export function setApiAccessToken(token: string | null) {
+  if (token !== accessToken) tokenVersion += 1;
+  accessToken = token;
+}
 
 function request<T>(url: string, init: RequestInit = {}): Promise<T> {
-  const key = `${init.method ?? "GET"} ${url} ${typeof init.body === "string" ? init.body : ""}`;
+  const token = accessToken;
+  const protectedRoute = url.startsWith("/api/v1/portfolios");
+  const headers = new Headers(init.headers);
+  if (protectedRoute && token) headers.set("Authorization", `Bearer ${token}`);
+  const key = `${protectedRoute ? tokenVersion : "public"} ${init.method ?? "GET"} ${url} ${typeof init.body === "string" ? init.body : ""}`;
   const existing = requestsInFlight.get(key);
   if (existing) return existing as Promise<T>;
   const pending = (async () => {
-    const response = await fetch(url, init);
+    const response = await fetch(url, { ...init, headers });
     const payload = await response.json().catch(() => null);
     if (!response.ok) {
       const error = payload?.error;
@@ -189,6 +212,36 @@ const post = <T>(url: string, body?: object) =>
     headers: body ? { "Content-Type": "application/json" } : undefined,
     body: body ? JSON.stringify(body) : undefined,
   });
+
+export function listPortfolios() {
+  return request<Portfolio[]>("/api/v1/portfolios");
+}
+
+export function createPortfolio(input: PortfolioInput, signal?: AbortSignal) {
+  return request<Portfolio>("/api/v1/portfolios", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+    signal,
+  });
+}
+
+export function updatePortfolio(portfolioId: string, input: PortfolioInput) {
+  return request<Portfolio>(
+    `/api/v1/portfolios/${encodeURIComponent(portfolioId)}`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export function analyzeExistingPortfolio(portfolio: Portfolio) {
+  return post<AnalysisResponse>(
+    `/api/v1/portfolios/${encodeURIComponent(portfolio.portfolio_id)}/analysis`,
+  ).then((analysis) => ({ portfolio, analysis }));
+}
 
 export async function analyzePortfolio(weights: number[]) {
   const portfolio = await post<Portfolio>(
@@ -225,10 +278,31 @@ export function getMarketHistory(symbols: string[], lookbackDays = 252) {
   return request<MarketHistoryResponse>(`/api/v1/market-history?${query}`);
 }
 
-export function comparePortfolio(portfolioId: string, weights: number[]) {
+export async function verifyPortfolioHistory(
+  holdings: Holding[],
+  signal?: AbortSignal,
+) {
+  for (const holding of holdings) {
+    if (signal?.aborted) throw new DOMException("Cancelled", "AbortError");
+    try {
+      await getMarketHistory([holding.symbol], 2);
+    } catch {
+      throw new Error(
+        `Could not verify sample price history for ${holding.symbol}. Try again or choose another ticker.`,
+      );
+    }
+  }
+  if (signal?.aborted) throw new DOMException("Cancelled", "AbortError");
+}
+
+export function comparePortfolio(
+  portfolioId: string,
+  weights: number[],
+  symbols?: string[],
+) {
   return post<WhatIfResponse>(
     `/api/v1/portfolios/${encodeURIComponent(portfolioId)}/what-if`,
-    { holdings: allocation(weights) },
+    { holdings: allocation(weights, symbols) },
   );
 }
 
@@ -268,13 +342,17 @@ export function requestScenarioExplanation(
   portfolioId: string,
   analysisId: string,
   weights: number[],
+  symbols?: string[],
 ) {
   return post<AIWorkflowResponse>(
     `/api/v1/portfolios/${encodeURIComponent(portfolioId)}/what-if/explanation`,
     {
       analysis_id: analysisId,
       proposed_weights: Object.fromEntries(
-        allocation(weights).map(({ symbol, weight }) => [symbol, weight]),
+        allocation(weights, symbols).map(({ symbol, weight }) => [
+          symbol,
+          weight,
+        ]),
       ),
       question:
         "Explain the trade-offs across the current, proposed, and change metrics.",

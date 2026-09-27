@@ -17,7 +17,8 @@ from pymongo import ASCENDING, DESCENDING, MongoClient, ReturnDocument
 from pymongo.database import Database
 from pymongo.errors import DuplicateKeyError
 
-from .schemas import AnalyticsSnapshot, Portfolio, PortfolioInput
+from .event_schemas import EventPortfolio, EventPortfolioInput
+from .schemas import AnalyticsSnapshot
 from .storage import SnapshotNotFound
 
 
@@ -289,7 +290,7 @@ class MongoPortfolioStore:
         if _now() - self._last_reconciliation >= timedelta(seconds=60):
             self.reconcile_quotas()
 
-    def _validate_portfolio_input(self, request: PortfolioInput) -> None:
+    def _validate_portfolio_input(self, request: EventPortfolioInput) -> None:
         if len(request.holdings) > 25:
             raise ValueError("A portfolio can have at most 25 holdings.")
         if self.supported_symbol is not None:
@@ -297,10 +298,10 @@ class MongoPortfolioStore:
             if unsupported:
                 raise ValueError(f"Unsupported symbols: {', '.join(unsupported)}")
 
-    def create_portfolio(self, owner_id: str, request: PortfolioInput) -> Portfolio:
+    def create_portfolio(self, owner_id: str, request: EventPortfolioInput) -> EventPortfolio:
         _owner(owner_id)
         self._validate_portfolio_input(request)
-        portfolio = Portfolio(
+        portfolio = EventPortfolio(
             **request.model_dump(), portfolio_id="portfolio_" + uuid4().hex, created_at=_now()
         )
         self.portfolios.insert_one({
@@ -312,20 +313,20 @@ class MongoPortfolioStore:
         })
         return portfolio
 
-    def list_portfolios(self, owner_id: str) -> list[Portfolio]:
+    def list_portfolios(self, owner_id: str) -> list[EventPortfolio]:
         cursor = self.portfolios.find(_visible(owner_id)).sort("created_at", DESCENDING)
-        return [Portfolio.model_validate(doc["payload"]) for doc in cursor]
+        return [EventPortfolio.model_validate(doc["payload"]) for doc in cursor]
 
-    def get_portfolio(self, owner_id: str, portfolio_id: str) -> Portfolio | None:
+    def get_portfolio(self, owner_id: str, portfolio_id: str) -> EventPortfolio | None:
         doc = self.portfolios.find_one(_visible(owner_id, portfolio_id))
-        return Portfolio.model_validate(doc["payload"]) if doc else None
+        return EventPortfolio.model_validate(doc["payload"]) if doc else None
 
-    def update_portfolio(self, owner_id: str, portfolio_id: str, request: PortfolioInput) -> Portfolio:
+    def update_portfolio(self, owner_id: str, portfolio_id: str, request: EventPortfolioInput) -> EventPortfolio:
         self._validate_portfolio_input(request)
         current = self.get_portfolio(owner_id, portfolio_id)
         if current is None:
             raise RecordNotFound(portfolio_id)
-        updated = Portfolio(**request.model_dump(), portfolio_id=portfolio_id, created_at=current.created_at)
+        updated = EventPortfolio(**request.model_dump(), portfolio_id=portfolio_id, created_at=current.created_at)
         result = self.portfolios.find_one_and_update(
             _visible(owner_id, portfolio_id),
             {"$set": {"payload": updated.model_dump(mode="json"), "updated_at": _now()}},
@@ -333,7 +334,7 @@ class MongoPortfolioStore:
         )
         if result is None:
             raise RecordNotFound(portfolio_id)
-        return Portfolio.model_validate(result["payload"])
+        return EventPortfolio.model_validate(result["payload"])
 
     def delete_portfolio(self, owner_id: str, portfolio_id: str) -> bool:
         # Tombstone first. Concurrent new child writes fail their parent lookup;

@@ -4,6 +4,7 @@ import sqlite3
 from uuid import uuid4
 
 from fastapi import Depends, FastAPI, HTTPException, Request
+from pymongo import MongoClient
 from fastapi.exception_handlers import http_exception_handler
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -19,21 +20,23 @@ from .instruments import SUPPORTED_INSTRUMENTS
 from .mongo_store import MongoPortfolioStore
 from .twelve_data import TwelveDataPriceProvider
 from .gemini_service import GeminiNotConfigured, GeminiUnavailable, generate_answer, metric_summary
-from .api_v1 import router as v1_router
+from .api_v1 import get_store, require_portfolio, router as v1_router
+from .auth import current_user_id
 from .observability import log_failure, request_id_context
 from .storage import PortfolioStore
+from .price_cache import RecentPriceCache
 from .providers import (
     IntegrationPending,
-    PortfolioNotFound,
-    ProviderUnavailable,
     QuantProvider,
     get_provider,
     demo_metrics,
 )
+from .market_data_errors import MarketHistoryNotFound, ProviderUnavailable, SymbolLimitExceeded
 from .schemas import (
     AnalystRequest,
     AnalystResponse,
     AnalyticsSnapshot,
+    Portfolio,
     WhatIfRequest,
 )
 
@@ -46,34 +49,77 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         store = await run_in_threadpool(PortfolioStore, settings.storage_path)
         await run_in_threadpool(store.seed_demo, demo_metrics())
         app.state.store = store
+        app.state.price_cache = RecentPriceCache()
         worker = None
-        if settings.event_lab_ready:
-            app.state.auth_verifier = SupabaseTokenVerifier(
-                settings.supabase_url, settings.supabase_publishable_key,
-                signing_mode=settings.supabase_signing_mode,
-            )
-            app.state.event_store = await run_in_threadpool(
-                MongoPortfolioStore, settings.mongo_uri.get_secret_value(),
-                settings.mongo_database, supported_symbol=lambda symbol: symbol in SUPPORTED_INSTRUMENTS,
-                max_active_jobs_per_owner=settings.event_max_active_jobs_per_user,
-                max_messages_per_run=settings.event_max_messages_per_run,
-            )
-            app.state.event_price_provider = TwelveDataPriceProvider(
-                settings.twelve_data_api_key.get_secret_value(),
-                cache_allowed=settings.twelve_data_cache_rights_confirmed,
-                cache_path=(Path(__file__).parent / "data" / "twelve_data_adjusted.sqlite3"
-                            if settings.twelve_data_cache_rights_confirmed else None),
-            )
-            worker = EventWorker(app.state.event_store, settings)
-            worker.start()
-            app.state.event_worker = worker
+        verifier = None
+        mongo_client = None
+        app.state.auth_verifier = None
+        app.state.event_store = None
+        app.state.event_price_provider = None
+        app.state.event_worker = None
         try:
+            if settings.event_lab_ready:
+                try:
+                    verifier = SupabaseTokenVerifier(
+                        settings.supabase_url, settings.supabase_publishable_key,
+                        signing_mode=settings.supabase_signing_mode,
+                    )
+                    mongo_client = await run_in_threadpool(
+                        MongoClient, settings.mongo_uri.get_secret_value(),
+                        serverSelectionTimeoutMS=5000, connectTimeoutMS=5000,
+                    )
+                    event_store = await run_in_threadpool(
+                        MongoPortfolioStore, "", settings.mongo_database,
+                        database=mongo_client[settings.mongo_database],
+                        supported_symbol=lambda symbol: symbol in SUPPORTED_INSTRUMENTS,
+                        max_active_jobs_per_owner=settings.event_max_active_jobs_per_user,
+                        max_messages_per_run=settings.event_max_messages_per_run,
+                    )
+                    event_price_provider = TwelveDataPriceProvider(
+                        settings.twelve_data_api_key.get_secret_value(),
+                        cache_allowed=settings.twelve_data_cache_rights_confirmed,
+                        cache_path=(Path(__file__).parent / "data" / "twelve_data_adjusted.sqlite3"
+                                    if settings.twelve_data_cache_rights_confirmed else None),
+                    )
+                    worker = EventWorker(event_store, settings)
+                    worker.start()
+                except Exception as exc:
+                    log_failure("EVENT_LAB_STARTUP_UNAVAILABLE", exc)
+                    if worker is not None:
+                        try:
+                            await worker.stop()
+                        except Exception as cleanup_exc:
+                            log_failure("EVENT_LAB_WORKER_CLEANUP_FAILED", cleanup_exc)
+                        worker = None
+                    if mongo_client is not None:
+                        try:
+                            mongo_client.close()
+                        except Exception as cleanup_exc:
+                            log_failure("EVENT_LAB_MONGO_CLEANUP_FAILED", cleanup_exc)
+                        mongo_client = None
+                    if verifier is not None:
+                        try:
+                            verifier.http_client.close()
+                        except Exception as cleanup_exc:
+                            log_failure("EVENT_LAB_AUTH_CLEANUP_FAILED", cleanup_exc)
+                        verifier = None
+                else:
+                    app.state.auth_verifier = verifier
+                    app.state.event_store = event_store
+                    app.state.event_price_provider = event_price_provider
+                    app.state.event_worker = worker
             yield
         finally:
-            if worker is not None:
-                await worker.stop()
-                app.state.event_store.client.close()
-                app.state.auth_verifier.http_client.close()
+            try:
+                if worker is not None:
+                    await worker.stop()
+            finally:
+                try:
+                    if mongo_client is not None:
+                        mongo_client.close()
+                finally:
+                    if verifier is not None:
+                        verifier.http_client.close()
 
     application = FastAPI(
         title="PortfolioLens API",
@@ -149,51 +195,68 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @application.get("/health")
     def health(request: Request, settings: Settings = Depends(get_settings)):
+        live_data = settings.market_data_provider == "twelvedata"
+        market_data_ready = not live_data or settings.has_twelve_data_key
+        event_store_ready = getattr(request.app.state, "event_store", None) is not None
         return {
-            "status": "ok",
+            "status": "ok" if market_data_ready and (not settings.event_lab_enabled or event_store_ready) else "degraded",
             "analyst_mode": settings.analyst_mode,
             "gemini_configured": settings.has_gemini_key,
-            "legacy_quant_integration": "quant_engine_sample_prices",
-            "legacy_data_mode": "demo",
+            "legacy_quant_integration": "quant_engine_twelvedata" if live_data else "quant_engine_sample_prices",
+            "legacy_data_mode": "live" if live_data else "demo",
             "legacy_storage_backend": "sqlite",
-            "quant_integration": "quant_engine_sample_prices",
-            "data_mode": "demo",
+            "quant_integration": "quant_engine_twelvedata" if live_data else "quant_engine_sample_prices",
+            "market_data_provider": settings.market_data_provider,
+            "market_data_ready": market_data_ready,
+            "data_mode": "live" if live_data else "demo",
             "storage_backend": "sqlite",
-            "event_data_mode": "live" if getattr(request.app.state, "event_store", None) is not None else "disabled",
-            "event_storage_backend": "mongo" if getattr(request.app.state, "event_store", None) is not None else "disabled",
-            "authentication_enabled": getattr(request.app.state, "auth_verifier", None) is not None,
+            "event_data_mode": "live" if event_store_ready else "unavailable" if settings.event_lab_enabled else "disabled",
+            "event_storage_backend": "mongo" if event_store_ready else "unavailable" if settings.event_lab_enabled else "disabled",
+            "authentication_enabled": settings.authentication_enabled,
+            "event_authentication_enabled": getattr(request.app.state, "auth_verifier", None) is not None,
             "event_lab_enabled": settings.event_lab_enabled,
-            "event_lab_ready": settings.event_lab_ready and getattr(request.app.state, "event_store", None) is not None,
-            "event_lab_public_ready": settings.event_lab_public_ready,
+            "event_lab_ready": settings.event_lab_ready and event_store_ready,
+            "event_lab_public_ready": settings.event_lab_public_ready and event_store_ready,
             "event_lab_probability_enabled": settings.event_lab_probability_enabled,
         }
 
-    def read_metrics(portfolio_id: str, provider: QuantProvider) -> AnalyticsSnapshot:
+    def read_metrics(portfolio: Portfolio, provider: QuantProvider) -> AnalyticsSnapshot:
         try:
-            return provider.get_analytics(portfolio_id)
+            return provider.analyze(portfolio)
+        except MarketHistoryNotFound as exc:
+            raise HTTPException(status_code=404, detail={
+                "code": "market_history_not_found", "message": "Market history is unavailable for one or more portfolio symbols."
+            }) from exc
+        except SymbolLimitExceeded as exc:
+            raise HTTPException(status_code=422, detail={
+                "code": "symbol_limit_exceeded", "message": str(exc)
+            }) from exc
         except ProviderUnavailable as exc:
             raise HTTPException(status_code=502, detail={
-                "code": "provider_unavailable", "message": "Sample price data is unavailable."
+                "code": "provider_unavailable", "message": "Market data is unavailable from the selected provider."
             }) from exc
-        except PortfolioNotFound:
-            raise HTTPException(
-                status_code=404,
-                detail={"code": "portfolio_not_found", "message": "Portfolio not found."},
-            )
+        except IntegrationPending as exc:
+            raise HTTPException(status_code=501, detail={
+                "code": "quant_integration_pending", "message": str(exc)
+            }) from exc
 
     @application.get(
         "/api/portfolios/{portfolio_id}/analytics", response_model=AnalyticsSnapshot, deprecated=True
     )
-    def analytics(portfolio_id: str, provider: QuantProvider = Depends(get_provider)):
-        return read_metrics(portfolio_id, provider)
+    def analytics(portfolio_id: str, provider: QuantProvider = Depends(get_provider),
+                  store: PortfolioStore = Depends(get_store), owner_id: str = Depends(current_user_id)):
+        return read_metrics(require_portfolio(store, portfolio_id, owner_id), provider)
 
     @application.post("/api/analyst", response_model=AnalystResponse, deprecated=True)
     async def analyst(
         request: AnalystRequest,
         settings: Settings = Depends(get_settings),
         provider: QuantProvider = Depends(get_provider),
+        store: PortfolioStore = Depends(get_store),
+        owner_id: str = Depends(current_user_id),
     ):
-        metrics = await run_in_threadpool(read_metrics, request.portfolio_id, provider)
+        portfolio = await run_in_threadpool(require_portfolio, store, request.portfolio_id, owner_id)
+        metrics = await run_in_threadpool(read_metrics, portfolio, provider)
         warnings = list(metrics.notes)
         if settings.analyst_mode == "demo":
             warnings.append("Offline demo response; Gemini and web tools were not called.")
@@ -222,13 +285,26 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
 
     @application.post("/api/what-if", deprecated=True)
-    def what_if(request: WhatIfRequest, provider: QuantProvider = Depends(get_provider)):
-        read_metrics(request.portfolio_id, provider)
+    def what_if(
+        request: WhatIfRequest,
+        provider: QuantProvider = Depends(get_provider),
+        store: PortfolioStore = Depends(get_store),
+        owner_id: str = Depends(current_user_id),
+    ):
+        portfolio = require_portfolio(store, request.portfolio_id, owner_id)
         try:
-            return provider.simulate(request)
+            return provider.simulate(request, portfolio)
+        except MarketHistoryNotFound as exc:
+            raise HTTPException(status_code=404, detail={
+                "code": "market_history_not_found", "message": "Market history is unavailable for one or more allocation symbols."
+            }) from exc
+        except SymbolLimitExceeded as exc:
+            raise HTTPException(status_code=422, detail={
+                "code": "symbol_limit_exceeded", "message": str(exc)
+            }) from exc
         except ProviderUnavailable as exc:
             raise HTTPException(status_code=502, detail={
-                "code": "provider_unavailable", "message": "Sample price data is unavailable."
+                "code": "provider_unavailable", "message": "Market data is unavailable from the selected provider."
             }) from exc
         except IntegrationPending as exc:
             raise HTTPException(

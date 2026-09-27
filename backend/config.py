@@ -31,8 +31,11 @@ class Settings(BaseSettings):
     event_lab_probability_enabled: bool = False
     event_lab_allowed_user_ids: str = ""
     supabase_url: str = ""
+    supabase_anon_key: SecretStr | None = None
     supabase_publishable_key: str = ""
     supabase_signing_mode: Literal["asymmetric", "legacy", "auto"] = "asymmetric"
+    market_data_provider: Literal["sample", "twelvedata"] = "sample"
+    market_data_timeout_seconds: float = Field(default=15, gt=0, le=60)
     mongo_uri: SecretStr | None = None
     mongo_database: str = "portfoliolens"
     twelve_data_api_key: SecretStr | None = None
@@ -81,6 +84,20 @@ class Settings(BaseSettings):
     @property
     def has_deepseek_key(self) -> bool:
         return bool(self.deepseek_api_key and self.deepseek_api_key.get_secret_value())
+
+    @property
+    def has_twelve_data_key(self) -> bool:
+        return bool(self.twelve_data_api_key and self.twelve_data_api_key.get_secret_value())
+
+    @property
+    def supabase_auth_api_key(self) -> str:
+        """Prefer an explicit legacy anon key; otherwise use the project publishable key."""
+        anon_key = self.supabase_anon_key.get_secret_value() if self.supabase_anon_key else ""
+        return anon_key.strip() or self.supabase_publishable_key.strip()
+
+    @property
+    def authentication_enabled(self) -> bool:
+        return bool(self.supabase_url and self.supabase_auth_api_key)
 
 
 @lru_cache

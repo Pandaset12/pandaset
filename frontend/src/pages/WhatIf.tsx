@@ -1,1708 +1,547 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ArrowRight,
   ArrowPath,
   Check,
+  Scale,
   InformationCircle as Info,
 } from "../components/icons";
-import { AssetMark, Modal, PageHeading } from "../components/UI";
+import type { Asset } from "../../../quant/data";
+import { pct, pp } from "../../../quant/analytics";
 import {
+  comparePortfolio,
   createRequestGuard,
-  type Portfolio,
   type AnalysisResponse,
+  type WhatIfResponse,
 } from "../api/portfolio";
-import type { PortfolioAsset } from "../types/portfolioAsset";
+import { AssetMark, PageHeading, SectionTitle, Modal } from "../components/UI";
+import { LineChart } from "../components/LineChart";
+import { parsePercentageDraft, workspaceAsset } from "../workspace/holdings";
 import {
-  cancelDraft,
-  cancelRun,
-  confirmDraft,
-  createDraft,
-  editablePercentages,
-  getDraft,
-  getSavedAnalysis,
-  getRun,
-  listDrafts,
-  listMessages,
-  listRuns,
-  listTemplates,
-  sendMessage,
-  validPercentAllocation,
-  type CaseGrid,
-  type ConfirmedShock,
-  type DraftProposal,
-  type EventTemplate,
-  type Evidence,
-  type RunMessage,
-  type ScenarioDraft,
-  type ScenarioRun,
-  type SavedAnalysis,
-} from "../api/eventLab";
+  PERCENT_SCALE,
+  parsePercentage,
+  isValidSymbol,
+  normalizeSymbol,
+} from "../components/onboarding/portfolioDraft";
 
-const cases = ["mild", "central", "severe"] as const;
-const horizons = ["1m", "3m"] as const;
-const factors = ["equity", "rates", "gold"] as const;
-const MAX_POLL_FAILURES = 3;
-const percentage = (value: number) => `${(value * 100).toFixed(1)}%`;
-const signed = (value: number) => `${value > 0 ? "+" : ""}${percentage(value)}`;
-const errorText = (cause: unknown) =>
-  cause instanceof Error ? cause.message : "The event service is unavailable.";
-
-function savedSituationTitle(
-  item: ScenarioDraft,
-  templates: EventTemplate[],
-): string {
-  const template = templates.find(
-    (option) => option.template_id === item.request?.template_id,
-  );
-  return (
-    item.request?.situation_snapshot?.title ??
-    template?.situations?.find(
-      (option) => option.situation_id === item.request?.situation_id,
-    )?.title ??
-    (template?.category === "custom"
-      ? "Your situation"
-      : (template?.title ?? "Saved situation"))
-  );
-}
-
-function proposedToConfirmed(
-  proposal: DraftProposal,
-): CaseGrid<ConfirmedShock> {
-  return Object.fromEntries(
-    cases.map((kind) => [
-      kind,
-      Object.fromEntries(
-        horizons.map((horizon) => {
-          const item = proposal.proposed_shocks[kind][horizon];
-          return [
-            horizon,
-            { factors: { ...item.factors }, issuers: { ...item.issuers } },
-          ];
-        }),
-      ),
-    ]),
-  ) as CaseGrid<ConfirmedShock>;
-}
-
-export function revisionReviewState(revision: ScenarioDraft) {
-  return {
-    draft: revision,
-    run: null,
-    shocks:
-      revision.status === "confirmed"
-        ? (revision.confirmed_shocks ?? null)
-        : revision.status === "ready" && revision.proposal?.proposed_shocks
-          ? proposedToConfirmed(revision.proposal)
-          : null,
-  };
-}
-
-export function draftAllocationFromSnapshot(
-  revision: ScenarioDraft,
-  snapshot: SavedAnalysis,
-) {
-  if (
-    !revision.request ||
-    revision.request.analysis_id !== snapshot.analysis_id ||
-    revision.request.portfolio_id !== snapshot.portfolio_id
-  )
-    return null;
-  const baseline = snapshot.metrics.weights;
-  const symbols = Object.keys(baseline);
-  const proposed = revision.request.proposed_weights ?? baseline;
-  if (
-    !symbols.length ||
-    Object.keys(proposed).length !== symbols.length ||
-    !symbols.every(
-      (symbol) =>
-        Number.isFinite(baseline[symbol]) &&
-        Number.isFinite(proposed[symbol]) &&
-        symbol in proposed,
-    )
-  )
-    return null;
-  return {
-    symbols,
-    current: symbols.map((symbol) => baseline[symbol] * 100),
-    proposed: symbols.map((symbol) => proposed[symbol] * 100),
-  };
-}
-
-function shocksValid(
-  shocks: CaseGrid<ConfirmedShock> | null,
-  symbols: Set<string>,
-) {
-  if (!shocks) return false;
-  return cases.every((kind) =>
-    horizons.every((horizon) => {
-      const shock = shocks[kind]?.[horizon];
-      return (
-        shock &&
-        factors.every(
-          (factor) =>
-            Number.isFinite(shock.factors[factor]) &&
-            Math.abs(shock.factors[factor]) <= 0.5,
-        ) &&
-        Object.keys(shock.factors).length === 3 &&
-        Object.entries(shock.issuers).every(
-          ([symbol, value]) =>
-            symbols.has(symbol) &&
-            Number.isFinite(value) &&
-            Math.abs(value) <= 3,
-        )
-      );
-    }),
-  );
-}
-
-export function contributionSymbols(
-  current: Record<string, number>,
-  proposed: Record<string, number>,
-): string[] {
-  return [...new Set([...Object.keys(current), ...Object.keys(proposed)])];
-}
-
-function sourceLink(evidence: Evidence) {
-  try {
-    const url = new URL(evidence.source_url ?? "");
-    return url.protocol === "https:" ? url.href : null;
-  } catch {
-    return null;
-  }
-}
+const MAX_COMBINED_SYMBOLS = 8;
 
 export default function WhatIf({
-  portfolio,
   analysis,
-  analysisBusy,
-  analysisError,
-  onRefreshAnalysis,
-  assets,
+  holdings,
   weights,
   onApply,
+  onExplainScenario,
   query,
 }: {
-  portfolio: Portfolio;
-  analysis: AnalysisResponse | null;
-  analysisBusy: boolean;
-  analysisError: string;
-  onRefreshAnalysis: () => void;
-  assets: PortfolioAsset[];
+  analysis: AnalysisResponse;
+  holdings: Asset[];
   weights: number[];
-  onApply: (weights: number[]) => Promise<boolean>;
+  onApply: (weights: number[], symbols: string[]) => Promise<boolean>;
+  onExplainScenario: (weights: number[], symbols: string[]) => void;
   query: URLSearchParams;
 }) {
-  const [allocation, setAllocation] = useState(() => {
+  const [scenarioAssets, setScenarioAssets] = useState(holdings);
+  const [newSymbol, setNewSymbol] = useState("");
+  const [draftText, setDraftText] = useState(() => {
     const next = [...weights];
-    const reduced = assets.findIndex(
+    const reduced = holdings.findIndex(
       (asset) => asset.symbol === query.get("reduce"),
     );
-    if (reduced >= 0 && assets.length > 1) {
-      const recipient = reduced === 0 ? 1 : 0;
+    if (reduced >= 0 && next.length > 1) {
       const amount = Math.min(10, next[reduced]);
       next[reduced] -= amount;
-      next[recipient] += amount;
+      next[reduced === 0 ? 1 : 0] += amount;
     }
-    return next;
+    return next.map(String);
   });
-  const [templates, setTemplates] = useState<EventTemplate[]>([]);
-  const [templatesBusy, setTemplatesBusy] = useState(true);
-  const [templateError, setTemplateError] = useState("");
-  const [templateId, setTemplateId] = useState("");
-  const [situationId, setSituationId] = useState("");
-  const [targetSymbol, setTargetSymbol] = useState("");
-  const [description, setDescription] = useState("");
-  const [draft, setDraft] = useState<ScenarioDraft | null>(null);
-  const [run, setRun] = useState<ScenarioRun | null>(null);
-  const [shocks, setShocks] = useState<CaseGrid<ConfirmedShock> | null>(null);
+  const [comparison, setComparison] = useState<{
+    weights: number[];
+    response: WhatIfResponse;
+  } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [applyConfirm, setApplyConfirm] = useState(false);
+  const [confirm, setConfirm] = useState(false);
   const [applying, setApplying] = useState(false);
-  const [messages, setMessages] = useState<RunMessage[]>([]);
-  const [messageText, setMessageText] = useState("");
-  const [chatBusy, setChatBusy] = useState(false);
-  const chatRequest = useRef(createRequestGuard());
-  const selectionGeneration = useRef(0);
-  const [draftAnalysis, setDraftAnalysis] = useState<SavedAnalysis | null>(
-    null,
+  const requestId = useRef(createRequestGuard());
+  useEffect(() => () => requestId.current.invalidate(), []);
+  const draft = draftText.map((text) => {
+    const units = parsePercentage(text, true);
+    return units === null ? Number.NaN : units / PERCENT_SCALE;
+  });
+  const total = draftText.reduce(
+    (sum, text) => sum + (parsePercentage(text, true) ?? 0) / PERCENT_SCALE,
+    0,
   );
-  const [draftAnalysisBusy, setDraftAnalysisBusy] = useState(false);
-  const [draftAnalysisError, setDraftAnalysisError] = useState("");
-  const [draftAnalysisRetry, setDraftAnalysisRetry] = useState(0);
-  const [draftPollFailures, setDraftPollFailures] = useState(0);
-  const [runPollFailures, setRunPollFailures] = useState(0);
-  const [savedRuns, setSavedRuns] = useState<ScenarioRun[]>([]);
-  const [savedDrafts, setSavedDrafts] = useState<ScenarioDraft[]>([]);
-  const [draftListBusy, setDraftListBusy] = useState(true);
-  const [draftListError, setDraftListError] = useState("");
-  const [runListBusy, setRunListBusy] = useState(true);
-  const [runListError, setRunListError] = useState("");
-  const pinnedAllocation =
-    draft && draftAnalysis
-      ? draftAllocationFromSnapshot(draft, draftAnalysis)
-      : null;
-  const editorAssets = draft
-    ? (pinnedAllocation?.symbols.map(
-        (symbol, index) =>
-          assets.find((asset) => asset.symbol === symbol) ?? {
-            symbol,
-            name: symbol,
-            short: symbol,
-            sector: null,
-            color: ["#39734f", "#38638a", "#a7473f"][index % 3],
-            description: null,
-            thesis: null,
-            watch: null,
-            source: null,
-          },
-      ) ?? [])
-    : assets;
-  const editorCurrent = draft ? (pinnedAllocation?.current ?? []) : weights;
-  const editorProposed = draft
-    ? (pinnedAllocation?.proposed ?? [])
-    : allocation;
-  const total = editorProposed.reduce((sum, weight) => sum + weight, 0);
-  const validAllocation =
-    allocation.length === assets.length && validPercentAllocation(allocation);
-  const validDisplayedAllocation = draft
-    ? Boolean(pinnedAllocation)
-    : validAllocation;
-  const changedAllocation = allocation.some(
-    (weight, index) => Math.abs(weight - weights[index]) > 0.000001,
-  );
-  const selectedTemplate = templates.find(
-    (item) => item.template_id === templateId,
-  );
-  const selectedSituation = selectedTemplate?.situations?.find(
-    (item) => item.situation_id === situationId,
-  );
-  const selectedTargetSymbol =
-    selectedTemplate?.category === "issuer"
-      ? targetSymbol || selectedTemplate.target_symbols?.[0] || ""
-      : "";
-  const scenarioReady =
-    Boolean(selectedSituation || description.trim()) &&
-    (selectedTemplate?.category !== "issuer" || Boolean(selectedTargetSymbol));
-  const draftTemplate = templates.find(
-    (item) => item.template_id === draft?.request?.template_id,
-  );
-  const draftSituation =
-    draft?.request?.situation_snapshot ??
-    draftTemplate?.situations?.find(
-      (item) => item.situation_id === draft?.request?.situation_id,
-    );
-  const proposal =
-    draft?.status === "ready" || draft?.status === "confirmed"
-      ? draft.proposal
-      : null;
-  const validShocks = shocksValid(
-    shocks,
-    new Set(
-      draft
-        ? (pinnedAllocation?.symbols ?? [])
-        : assets.map((asset) => asset.symbol),
-    ),
-  );
-
-  useEffect(() => {
-    const analysisId = draft?.request?.analysis_id;
-    if (!analysisId) {
-      setDraftAnalysis(null);
-      setDraftAnalysisError("");
-      setDraftAnalysisBusy(false);
-      return;
-    }
-    let cancelled = false;
-    setDraftAnalysis(null);
-    setDraftAnalysisBusy(true);
-    setDraftAnalysisError("");
-    void getSavedAnalysis(portfolio.portfolio_id, analysisId)
-      .then((saved) => {
-        if (!cancelled) setDraftAnalysis(saved);
-      })
-      .catch((cause) => {
-        if (!cancelled) setDraftAnalysisError(errorText(cause));
-      })
-      .finally(() => {
-        if (!cancelled) setDraftAnalysisBusy(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    portfolio.portfolio_id,
-    draft?.draft_id,
-    draft?.request?.analysis_id,
-    draftAnalysisRetry,
+  const symbols = scenarioAssets.map(({ symbol }) => symbol);
+  const combinedSymbols = new Set([
+    ...holdings.map(({ symbol }) => symbol),
+    ...symbols,
   ]);
+  const unionLimitReached = combinedSymbols.size >= MAX_COMBINED_SYMBOLS;
+  const valid = parsePercentageDraft(draftText) !== null;
+  const changed = draft.some((value, index) => value !== (weights[index] ?? 0));
+  const stale =
+    !!comparison &&
+    draft.some((value, index) => value !== comparison.weights[index]);
+  const available = comparison && !stale ? comparison.response : null;
+  const metric = (value: number | null | undefined) =>
+    value === null || value === undefined ? "Unavailable" : pct(value);
 
-  useEffect(() => {
-    let cancelled = false;
-    setSituationId("");
-    setTargetSymbol("");
-    setDescription("");
-    setTemplatesBusy(true);
-    setTemplateError("");
-    void listTemplates(portfolio.portfolio_id)
-      .then((found) => {
-        if (cancelled) return;
-        setTemplates(found);
-        setTemplateId((old) =>
-          found.some((item) => item.template_id === old)
-            ? old
-            : (found[0]?.template_id ?? ""),
-        );
-      })
-      .catch((cause) => {
-        if (!cancelled) setTemplateError(errorText(cause));
-      })
-      .finally(() => {
-        if (!cancelled) setTemplatesBusy(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [portfolio.portfolio_id]);
-
-  useEffect(() => {
-    let cancelled = false;
-    setRunListBusy(true);
-    setRunListError("");
-    void listRuns(portfolio.portfolio_id)
-      .then((found) => {
-        if (!cancelled) setSavedRuns(found);
-      })
-      .catch((cause) => {
-        if (!cancelled) setRunListError(errorText(cause));
-      })
-      .finally(() => {
-        if (!cancelled) setRunListBusy(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [portfolio.portfolio_id]);
-
-  useEffect(() => {
-    let cancelled = false;
-    setDraftListBusy(true);
-    setDraftListError("");
-    void listDrafts(portfolio.portfolio_id)
-      .then((found) => {
-        if (!cancelled) setSavedDrafts(found);
-      })
-      .catch((cause) => {
-        if (!cancelled) setDraftListError(errorText(cause));
-      })
-      .finally(() => {
-        if (!cancelled) setDraftListBusy(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [portfolio.portfolio_id]);
-
-  useEffect(() => {
-    if (
-      !draft ||
-      !["pending", "queued", "running"].includes(draft.status) ||
-      draftPollFailures >= MAX_POLL_FAILURES
-    )
-      return;
-    let cancelled = false;
-    const timer = window.setTimeout(() => {
-      void getDraft(draft.draft_id)
-        .then((next) => {
-          if (cancelled) return;
-          setDraftPollFailures(0);
-          setDraft(next);
-          setSavedDrafts((old) =>
-            old.map((item) => (item.draft_id === next.draft_id ? next : item)),
-          );
-          if (next.status === "ready" && next.proposal?.proposed_shocks)
-            setShocks(proposedToConfirmed(next.proposal));
-        })
-        .catch((cause) => {
-          if (!cancelled) {
-            setError(errorText(cause));
-            setDraftPollFailures((count) => count + 1);
-          }
-        });
-    }, 1500);
-    return () => {
-      cancelled = true;
-      window.clearTimeout(timer);
-    };
-  }, [draft, draftPollFailures]);
-
-  useEffect(() => {
-    if (
-      !run ||
-      !["pending", "queued", "running"].includes(run.status) ||
-      runPollFailures >= MAX_POLL_FAILURES
-    )
-      return;
-    let cancelled = false;
-    const timer = window.setTimeout(() => {
-      void getRun(run.run_id)
-        .then((next) => {
-          if (!cancelled) {
-            setRunPollFailures(0);
-            setRun(next);
-          }
-        })
-        .catch((cause) => {
-          if (!cancelled) {
-            setError(errorText(cause));
-            setRunPollFailures((count) => count + 1);
-          }
-        });
-    }, 1500);
-    return () => {
-      cancelled = true;
-      window.clearTimeout(timer);
-    };
-  }, [run, runPollFailures]);
-
-  useEffect(() => {
-    if (run?.status !== "completed") return;
-    let cancelled = false;
-    void listMessages(run.run_id)
-      .then((found) => {
-        if (!cancelled) setMessages(found);
-      })
-      .catch((cause) => {
-        if (!cancelled) setError(errorText(cause));
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [run?.run_id, run?.status]);
-
-  useEffect(() => {
-    if (!run || !["completed", "failed", "cancelled"].includes(run.status))
-      return;
-    void listRuns(portfolio.portfolio_id)
-      .then(setSavedRuns)
-      .catch(() => undefined);
-  }, [run?.run_id, run?.status, portfolio.portfolio_id]);
-
-  function updateShock(
-    kind: (typeof cases)[number],
-    horizon: (typeof horizons)[number],
-    group: "factors" | "issuers",
-    key: string,
-    text: string,
-  ) {
-    const value =
-      text === "" ? Number.NaN : Number(text) / (group === "factors" ? 100 : 1);
-    setShocks((previous) =>
-      previous
-        ? {
-            ...previous,
-            [kind]: {
-              ...previous[kind],
-              [horizon]: {
-                ...previous[kind][horizon],
-                [group]: { ...previous[kind][horizon][group], [key]: value },
-              },
-            },
-          }
-        : previous,
-    );
-  }
-
-  function openDraft(item: ScenarioDraft) {
-    if (busy) return;
-    selectionGeneration.current += 1;
-    chatRequest.current.invalidate();
-    setChatBusy(false);
-    setMessages([]);
-    const review = revisionReviewState(item);
-    setRun(review.run);
-    setDraft(review.draft);
-    setShocks(review.shocks);
-    setDraftPollFailures(0);
-    setTemplateId(item.request?.template_id ?? templateId);
-    setSituationId(item.request?.situation_id ?? "");
-    setTargetSymbol(item.request?.target_symbol ?? "");
-    setDescription(item.request?.description ?? item.request?.question ?? "");
-    setError("");
-  }
-
-  async function startDraft() {
-    if (!analysis || !templateId || !scenarioReady || !validAllocation || busy)
-      return;
-    selectionGeneration.current += 1;
-    setBusy(true);
-    setError("");
-    setRun(null);
-    chatRequest.current.invalidate();
-    setDraftPollFailures(0);
-    setRunPollFailures(0);
-    setDraft(null);
-    setShocks(null);
-    setMessages([]);
-    try {
-      const next = await createDraft(
-        {
-          portfolio_id: portfolio.portfolio_id,
-          analysis_id: analysis.analysis_id,
-          template_id: templateId,
-          ...(selectedSituation
-            ? { situation_id: selectedSituation.situation_id }
-            : {}),
-          ...(selectedTargetSymbol
-            ? { target_symbol: selectedTargetSymbol }
-            : {}),
-          ...(description.trim() ? { description: description.trim() } : {}),
-          ...(changedAllocation
-            ? {
-                proposed_weights: Object.fromEntries(
-                  assets.map((asset, index) => [
-                    asset.symbol,
-                    allocation[index] / 100,
-                  ]),
-                ),
-              }
-            : {}),
-        },
-        crypto.randomUUID(),
+  function preset(kind: "reduce" | "bonds" | "balanced") {
+    const next = [...weights];
+    if (kind === "reduce") {
+      const largestRisk = Object.entries(analysis.risk_contribution)
+        .filter(([, value]) => value !== null)
+        .sort((a, b) => (b[1] ?? 0) - (a[1] ?? 0))[0];
+      const index = scenarioAssets.findIndex(
+        (asset) => asset.symbol === largestRisk?.[0],
       );
-      setDraft(next);
-      setSavedDrafts((old) => [
-        next,
-        ...old.filter((item) => item.draft_id !== next.draft_id),
-      ]);
-    } catch (cause) {
-      setError(errorText(cause));
-    } finally {
-      setBusy(false);
+      if (index < 0) return;
+      const target = scenarioAssets.findIndex(
+        (_, candidate) => candidate !== index,
+      );
+      if (target < 0) return;
+      const amount = Math.min(10, next[index]);
+      next[index] -= amount;
+      next[target] += amount;
+    } else if (kind === "bonds") {
+      const bond = scenarioAssets.findIndex((asset) => asset.symbol === "TLT");
+      if (bond < 0) return;
+      const index = next.reduce(
+        (best, value, i) => (i !== bond && value > next[best] ? i : best),
+        0,
+      );
+      if (index === bond) return;
+      const amount = Math.min(15, next[index]);
+      next[index] -= amount;
+      next[bond] += amount;
+    } else {
+      const share = Math.floor((100 / next.length) * 1000000) / 1000000;
+      next.forEach((_, index) => {
+        next[index] =
+          index === next.length - 1 ? 100 - share * (next.length - 1) : share;
+      });
     }
+    setDraftText(next.map(String));
   }
 
-  async function confirm() {
-    const confirmed =
-      draft?.status === "confirmed" ? draft.confirmed_shocks : shocks;
-    if (!draft || draft.revision === null || !confirmed || !validShocks || busy)
-      return;
-    const targetDraftId = draft.draft_id;
-    const generation = selectionGeneration.current;
+  async function calculate() {
+    if (!valid || !changed || busy) return;
+    const id = requestId.current.begin();
     setBusy(true);
     setError("");
     try {
-      const next = await confirmDraft(targetDraftId, draft.revision, confirmed);
-      if (generation !== selectionGeneration.current) return;
-      setRunPollFailures(0);
-      setRun(next);
-      setDraft((current) =>
-        current?.draft_id === targetDraftId
-          ? { ...current, status: "confirmed", confirmed_shocks: confirmed }
-          : current,
+      const response = await comparePortfolio(
+        analysis.portfolio_id,
+        draft,
+        symbols,
       );
-      setSavedDrafts((old) =>
-        old.map((item) =>
-          item.draft_id === targetDraftId
-            ? { ...item, status: "confirmed", confirmed_shocks: confirmed }
-            : item,
-        ),
-      );
-    } catch (cause) {
-      if (generation !== selectionGeneration.current) return;
-      setError(errorText(cause));
-      void getDraft(targetDraftId)
-        .then((updated) => {
-          if (generation !== selectionGeneration.current) return;
-          setDraft(updated);
-          setSavedDrafts((old) =>
-            old.map((item) =>
-              item.draft_id === updated.draft_id ? updated : item,
-            ),
-          );
-          if (updated.status === "confirmed")
-            setShocks(updated.confirmed_shocks ?? null);
-        })
-        .catch(() => undefined);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function stopJob() {
-    setBusy(true);
-    setError("");
-    try {
-      if (run && ["pending", "queued", "running"].includes(run.status))
-        setRun(await cancelRun(run.run_id));
-      else if (draft) setDraft(await cancelDraft(draft.draft_id));
-    } catch (cause) {
-      setError(errorText(cause));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function submitMessage(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!run || run.status !== "completed" || !messageText.trim() || chatBusy)
-      return;
-    const request = chatRequest.current.begin();
-    const targetRun = run;
-    setChatBusy(true);
-    setError("");
-    try {
-      const sent = await sendMessage(targetRun.run_id, messageText.trim());
-      if (!chatRequest.current.isCurrent(request)) return;
-      setMessageText("");
-      if (sent.revision_draft_id) {
-        const revision = await getDraft(sent.revision_draft_id);
-        if (!chatRequest.current.isCurrent(request)) return;
-        setSavedRuns((old) =>
-          old.some((item) => item.run_id === targetRun.run_id)
-            ? old
-            : [targetRun, ...old],
+      if (requestId.current.isCurrent(id))
+        setComparison({ weights: [...draft], response });
+    } catch (reason) {
+      if (requestId.current.isCurrent(id))
+        setError(
+          reason instanceof Error
+            ? reason.message
+            : "The comparison service is unavailable.",
         );
-        selectionGeneration.current += 1;
-        const review = revisionReviewState(revision);
-        setRun(review.run);
-        setDraft(review.draft);
-        setSavedDrafts((old) => [
-          revision,
-          ...old.filter((item) => item.draft_id !== revision.draft_id),
-        ]);
-        setShocks(review.shocks);
-        setDraftPollFailures(0);
-        setTemplateId(revision.request?.template_id ?? templateId);
-        setSituationId(revision.request?.situation_id ?? "");
-        setTargetSymbol(revision.request?.target_symbol ?? "");
-        setDescription(
-          revision.request?.description ?? revision.request?.question ?? "",
-        );
-        setMessages([]);
-      } else {
-        const latest = await listMessages(targetRun.run_id);
-        if (chatRequest.current.isCurrent(request)) setMessages(latest);
-      }
-    } catch (cause) {
-      if (chatRequest.current.isCurrent(request)) setError(errorText(cause));
     } finally {
-      if (chatRequest.current.isCurrent(request)) setChatBusy(false);
+      if (requestId.current.isCurrent(id)) setBusy(false);
     }
   }
 
-  const displayFacts = proposal?.facts ?? run?.result?.facts ?? [];
-  const evidence = proposal?.evidence ?? run?.result?.evidence ?? [];
-  const results = run?.status === "completed" ? run.result : null;
-  const appliedWeights =
-    results?.proposed_weights &&
-    Object.keys(results.proposed_weights).length === assets.length &&
-    assets.every((asset) => asset.symbol in results.proposed_weights!)
-      ? editablePercentages(
-          assets.map((asset) => results.proposed_weights![asset.symbol]),
-        )
-      : null;
-  const canApply =
-    appliedWeights &&
-    appliedWeights.some(
-      (weight, index) => Math.abs(weight - weights[index]) > 0.000001,
-    );
+  const current = available?.current_analysis;
+  const proposed = available?.proposed_analysis;
+  const currentPath = current?.series?.portfolio_index;
+  const proposedPath = proposed?.series?.portfolio_index;
+  const comparedWeights = comparison?.weights ?? draft;
+  const chartReady =
+    !!currentPath &&
+    !!proposedPath &&
+    currentPath.length === proposedPath.length &&
+    currentPath.every((value): value is number => value !== null) &&
+    proposedPath.every((value): value is number => value !== null);
+
+  async function applyScenario() {
+    if (!comparison || stale) return;
+    setApplying(true);
+    if (await onApply(comparison.weights, symbols)) setConfirm(false);
+    setApplying(false);
+  }
 
   return (
     <>
       <PageHeading
-        title="What-if lab"
-        description="Explore a hypothetical event using your saved holdings and a dated analysis snapshot."
+        title="Scenario comparison"
+        description="Try a different allocation. Compare the backend’s historical estimates side by side."
       >
         <span className="scenario-badge">
           <span />
-          Hypothetical, not a forecast
+          Hypothetical portfolio
         </span>
       </PageHeading>
-      {!analysis && (
-        <div className="api-state" role={analysisError ? "alert" : "status"}>
-          <strong>
-            {analysisBusy
-              ? "Loading saved analysis…"
-              : "Analysis unavailable for new scenarios."}
-          </strong>
-          <p>
-            {analysisError ||
-              "Saved runs and chat remain available below. Create an analysis to research a new event."}
-          </p>
-          <button
-            className="button subtle"
-            disabled={analysisBusy}
-            onClick={onRefreshAnalysis}
-          >
-            Create analysis
-          </button>
-        </div>
-      )}
-      <div className="event-lab-grid">
-        <section className="event-panel" aria-labelledby="allocation-title">
-          <div className="eyebrow">01 / PORTFOLIO</div>
-          <h2 id="allocation-title">Compare allocations</h2>
-          <p>
-            Adjust your saved holdings to compare the same event against a
-            proposed allocation. Changes stay in this draft until you apply
-            them.
-          </p>
-          <div className="event-allocation-head">
+      <div className="scenario-presets">
+        <span>START WITH A QUESTION</span>
+        <button
+          disabled={
+            busy ||
+            scenarioAssets.length < 2 ||
+            !Object.values(analysis.risk_contribution).some(
+              (value) => value !== null,
+            )
+          }
+          onClick={() => preset("reduce")}
+        >
+          Less single-stock risk
+          <ArrowRight size={14} />
+        </button>
+        <button
+          disabled={
+            busy ||
+            !scenarioAssets.some((asset) => asset.symbol === "TLT") ||
+            scenarioAssets.length < 2
+          }
+          onClick={() => preset("bonds")}
+        >
+          More Treasury exposure
+          <ArrowRight size={14} />
+        </button>
+        <button disabled={busy} onClick={() => preset("balanced")}>
+          A more balanced mix
+          <ArrowRight size={14} />
+        </button>
+      </div>
+      <div className="scenario-workspace">
+        <section className="scenario-editor">
+          <SectionTitle eyebrow="01 / ADJUST" title="Build your scenario">
+            <button
+              className="text-button"
+              aria-label="Reset scenario"
+              disabled={busy}
+              onClick={() => {
+                setScenarioAssets(holdings);
+                setDraftText(weights.map(String));
+                setComparison(null);
+              }}
+            >
+              <ArrowPath size={16} />
+              Reset
+            </button>
+          </SectionTitle>
+          <div className="editor-table-head">
             <span>Holding</span>
             <span>Current</span>
             <span>Proposed</span>
           </div>
-          {draft && !pinnedAllocation && (
-            <div
-              className="api-state"
-              role={draftAnalysisError ? "alert" : "status"}
-            >
-              <p>
-                {draftAnalysisError ||
-                  (draftAnalysisBusy || !draft.request
-                    ? "Loading the saved allocation for this draft…"
-                    : "The saved allocation for this draft could not be reconciled.")}
-              </p>
-              {draftAnalysisError && (
-                <button
-                  className="button subtle"
-                  onClick={() => setDraftAnalysisRetry((count) => count + 1)}
-                >
-                  Retry saved allocation
-                </button>
-              )}
-            </div>
-          )}
-          {editorAssets.map((asset, index) => (
-            <div className="event-allocation-row" key={asset.symbol}>
-              <span className="event-holding">
-                <AssetMark asset={asset} small />
-                <strong>{asset.symbol}</strong>
-              </span>
-              <span>{editorCurrent[index].toFixed(2)}%</span>
-              <label>
-                <span className="sr-only">
-                  {asset.symbol} proposed allocation
-                </span>
-                <input
-                  type="number"
-                  min="0"
-                  max="100"
-                  step="0.000001"
-                  value={editorProposed[index]}
-                  disabled={Boolean(draft) || busy}
-                  aria-invalid={
-                    !Number.isFinite(editorProposed[index]) ||
-                    editorProposed[index] < 0 ||
-                    editorProposed[index] > 100
-                  }
-                  onChange={(event) =>
-                    setAllocation((old) =>
-                      old.map((value, i) =>
-                        i === index ? Number(event.target.value) : value,
-                      ),
-                    )
-                  }
-                />
-                <span>%</span>
-              </label>
-            </div>
-          ))}
-          {(!draft || pinnedAllocation) && (
-            <div
-              className={`allocation-total ${validDisplayedAllocation ? "valid" : "invalid"}`}
-              aria-live="polite"
-            >
-              <span>Total allocation</span>
-              <strong>{total.toFixed(2)}%</strong>
-            </div>
-          )}
-          {!draft && !validAllocation && (
-            <p className="field-error" role="alert">
-              Allocations must total 100%, with each holding between 0% and
-              100%.
-            </p>
-          )}
-          <button
-            className="text-button"
-            disabled={Boolean(draft) || busy}
-            onClick={() => setAllocation([...weights])}
-          >
-            Reset allocation
-          </button>
-          {draft && (
-            <p className="event-note">
-              This draft is pinned to the allocation shown above. Start a new
-              draft to use other weights.
-            </p>
-          )}
-        </section>
-
-        <section className="event-panel" aria-labelledby="event-title">
-          <div className="eyebrow">02 / EVENT</div>
-          <h2 id="event-title">Set up your situation</h2>
-          <p>
-            Choose a starting point, then add any details you want the research
-            and scenario proposal to consider.
-          </p>
-          {templatesBusy ? (
-            <p role="status">Loading curated events…</p>
-          ) : templateError ? (
-            <div className="api-state" role="alert">
-              <p>{templateError}</p>
-              <button
-                className="button subtle"
-                onClick={() => {
-                  setTemplatesBusy(true);
-                  void listTemplates(portfolio.portfolio_id)
-                    .then((found) => {
-                      setTemplates(found);
-                      setTemplateId(found[0]?.template_id ?? "");
-                      setSituationId("");
-                      setTargetSymbol("");
-                      setTemplateError("");
-                    })
-                    .catch((cause) => setTemplateError(errorText(cause)))
-                    .finally(() => setTemplatesBusy(false));
-                }}
-              >
-                Retry events
-              </button>
-            </div>
-          ) : templates.length === 0 ? (
-            <p>No curated events are available for these holdings.</p>
-          ) : (
-            <div className="event-template-picker">
-              <label htmlFor="event-template-select">Event area</label>
-              <select
-                id="event-template-select"
-                value={templateId}
-                disabled={Boolean(draft) || busy}
-                onChange={(event) => {
-                  setTemplateId(event.target.value);
-                  setSituationId("");
-                  setTargetSymbol("");
-                  setDescription("");
-                }}
-              >
-                {templates.map((item) => (
-                  <option key={item.template_id} value={item.template_id}>
-                    {item.title}
-                  </option>
-                ))}
-              </select>
-              {selectedTemplate && <p>{selectedTemplate.description}</p>}
-            </div>
-          )}
-          {selectedTemplate?.category === "issuer" && (
-            <div className="event-target-picker">
-              <label htmlFor="event-target-select">
-                Stock in this portfolio
-              </label>
-              <select
-                id="event-target-select"
-                value={selectedTargetSymbol}
-                disabled={Boolean(draft) || busy}
-                onChange={(event) => setTargetSymbol(event.target.value)}
-              >
-                {(selectedTemplate.target_symbols ?? []).map((symbol) => (
-                  <option key={symbol} value={symbol}>
-                    {symbol} ·{" "}
-                    {assets.find((asset) => asset.symbol === symbol)?.name ??
-                      symbol}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-          {selectedTemplate && selectedTemplate.category !== "custom" && (
-            <fieldset
-              className="event-situation-group"
-              disabled={Boolean(draft) || busy}
-            >
-              <legend>Suggested situations</legend>
-              <p>
-                Hypothetical starting points. Choose one or describe your own.
-              </p>
-              <div className="event-situation-list">
-                {(selectedTemplate.situations ?? []).map((item) => (
-                  <label
-                    key={item.situation_id}
-                    className={
-                      situationId === item.situation_id ? "selected" : ""
-                    }
-                  >
-                    <input
-                      type="radio"
-                      name="event-situation"
-                      value={item.situation_id}
-                      checked={situationId === item.situation_id}
-                      onChange={() => setSituationId(item.situation_id)}
-                    />
-                    <span>
-                      <strong>{item.title}</strong>
-                      <small>{item.description}</small>
-                    </span>
-                  </label>
-                ))}
-                <label className={!situationId ? "selected" : ""}>
+          <div className="allocation-editor">
+            {scenarioAssets.map((asset, index) => (
+              <div className="editor-row" key={asset.symbol}>
+                <div className="editor-asset">
+                  <AssetMark asset={asset} small />
+                  <strong>{asset.symbol}</strong>
+                </div>
+                <span className="current-weight">{weights[index] ?? 0}%</span>
+                <div className="weight-input">
                   <input
-                    type="radio"
-                    name="event-situation"
-                    value=""
-                    checked={!situationId}
-                    onChange={() => setSituationId("")}
+                    type="text"
+                    inputMode="decimal"
+                    aria-label={`${asset.symbol} proposed allocation`}
+                    aria-invalid={
+                      parsePercentage(draftText[index], true) === null
+                    }
+                    value={draftText[index]}
+                    disabled={busy}
+                    onChange={(event) =>
+                      setDraftText(
+                        draftText.map((value, i) =>
+                          i === index ? event.target.value : value,
+                        ),
+                      )
+                    }
                   />
-                  <span>
-                    <strong>Describe my own</strong>
-                    <small>Write another situation for this event area.</small>
-                  </span>
-                </label>
+                  <span>%</span>
+                </div>
               </div>
-            </fieldset>
-          )}
-          <label className="event-question" htmlFor="event-description">
-            {selectedSituation
-              ? "Add your details (optional)"
-              : "Describe what could happen"}
-            <textarea
-              id="event-description"
-              value={description}
-              maxLength={700}
-              rows={4}
-              disabled={Boolean(draft) || busy}
-              aria-required={!selectedSituation}
-              aria-describedby="event-description-help"
-              placeholder={
-                selectedSituation
-                  ? "For example, which holdings or timing matter to you?"
-                  : "Describe the event, timing, and holdings you care about."
-              }
-              onChange={(event) => setDescription(event.target.value)}
-            />
-          </label>
-          <p id="event-description-help" className="event-description-help">
-            {scenarioReady
-              ? "You will review and confirm any proposed shocks before a calculation runs."
-              : selectedTemplate?.category === "custom"
-                ? "Describe your situation to continue."
-                : "Choose a suggested situation or write your own to continue."}
-            <span>{description.length}/700</span>
-          </p>
-          <button
-            className="button dark full"
-            disabled={
-              !analysis ||
-              !selectedTemplate ||
-              !scenarioReady ||
-              !validAllocation ||
-              busy ||
-              Boolean(draft)
-            }
-            onClick={() => void startDraft()}
-          >
-            {busy ? "Starting…" : "Research this event"}
-            <ArrowRight size={16} />
-          </button>
-        </section>
-      </div>
-
-      <section
-        className="event-saved-runs"
-        aria-labelledby="saved-drafts-title"
-      >
-        <div>
-          <div className="eyebrow">SAVED WORK</div>
-          <h2 id="saved-drafts-title">Drafts</h2>
-        </div>
-        {draftListBusy ? (
-          <p role="status">Loading saved drafts…</p>
-        ) : draftListError ? (
-          <p role="alert">{draftListError}</p>
-        ) : savedDrafts.length === 0 ? (
-          <p>No saved drafts yet.</p>
-        ) : (
-          <div className="event-run-list">
-            {savedDrafts
-              .filter((item) =>
-                [
-                  "pending",
-                  "queued",
-                  "running",
-                  "ready",
-                  "failed",
-                  "cancelled",
-                  "confirmed",
-                ].includes(item.status),
-              )
-              .map((item) => (
-                <button
-                  key={item.draft_id}
-                  className={
-                    draft?.draft_id === item.draft_id ? "selected" : ""
-                  }
-                  disabled={chatBusy || busy}
-                  onClick={() => openDraft(item)}
-                >
-                  <strong>{savedSituationTitle(item, templates)}</strong>
-                  <small>
-                    {item.status} ·{" "}
-                    {item.created_at
-                      ? new Date(item.created_at).toLocaleString()
-                      : item.draft_id}
-                  </small>
-                </button>
-              ))}
-          </div>
-        )}
-        {draft && (
-          <button
-            className="text-button"
-            disabled={busy || chatBusy}
-            onClick={() => {
-              selectionGeneration.current += 1;
-              setDraft(null);
-              setShocks(null);
-              setAllocation([...weights]);
-            }}
-          >
-            Close draft view
-          </button>
-        )}
-      </section>
-
-      <section className="event-saved-runs" aria-labelledby="saved-runs-title">
-        <div>
-          <div className="eyebrow">SAVED SCENARIOS</div>
-          <h2 id="saved-runs-title">Past runs</h2>
-        </div>
-        {runListBusy ? (
-          <p role="status">Loading saved runs…</p>
-        ) : runListError ? (
-          <p role="alert">{runListError}</p>
-        ) : savedRuns.length === 0 ? (
-          <p>No saved runs yet.</p>
-        ) : (
-          <div className="event-run-list">
-            {savedRuns.map((item) => (
-              <button
-                key={item.run_id}
-                className={run?.run_id === item.run_id ? "selected" : ""}
-                disabled={chatBusy || busy}
-                onClick={() => {
-                  if (busy) return;
-                  selectionGeneration.current += 1;
-                  chatRequest.current.invalidate();
-                  setChatBusy(false);
-                  setMessages([]);
-                  setDraft(null);
-                  setShocks(null);
-                  setRunPollFailures(0);
-                  setRun(item);
-                  setError("");
-                }}
-              >
-                <strong>
-                  {item.status === "completed"
-                    ? "Completed event run"
-                    : `Run ${item.status}`}
-                </strong>
-                <small>
-                  {item.created_at
-                    ? new Date(item.created_at).toLocaleString()
-                    : item.run_id}
-                </small>
-              </button>
             ))}
           </div>
-        )}
-      </section>
-
-      {draft && (
-        <section className="event-stage" aria-labelledby="draft-title">
-          <div className="event-stage-heading">
-            <div>
-              <div className="eyebrow">03 / RESEARCH & REVIEW</div>
-              <h2 id="draft-title">Review proposed assumptions</h2>
-            </div>
-            <span className="label-chip" role="status">
-              Draft {draft.status}
-            </span>
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              const symbol = normalizeSymbol(newSymbol);
+              if (
+                !isValidSymbol(symbol) ||
+                symbols.includes(symbol) ||
+                (unionLimitReached && !combinedSymbols.has(symbol))
+              )
+                return;
+              setScenarioAssets((current) => [
+                ...current,
+                workspaceAsset(symbol),
+              ]);
+              setDraftText((current) => [...current, "0"]);
+              setComparison(null);
+              setNewSymbol("");
+            }}
+          >
+            <label htmlFor="scenario-add-symbol">
+              Add a ticker to this scenario
+            </label>
+            <input
+              id="scenario-add-symbol"
+              value={newSymbol}
+              onChange={(event) => setNewSymbol(event.target.value)}
+              aria-label="Ticker to add"
+            />
+            <button
+              type="submit"
+              className="text-button"
+              disabled={unionLimitReached}
+            >
+              Add holding
+            </button>
+          </form>
+          {unionLimitReached && (
+            <p className="small-text muted" role="status">
+              What-if supports at most eight distinct symbols across the saved
+              portfolio and proposed allocation.
+            </p>
+          )}
+          <div
+            className={`allocation-total ${valid ? "valid" : "invalid"}`}
+            aria-live="polite"
+          >
+            <span>Total allocation</span>
+            <strong>{Number(total.toFixed(6))}%</strong>
           </div>
-          {draft.request && (
-            <div className="event-situation-summary">
-              <span>Selected situation</span>
-              <strong>
-                {draftSituation?.title ??
-                  (draft.request.description || draft.request.question
-                    ? "Your own situation"
-                    : (draftTemplate?.title ?? "Event"))}
-              </strong>
-              {draft.request.target_symbol && (
-                <p>Target stock: {draft.request.target_symbol}</p>
-              )}
-              {draftSituation && <p>{draftSituation.description}</p>}
-              {(draft.request.description || draft.request.question) && (
-                <p>{draft.request.description ?? draft.request.question}</p>
-              )}
-            </div>
+          {!valid && (
+            <p className="field-error" role="alert">
+              {draftText.some((value) => parsePercentage(value, true) === null)
+                ? "Each allocation must be between 0% and 100%."
+                : `${total < 100 ? "Allocate" : "Remove"} ${Math.abs(100 - total).toFixed(1)}% to reach 100%.`}
+            </p>
           )}
-          {["pending", "queued", "running"].includes(draft.status) && (
-            <div className="api-state" role="status">
-              <ArrowPath className="spin" size={18} />
-              <p>
-                Researching evidence and preparing six hypothetical cases. This
-                may take a moment.
-              </p>
-              <button
-                className="button subtle"
-                disabled={busy}
-                onClick={() => void stopJob()}
-              >
-                Cancel draft
-              </button>
-              {draftPollFailures >= MAX_POLL_FAILURES && (
-                <button
-                  className="button subtle"
-                  onClick={() => {
-                    setError("");
-                    setDraftPollFailures(0);
-                  }}
-                >
-                  Retry draft status
-                </button>
-              )}
-            </div>
-          )}
-          {draft.status === "failed" && (
+          <button
+            className="button dark full"
+            onClick={() => void calculate()}
+            disabled={!valid || !changed || busy}
+          >
+            {busy ? (
+              <>
+                <ArrowPath size={16} className="spin" />
+                Comparing…
+              </>
+            ) : (
+              <>
+                Compare portfolios
+                <ArrowRight size={17} />
+              </>
+            )}
+          </button>
+          {error && (
             <div className="api-state" role="alert">
-              <p>{draft.last_error || "The draft could not be prepared."}</p>
+              <p>{error}</p>
               <button
                 className="button subtle"
-                onClick={() => {
-                  setDraft(null);
-                  setShocks(null);
-                }}
+                onClick={() => void calculate()}
+                disabled={busy || !valid}
               >
-                Start another draft
+                Retry comparison
               </button>
             </div>
           )}
-          {draft.status === "cancelled" && (
-            <div className="api-state">
-              <p>Draft cancelled.</p>
-              <button
-                className="button subtle"
-                onClick={() => {
-                  setDraft(null);
-                  setShocks(null);
-                }}
-              >
-                Start another draft
-              </button>
-            </div>
-          )}
-          {proposal && (
-            <>
-              <EvidenceSection
-                facts={displayFacts}
-                evidence={evidence}
-                missing={proposal.missing_evidence ?? []}
-              />
-              <div className="event-assumptions">
-                <h3>
-                  {draft.status === "confirmed"
-                    ? "Confirmed shocks"
-                    : "Proposed shocks"}
-                </h3>
-                <p>
-                  These numbers are hypothetical assumptions. Factor changes are
-                  cumulative returns; issuer changes are multiples of residual
-                  volatility. Review every case and horizon before confirming.
-                </p>
-                {draft.status === "confirmed" && !run && (
-                  <p role="status">
-                    These assumptions were confirmed. Resume the saved
-                    calculation to see its result.
-                  </p>
-                )}
-                <div className="event-shock-grid">
-                  {cases.map((kind) =>
-                    horizons.map((horizon) => {
-                      const proposed = proposal.proposed_shocks[kind][horizon];
-                      const current = shocks?.[kind]?.[horizon];
-                      return (
-                        <fieldset
-                          key={`${kind}-${horizon}`}
-                          className="event-shock-cell"
-                        >
-                          <legend>
-                            {kind[0].toUpperCase() + kind.slice(1)} ·{" "}
-                            {horizon === "1m" ? "1 month" : "3 months"}
-                          </legend>
-                          <p>{proposed.rationale}</p>
-                          <small>
-                            Evidence: {proposed.evidence_ids.join(", ")}
-                          </small>
-                          <div className="event-shock-fields">
-                            {factors.map((factor) => (
-                              <label key={factor}>
-                                {factor}{" "}
-                                <span>
-                                  <input
-                                    type="number"
-                                    step="0.1"
-                                    min="-50"
-                                    max="50"
-                                    value={
-                                      Number.isNaN(current?.factors[factor])
-                                        ? ""
-                                        : (current?.factors[factor] ?? 0) * 100
-                                    }
-                                    aria-label={`${kind} ${horizon} ${factor} factor shock, percent`}
-                                    disabled={
-                                      Boolean(run) ||
-                                      busy ||
-                                      draft.status === "confirmed"
-                                    }
-                                    onChange={(event) =>
-                                      updateShock(
-                                        kind,
-                                        horizon,
-                                        "factors",
-                                        factor,
-                                        event.target.value,
-                                      )
-                                    }
-                                  />
-                                  %
-                                </span>
-                              </label>
-                            ))}
-                            {Object.keys(proposed.issuers).map((symbol) => (
-                              <label key={symbol}>
-                                {symbol} issuer{" "}
-                                <span>
-                                  <input
-                                    type="number"
-                                    step="0.1"
-                                    min="-3"
-                                    max="3"
-                                    value={
-                                      Number.isNaN(current?.issuers[symbol])
-                                        ? ""
-                                        : (current?.issuers[symbol] ?? 0)
-                                    }
-                                    aria-label={`${kind} ${horizon} ${symbol} issuer shock, residual sigma multiples`}
-                                    disabled={
-                                      Boolean(run) ||
-                                      busy ||
-                                      draft.status === "confirmed"
-                                    }
-                                    onChange={(event) =>
-                                      updateShock(
-                                        kind,
-                                        horizon,
-                                        "issuers",
-                                        symbol,
-                                        event.target.value,
-                                      )
-                                    }
-                                  />
-                                  × σ
-                                </span>
-                              </label>
-                            ))}
-                          </div>
-                        </fieldset>
-                      );
-                    }),
-                  )}
-                </div>
-                {pinnedAllocation && !validShocks && (
-                  <p className="field-error" role="alert">
-                    Review all six cases. Factor shocks must be within ±50%, and
-                    issuer shocks within ±3 residual standard deviations.
-                  </p>
-                )}
-                {!run && (
-                  <button
-                    className="button dark"
-                    disabled={!validShocks || busy}
-                    onClick={() => void confirm()}
-                  >
-                    {busy
-                      ? "Confirming…"
-                      : draft.status === "confirmed"
-                        ? "Resume confirmed run"
-                        : "Confirm all assumptions and calculate"}
-                    <Check size={16} />
-                  </button>
-                )}
-              </div>
-            </>
-          )}
+          <p className="editor-note">
+            {!changed
+              ? "Change an allocation to request a backend comparison."
+              : "The active portfolio stays unchanged until you apply a successful comparison."}
+          </p>
         </section>
-      )}
-
-      {run && (
-        <section className="event-stage" aria-labelledby="run-title">
-          <div className="event-stage-heading">
-            <div>
-              <div className="eyebrow">04 / RESULTS</div>
-              <h2 id="run-title">Calculated cases</h2>
-            </div>
-            <span className="label-chip" role="status">
-              Run {run.status}
-            </span>
-          </div>
-          {["pending", "queued", "running"].includes(run.status) && (
-            <div className="api-state" role="status">
-              <ArrowPath className="spin" size={18} />
-              <p>Calculating confirmed cases from the saved price snapshot.</p>
-              <button
-                className="button subtle"
-                disabled={busy}
-                onClick={() => void stopJob()}
-              >
-                Cancel run
-              </button>
-              {runPollFailures >= MAX_POLL_FAILURES && (
-                <button
-                  className="button subtle"
-                  onClick={() => {
-                    setError("");
-                    setRunPollFailures(0);
-                  }}
-                >
-                  Retry run status
-                </button>
-              )}
-            </div>
-          )}
-          {run.status === "failed" && (
-            <div className="api-state" role="alert">
-              {run.last_error || "Calculation failed."}
-            </div>
-          )}
-          {run.status === "cancelled" && (
-            <div className="api-state">Run cancelled.</div>
-          )}
-          {results && (
+        <section className="scenario-results" aria-busy={busy}>
+          <SectionTitle
+            eyebrow="02 / COMPARE"
+            title={
+              available ? "The trade-offs, in view." : "What could change?"
+            }
+          >
+            {comparison && (
+              <span className={`results-status ${stale ? "stale" : ""}`}>
+                {stale ? "Comparison is stale" : "Backend comparison"}
+              </span>
+            )}
+          </SectionTitle>
+          {available && current && proposed ? (
             <>
-              <EvidenceSection
-                facts={results.facts ?? []}
-                evidence={results.evidence ?? []}
-                missing={results.missing_evidence ?? []}
-              />
-              <p>
-                Hypothetical estimated returns, conditional on the confirmed
-                shocks. Both allocations use the same event cases and saved
-                price snapshot.
-              </p>
-              <div className="event-table-wrap">
-                <table className="event-results-table">
-                  <thead>
-                    <tr>
-                      <th>Case</th>
-                      <th>Horizon</th>
-                      <th>Current</th>
-                      <th>Proposed</th>
-                      <th>Change</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {results.cases.map((item) => (
-                      <tr key={`${item.case}-${item.horizon}`}>
-                        <th>{item.case}</th>
-                        <td>{item.horizon}</td>
-                        <td>{signed(item.current.estimated_return)}</td>
-                        <td>{signed(item.proposed.estimated_return)}</td>
-                        <td>{signed(item.delta.estimated_return)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              <details className="event-details">
-                <summary>Holding contributions</summary>
-                {results.cases.map((item) => (
-                  <div key={`${item.case}-${item.horizon}`}>
-                    <strong>
-                      {item.case} · {item.horizon}
-                    </strong>
-                    <ul>
-                      {contributionSymbols(
-                        item.current.holding_contributions,
-                        item.proposed.holding_contributions,
-                      ).map((symbol) => (
-                        <li key={symbol}>
-                          {symbol}: current{" "}
-                          {item.current.holding_contributions[symbol] ===
-                          undefined
-                            ? "Unavailable"
-                            : signed(
-                                item.current.holding_contributions[symbol],
-                              )}
-                          , proposed{" "}
-                          {item.proposed.holding_contributions[symbol] ===
-                          undefined
-                            ? "Unavailable"
-                            : signed(
-                                item.proposed.holding_contributions[symbol],
-                              )}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ))}
-              </details>
-              <section className="event-result-block">
-                <h3>Confirmed assumptions</h3>
-                <p>
-                  The following factor returns and issuer residual shocks were
-                  confirmed before calculation.
-                </p>
-                <div className="event-confirmed-grid">
-                  {cases.map((kind) =>
-                    horizons.map((horizon) => {
-                      const confirmed =
-                        results.confirmed_assumptions?.[kind]?.[horizon] ??
-                        shocks?.[kind]?.[horizon];
-                      return (
-                        <div key={`${kind}-${horizon}`}>
-                          <strong>
-                            {kind} · {horizon}
-                          </strong>
-                          <p>
-                            {confirmed
-                              ? factors
-                                  .map(
-                                    (factor) =>
-                                      `${factor}: ${signed(confirmed.factors[factor])}`,
-                                  )
-                                  .join(" · ")
-                              : "Unavailable"}
-                          </p>
-                          {confirmed &&
-                            Object.keys(confirmed.issuers).length > 0 && (
-                              <p>
-                                Issuer shocks:{" "}
-                                {Object.entries(confirmed.issuers)
-                                  .map(
-                                    ([symbol, value]) =>
-                                      `${symbol}: ${value}× σ`,
-                                  )
-                                  .join(" · ")}
-                              </p>
-                            )}
-                        </div>
-                      );
-                    }),
-                  )}
+              <div className="comparison-summary">
+                <span className="eyebrow">ANNUALIZED VOLATILITY · BACKEND</span>
+                <div className="volatility-change">
+                  <span>{pct(current.portfolio_volatility)}</span>
+                  <ArrowRight size={26} />
+                  <strong>{pct(proposed.portfolio_volatility)}</strong>
+                  <span className="delta-pill">
+                    {pp(available.delta.portfolio_volatility)}
+                  </span>
                 </div>
-              </section>
-              <section className="event-result-block">
-                <h3>Conditional central-case ranges</h3>
-                {results.probabilities?.status === "available" ? (
-                  <>
-                    <p>
-                      Outcomes given the confirmed central shocks. These are not
-                      odds that the event occurs.
-                    </p>
-                    <div className="event-table-wrap">
-                      <table className="event-results-table">
-                        <thead>
-                          <tr>
-                            <th>Horizon</th>
-                            <th>Allocation</th>
-                            <th>10th</th>
-                            <th>Median</th>
-                            <th>90th</th>
-                            <th>Loss chance</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {horizons.flatMap((horizon) =>
-                            (["current", "proposed"] as const).map(
-                              (allocationType) => {
-                                const range =
-                                  results.probabilities.central[horizon]?.[
-                                    allocationType
-                                  ];
-                                return range ? (
-                                  <tr key={`${horizon}-${allocationType}`}>
-                                    <th>{horizon}</th>
-                                    <td>{allocationType}</td>
-                                    <td>{signed(range.p10)}</td>
-                                    <td>{signed(range.p50)}</td>
-                                    <td>{signed(range.p90)}</td>
-                                    <td>
-                                      {percentage(range.probability_of_loss)}
-                                    </td>
-                                  </tr>
-                                ) : null;
-                              },
-                            ),
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
-                  </>
-                ) : (
-                  <p role="status">
-                    Conditional ranges unavailable:{" "}
-                    {results.probabilities?.reason?.replaceAll("_", " ") ||
-                      "coverage or calibration requirements were not met"}
-                    .
-                  </p>
-                )}
-              </section>
-              <section className="event-result-block">
-                <h3>Coverage and provenance</h3>
-                <dl className="event-provenance">
-                  <div>
-                    <dt>Model</dt>
-                    <dd>{results.model_version ?? "Unavailable"}</dd>
-                  </div>
-                  <div>
-                    <dt>Aligned observations</dt>
-                    <dd>
-                      {String(
-                        results.coverage?.aligned_observations ?? "Unavailable",
-                      )}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>Analysis snapshot</dt>
-                    <dd>
-                      {run.analysis_id ?? results.analysis_id ?? "Unavailable"}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>Price provenance</dt>
-                    <dd>
-                      {results.price_provenance
-                        ? `${Object.keys(results.price_provenance).length} saved provider records`
-                        : "Unavailable"}
-                    </dd>
-                  </div>
-                </dl>
                 <p>
-                  <Info size={15} /> Price and allocation snapshots are fixed
-                  for this run. No trades are placed.
+                  Difference convention: {available.difference_convention}. Both
+                  portfolios use the same available sample.
                 </p>
-              </section>
-              {canApply && (
+              </div>
+              <table className="scenario-comparison">
+                <thead>
+                  <tr>
+                    <th>Metric · available history</th>
+                    <th>Current</th>
+                    <th>Proposed</th>
+                    <th>Change</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <th>Sample return</th>
+                    <td>{metric(current.portfolio_return)}</td>
+                    <td>{metric(proposed.portfolio_return)}</td>
+                    <td>{metric(available.delta.portfolio_return)}</td>
+                  </tr>
+                  <tr>
+                    <th>Annualized return</th>
+                    <td>{metric(current.annualized_return)}</td>
+                    <td>{metric(proposed.annualized_return)}</td>
+                    <td>{metric(available.delta.annualized_return)}</td>
+                  </tr>
+                  <tr>
+                    <th>Largest drawdown</th>
+                    <td>{metric(current.max_drawdown)}</td>
+                    <td>{metric(proposed.max_drawdown)}</td>
+                    <td>{metric(available.delta.max_drawdown)}</td>
+                  </tr>
+                  <tr>
+                    <th>Largest holding</th>
+                    <td>{largest(weights, holdings)}</td>
+                    <td>{largest(comparedWeights, scenarioAssets)}</td>
+                    <td>
+                      {pp(
+                        largestWeight(comparedWeights) - largestWeight(weights),
+                      )}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+              {chartReady && proposed.series && (
+                <LineChart
+                  dates={proposed.series.dates}
+                  series={proposedPath as number[]}
+                  secondary={currentPath as number[]}
+                  label="Proposed"
+                  secondaryLabel="Current"
+                  compact
+                />
+              )}
+              <div className="scenario-result-actions">
+                <button
+                  className="text-button"
+                  disabled={busy || stale || !comparison || !valid}
+                  onClick={() => onExplainScenario(draft, symbols)}
+                >
+                  <Scale size={16} />
+                  Explain the trade-offs
+                </button>
                 <button
                   className="button dark"
-                  onClick={() => setApplyConfirm(true)}
+                  disabled={busy || stale || !comparison}
+                  onClick={() => setConfirm(true)}
                 >
-                  Use proposed allocation
+                  Use this allocation
                   <ArrowRight size={16} />
                 </button>
-              )}
+              </div>
             </>
-          )}
-        </section>
-      )}
-
-      {run?.status === "completed" && (
-        <section className="event-stage" aria-labelledby="chat-title">
-          <div className="eyebrow">05 / DISCUSS</div>
-          <h2 id="chat-title">Discuss this run</h2>
-          <p>
-            Questions are answered from saved evidence and calculations. A
-            requested change creates a new draft for review.
-          </p>
-          <div className="event-chat-log" aria-live="polite">
-            {messages.length === 0 ? (
-              <p>No messages yet. Ask about a result or source.</p>
-            ) : (
-              messages.map((record) => (
-                <div key={record.id}>
-                  <article className="event-chat-message user">
-                    <strong>You</strong>
-                    <p>{record.message.content}</p>
-                  </article>
-                  <article className="event-chat-message assistant">
-                    <strong>PandaSet</strong>
-                    <p>
-                      {typeof record.message.answer === "string"
-                        ? record.message.answer
-                        : record.message.answer.content}
-                    </p>
-                  </article>
-                </div>
-              ))
-            )}
-          </div>
-          <form
-            className="event-chat-form"
-            onSubmit={(event) => void submitMessage(event)}
-          >
-            <label htmlFor="event-chat-input">Your question</label>
-            <div>
-              <input
-                id="event-chat-input"
-                value={messageText}
-                maxLength={2000}
-                disabled={chatBusy}
-                onChange={(event) => setMessageText(event.target.value)}
-                placeholder="What drives the central case?"
-              />
+          ) : stale ? (
+            <div className="scenario-empty">
+              <h3>Draft changed after the comparison.</h3>
+              <p>
+                Run the comparison again to see results for the current
+                allocation.
+              </p>
               <button
                 className="button dark"
-                disabled={chatBusy || !messageText.trim()}
+                disabled={!valid || busy}
+                onClick={() => void calculate()}
               >
-                {chatBusy ? "Sending…" : "Send"}
+                Compare updated allocation
+                <ArrowRight size={16} />
               </button>
             </div>
-          </form>
+          ) : (
+            <div className="scenario-empty">
+              <div className="scenario-illustration" aria-hidden="true">
+                <div>
+                  <i style={{ height: "75%" }} />
+                  <i style={{ height: "47%" }} />
+                </div>
+                <div>
+                  <i style={{ height: "55%" }} />
+                  <i style={{ height: "68%" }} />
+                </div>
+                <div>
+                  <i style={{ height: "35%" }} />
+                  <i style={{ height: "46%" }} />
+                </div>
+              </div>
+              <h3>
+                A different mix.
+                <br />A different risk profile.
+              </h3>
+              <p>
+                Adjust the weights and request a backend comparison using the
+                same available dates.
+              </p>
+              <div className="comparison-preview">
+                <span>
+                  Current volatility
+                  <strong>{pct(analysis.portfolio_volatility)}</strong>
+                </span>
+                <ArrowRight size={22} />
+                <span>
+                  Proposed volatility<strong>—</strong>
+                </span>
+              </div>
+            </div>
+          )}
+          <div className="scenario-disclaimer">
+            <Info size={15} />
+            <p>
+              Results use {analysis.lookback_days} available fictional daily
+              return observations. The demo fixture contains short history; no
+              longer period is inferred or extrapolated. No forecast, trading
+              costs, or taxes are included.
+            </p>
+          </div>
         </section>
-      )}
-
-      {error && (
-        <div className="api-state" role="alert">
-          <strong>Event request failed.</strong>
-          <p>{error}</p>
-          <button className="button subtle" onClick={() => setError("")}>
-            Dismiss
-          </button>
-        </div>
-      )}
-      {applyConfirm && appliedWeights && (
+      </div>
+      {confirm && comparison && (
         <Modal
-          title="Use the proposed allocation?"
-          onClose={applying ? () => undefined : () => setApplyConfirm(false)}
+          title="Use this allocation?"
+          onClose={applying ? () => undefined : () => setConfirm(false)}
         >
-          <p>
-            This updates your saved portfolio weights and creates a new analysis
-            snapshot. Existing event runs keep their original allocation and
-            prices.
+          <p className="note-body">
+            PandaSet will create and analyze the new sample allocation, then
+            replace the active portfolio after the backend confirms it. This
+            does not place trades or connect to a brokerage.
           </p>
           <div className="modal-actions">
             <button
               className="button subtle"
               disabled={applying}
-              onClick={() => setApplyConfirm(false)}
+              onClick={() => setConfirm(false)}
             >
               Keep exploring
             </button>
             <button
               className="button dark"
               disabled={applying}
-              onClick={() => {
-                setApplying(true);
-                void onApply(appliedWeights)
-                  .then((ok) => {
-                    if (ok) setApplyConfirm(false);
-                  })
-                  .finally(() => setApplying(false));
-              }}
+              onClick={() => void applyScenario()}
             >
-              {applying ? "Applying…" : "Apply allocation"}
+              {applying ? "Saving…" : "Use sample allocation"}
               <Check size={16} />
             </button>
           </div>
@@ -1712,54 +551,10 @@ export default function WhatIf({
   );
 }
 
-function EvidenceSection({
-  facts,
-  evidence,
-  missing,
-}: {
-  facts: { claim: string; evidence_ids: string[] }[];
-  evidence: Evidence[];
-  missing: string[];
-}) {
-  const byId = new Map(evidence.map((item) => [item.evidence_id, item]));
-  return (
-    <div className="event-evidence">
-      <h3>Sourced facts</h3>
-      {facts.length ? (
-        <ul>
-          {facts.map((fact, index) => (
-            <li key={`${fact.claim}-${index}`}>
-              <p>{fact.claim}</p>
-              <small>
-                Sources:{" "}
-                {fact.evidence_ids
-                  .map((id) => byId.get(id)?.title ?? id)
-                  .join(", ")}
-              </small>
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p>No sourced facts were available for this draft.</p>
-      )}
-      <details>
-        <summary>Evidence and missing sources</summary>
-        <ul>
-          {evidence.map((item) => (
-            <li key={item.evidence_id}>
-              <strong>{item.title ?? item.evidence_id}</strong> · {item.status}
-              {item.published_at ? ` · published ${item.published_at}` : ""}
-              {item.retrieved_at ? ` · retrieved ${item.retrieved_at}` : ""}
-              {sourceLink(item) && (
-                <a href={sourceLink(item)!} target="_blank" rel="noreferrer">
-                  Open source
-                </a>
-              )}
-            </li>
-          ))}
-        </ul>
-        {missing.length > 0 && <p>Missing evidence: {missing.join(", ")}</p>}
-      </details>
-    </div>
-  );
+function largest(allocation: number[], holdings: Asset[]) {
+  const index = allocation.indexOf(Math.max(...allocation));
+  return `${holdings[index].symbol} · ${allocation[index]}%`;
+}
+function largestWeight(allocation: number[]) {
+  return Math.max(...allocation) / 100;
 }

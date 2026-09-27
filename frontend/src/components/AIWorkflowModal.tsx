@@ -17,7 +17,11 @@ import {
 export type AIWorkflowAction =
   | { workflow: "analysis_briefing" }
   | { workflow: "risk_explanation"; question: string }
-  | { workflow: "scenario_explanation"; proposedWeights: number[] }
+  | {
+      workflow: "scenario_explanation";
+      proposedWeights: number[];
+      symbols: string[];
+    }
   | { workflow: "research_summary"; symbol: string };
 
 const workflowTitles = {
@@ -107,6 +111,7 @@ export function AIWorkflowModal({
                   portfolioId,
                   analysisId,
                   action.proposedWeights,
+                  action.symbols,
                 )
               : await requestResearchSummary(action.symbol);
       if (requestGuard.current.isCurrent(id)) setResponse(result);

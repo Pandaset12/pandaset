@@ -8,12 +8,15 @@ or loaded by this application.
 from dataclasses import dataclass
 from typing import Any, Literal
 from urllib.parse import urlparse
+import uuid
 
 import httpx
 import jwt
-from fastapi import HTTPException, Request
+from fastapi import Depends, Header, HTTPException, Request
 from jwt import PyJWKClient
 from jwt.exceptions import InvalidTokenError, PyJWKClientConnectionError, PyJWKClientError
+
+from .config import Settings, get_settings
 
 
 class InvalidAccessToken(Exception):
@@ -146,3 +149,25 @@ def require_user(request: Request) -> AuthenticatedUser:
         raise HTTPException(status_code=401, detail={"code": "INVALID_TOKEN", "message": "Sign in again."}) from exc
     except AuthUnavailable as exc:
         raise HTTPException(status_code=503, detail={"code": "AUTH_UNAVAILABLE", "message": "Authentication is unavailable."}) from exc
+
+
+def current_user_id(
+    authorization: str | None = Header(default=None),
+    settings: Settings = Depends(get_settings),
+) -> str:
+    """Resolve the owner for v1 routes through the Supabase Auth user endpoint."""
+    if not authorization or not authorization.startswith("Bearer ") or not authorization[7:].strip():
+        raise HTTPException(status_code=401, detail={"code": "AUTH_REQUIRED", "message": "Authentication required."})
+    if not settings.authentication_enabled:
+        raise HTTPException(status_code=503, detail={"code": "AUTH_NOT_CONFIGURED", "message": "Authentication is unavailable."})
+    try:
+        response = httpx.get(
+            f"{settings.supabase_url.rstrip('/')}/auth/v1/user",
+            headers={"apikey": settings.supabase_auth_api_key, "Authorization": authorization},
+            timeout=5,
+        )
+        if response.status_code != 200:
+            raise ValueError("Invalid session")
+        return str(uuid.UUID(response.json()["id"]))
+    except (httpx.HTTPError, ValueError, KeyError, TypeError) as exc:
+        raise HTTPException(status_code=401, detail={"code": "INVALID_TOKEN", "message": "Invalid authentication."}) from exc

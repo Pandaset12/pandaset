@@ -21,11 +21,12 @@ import {
   validatePortfolioDraft,
 } from "./portfolioDraft";
 import type { HoldingDraft, TickerResult } from "./portfolioDraft";
-import "./onboarding.css";
 
 export type PortfolioOnboardingProps = {
   /** Key the component by the signed-in investor's user ID. */
   loadState?: "loading" | "empty" | "error";
+  hasExistingPortfolios?: boolean;
+  maxHoldings?: number;
   onRetryLoad?: () => void;
   searchTickers: SearchTickers;
   createPortfolio: (
@@ -44,6 +45,8 @@ const steps = [
 
 export function PortfolioOnboarding({
   loadState = "empty",
+  hasExistingPortfolios = false,
+  maxHoldings = MAX_HOLDINGS,
   onRetryLoad,
   searchTickers,
   createPortfolio,
@@ -57,12 +60,13 @@ export function PortfolioOnboarding({
   const [showNameError, setShowNameError] = useState(false);
   const [showHoldingErrors, setShowHoldingErrors] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [saveError, setSaveError] = useState("");
+  const [saveError, setSaveError] = useState(false);
+  const [saveErrorDetail, setSaveErrorDetail] = useState("");
   const [created, setCreated] = useState<Portfolio | null>(null);
   const [focusTarget, setFocusTarget] = useState("");
   const title = useRef<HTMLHeadingElement>(null);
   const pending = useRef<AbortController | null>(null);
-  const validation = validatePortfolioDraft(name, holdings);
+  const validation = validatePortfolioDraft(name, holdings, maxHoldings);
   const currentStep = step === "name" ? 0 : step === "holdings" ? 1 : 2;
   const tickerInputId = prefix + "-search";
   const weightId = (symbol: string) => prefix + "-weight-" + symbol;
@@ -92,7 +96,7 @@ export function PortfolioOnboarding({
 
   function addHolding(ticker: TickerResult) {
     if (
-      holdings.length >= MAX_HOLDINGS ||
+      holdings.length >= maxHoldings ||
       holdings.some((row) => row.symbol === ticker.symbol)
     )
       return;
@@ -124,7 +128,7 @@ export function PortfolioOnboarding({
     if (step === "holdings") {
       setShowHoldingErrors(true);
       if (validation.payload) {
-        setSaveError("");
+        setSaveError(false);
         setStep("review");
       } else {
         const firstInvalid = holdings.find(
@@ -144,7 +148,7 @@ export function PortfolioOnboarding({
     const controller = new AbortController();
     pending.current = controller;
     setSaving(true);
-    setSaveError("");
+    setSaveError(false);
     try {
       const portfolio = await createPortfolio(validation.payload, {
         signal: controller.signal,
@@ -157,13 +161,15 @@ export function PortfolioOnboarding({
       )
         throw new Error("Invalid saved portfolio response.");
       setCreated(portfolio);
-    } catch (reason) {
-      if (!controller.signal.aborted)
-        setSaveError(
-          reason instanceof Error
-            ? reason.message
-            : "Portfolio creation failed. Try again.",
+    } catch (error) {
+      if (!controller.signal.aborted) {
+        setSaveError(true);
+        setSaveErrorDetail(
+          error instanceof Error
+            ? error.message
+            : "Try again or change your holdings.",
         );
+      }
     } finally {
       if (pending.current === controller) {
         pending.current = null;
@@ -305,9 +311,15 @@ export function PortfolioOnboarding({
             </div>
             <span className="po-art-plus">+</span>
           </div>
-          <span className="po-eyebrow">LET’S BUILD YOUR FIRST PORTFOLIO</span>
+          <span className="po-eyebrow">
+            {hasExistingPortfolios
+              ? "BUILD ANOTHER PORTFOLIO"
+              : "LET’S BUILD YOUR FIRST PORTFOLIO"}
+          </span>
           <h2>
-            No portfolios yet.
+            {hasExistingPortfolios
+              ? "Start another portfolio."
+              : "No portfolios yet."}
             <br />
             Plenty of possibilities.
           </h2>
@@ -321,7 +333,9 @@ export function PortfolioOnboarding({
             type="button"
             onClick={() => setStep("name")}
           >
-            Create your first portfolio{" "}
+            {hasExistingPortfolios
+              ? "Create another portfolio"
+              : "Create your first portfolio"}{" "}
             <ArrowRight size={17} aria-hidden="true" />
           </button>
           <span className="po-welcome-caption">
@@ -415,11 +429,11 @@ export function PortfolioOnboarding({
               selectedSymbols={holdings.map((row) => row.symbol)}
               searchTickers={searchTickers}
               onSelect={addHolding}
-              disabled={holdings.length >= MAX_HOLDINGS}
+              disabled={holdings.length >= maxHoldings}
             />
-            {holdings.length >= MAX_HOLDINGS && (
+            {holdings.length >= maxHoldings && (
               <p className="po-help" role="status">
-                You’ve reached the limit of 25 holdings.
+                You’ve reached the limit of {maxHoldings} holdings.
               </p>
             )}
             <div className="po-holdings-heading">
@@ -614,7 +628,10 @@ export function PortfolioOnboarding({
             {saveError && (
               <div className="po-save-error" role="alert">
                 <strong>We couldn’t create your portfolio.</strong>
-                <p>{saveError}</p>
+                <p>
+                  {saveErrorDetail} Your entries are still here. Try again, or
+                  go back to make changes.
+                </p>
               </div>
             )}
             {saving && (
@@ -630,7 +647,7 @@ export function PortfolioOnboarding({
             type="button"
             disabled={saving}
             onClick={() => {
-              setSaveError("");
+              setSaveError(false);
               setStep(
                 step === "name"
                   ? "welcome"

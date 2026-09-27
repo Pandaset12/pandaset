@@ -17,7 +17,7 @@ from .auth import AuthenticatedUser, require_user
 from .config import Settings, get_settings
 from .event_agents import answer_run_question
 from .event_jobs import FACTOR_SYMBOLS
-from .event_schemas import ChatRequest, ConfirmRequest, DraftRequest, validate_shocks
+from .event_schemas import ChatRequest, ConfirmRequest, DraftRequest, EventPortfolioInput, validate_shocks
 from .event_templates import EventTemplateNotFound, get_event_template, list_event_templates
 from .gemini_service import (GeminiRateLimited, GeminiUnavailable,
                              gemini_cooldown_remaining, generate_analysis_workflow)
@@ -25,7 +25,7 @@ from .instruments import SUPPORTED_INSTRUMENTS, resolve_instrument, search_instr
 from .mongo_store import (IdempotencyConflict, InvalidTransition, MongoPortfolioStore,
                           QuotaExceeded, RecordNotFound, ReservationInProgress)
 from .providers import map_quant_report
-from .schemas import AIWorkflowResponse, AnalysisWorkflowRequest, AnalyticsSnapshot, PortfolioInput
+from .schemas import AIWorkflowResponse, AnalysisWorkflowRequest, AnalyticsSnapshot
 from .storage import SnapshotNotFound
 from .twelve_data import CoverageError, ProviderUnavailable, RateLimitError, TwelveDataPriceProvider
 
@@ -128,7 +128,7 @@ async def portfolios(context=Depends(_store)):
 
 
 @router.post("/portfolios", status_code=201)
-async def create_portfolio(body: PortfolioInput, context=Depends(_store)):
+async def create_portfolio(body: EventPortfolioInput, context=Depends(_store)):
     store, user, _ = context
     return await _call(store.create_portfolio, user.user_id, body)
 
@@ -144,7 +144,7 @@ async def portfolio(portfolio_id: str, context=Depends(_store)):
 
 @router.put("/portfolios/{portfolio_id}")
 @router.patch("/portfolios/{portfolio_id}")
-async def update_portfolio(portfolio_id: str, body: PortfolioInput, context=Depends(_store)):
+async def update_portfolio(portfolio_id: str, body: EventPortfolioInput, context=Depends(_store)):
     store, user, _ = context
     return await _call(store.update_portfolio, user.user_id, portfolio_id, body)
 
@@ -286,13 +286,12 @@ async def create_draft(body: DraftRequest, context=Depends(_store),
     except EventTemplateNotFound as exc:
         raise _error(422, "UNKNOWN_TEMPLATE", "Event template is unsupported.") from exc
     situation = _situation_snapshot(template, body)
-    portfolio = await _call(store.get_portfolio, user.user_id, body.portfolio_id)
-    if portfolio is None:
+    if await _call(store.get_portfolio, user.user_id, body.portfolio_id) is None:
         raise _not_found()
     record = await _call(store.get_analysis_record, user.user_id, body.portfolio_id, body.analysis_id)
     if record is None:
         raise _not_found()
-    _validate_draft_portfolio(template, body, portfolio.weights, record["metrics"]["weights"])
+    _validate_draft_allocation(template, body, record["metrics"]["weights"])
     try:
         _check_snapshot_coverage(record, set(record["metrics"]["weights"]))
     except ValueError as exc:
@@ -329,15 +328,12 @@ def _validate_target(template, target_symbol: str | None, portfolio_weights: dic
         raise _error(422, "INVALID_TARGET", "This event does not use a target stock.")
 
 
-def _validate_draft_portfolio(template, body: DraftRequest, portfolio_weights: dict,
-                              analysis_weights: dict) -> None:
+def _validate_draft_allocation(template, body: DraftRequest, analysis_weights: dict) -> None:
     eligible = {item.template_id for item in list_event_templates(
-        [resolve_instrument(symbol) for symbol in portfolio_weights])}
+        [resolve_instrument(symbol) for symbol in analysis_weights])}
     if template.template_id not in eligible:
-        raise _error(422, "UNKNOWN_TEMPLATE", "This template does not apply to the saved portfolio.")
-    _validate_target(template, body.target_symbol, portfolio_weights)
-    if template.category == "issuer" and body.target_symbol not in analysis_weights:
-        raise _error(422, "INVALID_TARGET", "The selected stock is not in this saved analysis.")
+        raise _error(422, "UNKNOWN_TEMPLATE", "This template does not apply to the saved analysis.")
+    _validate_target(template, body.target_symbol, analysis_weights)
     if body.proposed_weights is not None and set(body.proposed_weights) != set(analysis_weights):
         raise _error(422, "INVALID_WEIGHTS", "Proposed weights must cover the saved holdings.")
 
@@ -528,6 +524,8 @@ async def post_message(run_id: str, body: ChatRequest, context=Depends(_store),
     try:
         is_revision = body.revision is not None or REVISION_LANGUAGE.search(body.content) is not None
         if is_revision:
+            saved_weights = {holding["symbol"]: holding["weight"]
+                             for holding in item["allocation_snapshot"]["holdings"]}
             prior = item.get("proposal_snapshot") or {}
             template_id = (prior.get("template") or {}).get("template_id")
             if not template_id:
@@ -535,7 +533,7 @@ async def post_message(run_id: str, body: ChatRequest, context=Depends(_store),
             prior_target = prior.get("target_symbol")
             if template_id == "issuer_earnings" and not prior_target:
                 prior_target = next(
-                    (symbol for symbol in item["result"]["current_weights"]
+                    (symbol for symbol in saved_weights
                      if resolve_instrument(symbol).kind == "us_stock"), None,
                 )
             revision = body.revision or DraftRequest(
@@ -552,15 +550,9 @@ async def post_message(run_id: str, body: ChatRequest, context=Depends(_store),
             except EventTemplateNotFound as exc:
                 raise _error(422, "UNKNOWN_TEMPLATE", "Event template is unsupported.") from exc
             situation = _situation_snapshot(template, revision)
-            portfolio = await _call(store.get_portfolio, user.user_id, item["portfolio_id"])
-            if portfolio is None:
+            if await _call(store.get_portfolio, user.user_id, item["portfolio_id"]) is None:
                 raise _not_found()
-            record = await _call(store.get_analysis_record, user.user_id, item["portfolio_id"],
-                                 item["analysis_id"])
-            if record is None:
-                raise _not_found()
-            _validate_draft_portfolio(template, revision, portfolio.weights,
-                                      record["metrics"]["weights"])
+            _validate_draft_allocation(template, revision, saved_weights)
             payload = revision.model_dump(mode="json", exclude_none=True)
             payload["template_version"] = template.version
             if situation:

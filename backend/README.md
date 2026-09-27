@@ -6,7 +6,9 @@ MongoDB infrastructure and financial formulas belong to the data/quant teammates
 See [the shared HLD](../PortfolioLens-HLD.md) and [integration design](INTEGRATION.md).
 
 The default v1 provider connects the quant engine to fictional sample prices for
-an offline demo. The gated v2 event lab uses adjusted Twelve Data history.
+an offline demo. V1 can use adjusted daily end-of-day prices from Twelve Data
+when `MARKET_DATA_PROVIDER=twelvedata`; see [setup guide](docs/TWELVE_DATA.md).
+The gated v2 event lab requires adjusted Twelve Data history.
 Gemini is optional for v1 and designs v2 scenario assumptions. V2 event research
 uses Tavily retrieval and DeepSeek fact extraction.
 
@@ -16,8 +18,8 @@ The event lab is disabled by default. Copy `backend/.env.example` to the ignored
 `backend/.env`, then set `EVENT_LAB_ENABLED=true`, the Supabase project origin and
 publishable key, `SUPABASE_SIGNING_MODE`, Mongo URI, Twelve Data key, Gemini key,
 `TAVILY_API_KEY`, and `DEEPSEEK_API_KEY`. All v2 routes verify a bearer access
-token and derive the Mongo owner from its verified subject. The v1 sample API
-remains separate. V2 analyses request
+token and derive the Mongo owner from its verified subject. V1 uses Supabase Auth
+to resolve portfolio ownership and remains separate. V2 analyses request
 adjusted daily history from Twelve Data and never substitute demo prices.
 
 For an internal release, keep `EVENT_LAB_PUBLIC_ENABLED=false` and populate
@@ -72,10 +74,11 @@ Open [interactive API docs](http://127.0.0.1:8000/docs) or
 [health](http://127.0.0.1:8000/health). Health confirms the API process/configuration,
 not connectivity to Gemini, databases, or real quant services.
 
-No environment file or API key is needed in default v1 demo mode. Its portfolios
-and analysis snapshots are stored in ignored `backend/data/portfoliolens.sqlite3`.
-The v1 compatibility routes have no login or multi-user authorization; the gated
-v2 routes use verified Supabase identity and owner-scoped MongoDB records.
+The v1 market-data provider defaults to fictional sample prices. V1 portfolio
+routes require `SUPABASE_URL` and either `SUPABASE_PUBLISHABLE_KEY` or the legacy
+`SUPABASE_ANON_KEY` to verify the bearer session and scope SQLite portfolios and
+analysis snapshots to the user. The gated v2
+routes use verified Supabase identity and owner-scoped MongoDB records.
 
 ## First frontend flow
 
@@ -98,8 +101,10 @@ The default answer has `status: "demo"` and explicitly labels the fixture as
 fictional. It is a deterministic snapshot summary, not an arbitrary-question AI.
 The seeded allocation is NVDA 30%, SPY 40%, JPM 20%, TLT 10%. Any valid allocation
 using NVDA, MSFT, AAPL, JPM, VTI, TLT, AMD, GLD, or SPY can be analyzed and compared
-using seven fictional price rows (six daily returns). Unsupported symbols fail with 502; prices are never
+using seven fictional price rows (six daily returns). Unsupported symbols return 404; prices are never
 invented or filled. Weights must total one within 1e-10 and are never renormalized.
+Portfolios and proposed allocations accept at most eight symbols; a what-if comparison
+also requires the combined saved/proposed symbol set to stay within eight.
 Undefined risk shares and correlation cells remain `null`. The UTC midnight `as_of`
 is a sample session-date label, not a live quote or exchange closing timestamp.
 
@@ -109,11 +114,12 @@ is a sample session-date label, not a live quote or exchange closing timestamp.
 | --- | --- | --- |
 | GET | `/health` | Process/configuration status |
 | POST | `/api/v1/portfolios` | Validate and save `name` plus `holdings`; returns 201 |
+| PUT | `/api/v1/portfolios/{id}` | Replace the authenticated owner's portfolio name and holdings; retains ID and creation time |
 | GET | `/api/v1/portfolios/{id}` | Read saved portfolio |
 | POST | `/api/v1/portfolios/{id}/analysis` | Validate provider output and save a snapshot |
 | GET | `/api/v1/portfolios/{id}/analyses/{analysis_id}` | Read that snapshot |
 | POST | `/api/v1/portfolios/{id}/ask` | Explain exactly the selected saved snapshot |
-| POST | `/api/v1/portfolios/{id}/what-if` | Compare saved and proposed holdings on common sample prices |
+| POST | `/api/v1/portfolios/{id}/what-if` | Compare saved and proposed holdings on the selected market-data history |
 | POST | `/api/v1/portfolios/{id}/briefing` | Write a briefing from one saved analysis |
 | POST | `/api/v1/portfolios/{id}/risk/explanation` | Explain risk using one saved analysis |
 | POST | `/api/v1/portfolios/{id}/what-if/explanation` | Recalculate and explain a proposal against a saved analysis |
@@ -271,3 +277,10 @@ ephemeral filesystem survives rebuilds or is shared across replicas. Confirm a
 single-instance persistent volume or complete the team's MongoDB adapter before
 claiming durable shared persistence. See the rollout gates in
 [INTEGRATION.md](INTEGRATION.md).
+# Investor ownership
+
+Set `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` in `backend/.env` to the same project used by frontend authentication. V1 also accepts a legacy `SUPABASE_ANON_KEY`; when it is set, that key takes precedence for v1 Supabase Auth requests. The backend validates Bearer tokens through Supabase Auth. New portfolios are owned by the authenticated user; legacy SQLite rows are retained with no owner and are not returned to investors. `/api/v1/portfolios` lists only the caller's portfolios. No Supabase service role secret is needed.
+
+Updating a portfolio preserves its `portfolio_id`, `owner_id`, and original `created_at`. When its allocation changes, saved analyses for that portfolio are deleted in the same SQLite transaction. Old analysis IDs then return 404; the client creates a fresh analysis for the new allocation. An analysis computed before an update cannot be saved afterward.
+
+Market-history preflight and subsequent analysis reuse successful per-symbol daily price frames for 60 seconds. The cache obtains an analysis-length window even when preflight requests only two days, so the immediate analysis does not fetch those symbols again. Failed history requests are not cached. The cache lives in the API process; separate workers have separate caches.
