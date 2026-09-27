@@ -1,5 +1,6 @@
 /* Match the landing page's panda palette without changing data semantics. */
-.dashboard-shell {
+.dashboard-shell,
+.modal {
   --canvas: #fafafa;
   --surface: #fff;
   --raised: #f0f0f0;
@@ -15,6 +16,7 @@
   --bar-secondary: #b5b5b5;
   --action: #171717;
   --action-hover: #363636;
+  --ink-on-accent: #fff;
   --data-primary: #2f7652;
   --data-primary-on-dark: #8bd6a8;
   --data-negative: #a84f43;
@@ -28,9 +30,39 @@
   --overlay-ink: #fff;
   --radius: 4px;
   --serif: "DM Sans", Arial, sans-serif;
+}
+
+.dashboard-shell {
   background: var(--canvas);
   color: var(--ink);
   accent-color: var(--ink);
+}
+
+.modal {
+  background: var(--surface);
+  border-color: var(--border);
+  border-radius: var(--radius);
+  color: var(--ink);
+  box-shadow: 0 24px 80px #17171726;
+  accent-color: var(--ink);
+}
+
+.modal::backdrop {
+  background: #1717178c;
+}
+
+.modal-heading h2 {
+  font-family: "DM Sans", Arial, sans-serif;
+  font-size: clamp(1.75rem, 3vw, 2.25rem);
+  font-weight: 500;
+  letter-spacing: -0.045em;
+  line-height: 1.15;
+}
+
+.modal .asset-mark {
+  background: var(--raised);
+  border-color: var(--border);
+  color: var(--ink);
 }
 
 .dashboard-shell ::selection {
