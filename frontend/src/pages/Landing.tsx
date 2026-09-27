@@ -33,7 +33,6 @@ export default function Landing() {
   const root = useRef<HTMLDivElement>(null);
   useLandingMotion(root);
   const mounted = useRef(false);
-  const manualPerspective = useRef(false);
   const [perspective, setPerspective] = useState<"capital" | "risk">("capital");
   const [menuOpen, setMenuOpen] = useState(false);
   useEffect(() => {
@@ -42,33 +41,6 @@ export default function Landing() {
       window.ScrollCraft.mount(root.current);
     }
   }, []);
-  useEffect(() => {
-    const motion = matchMedia("(prefers-reduced-motion: reduce)");
-    let frame = 0;
-    const update = () => {
-      if (manualPerspective.current || motion.matches || innerWidth <= 760)
-        return;
-      cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(() => {
-        const section = document.getElementById("perspective");
-        if (!section) return;
-        const rect = section.getBoundingClientRect();
-        const travel = Math.max(1, rect.height - innerHeight);
-        if (rect.top <= 0 && rect.bottom >= innerHeight) {
-          setPerspective(-rect.top / travel >= 0.4 ? "risk" : "capital");
-        }
-      });
-    };
-    addEventListener("scroll", update, { passive: true });
-    return () => {
-      removeEventListener("scroll", update);
-      cancelAnimationFrame(frame);
-    };
-  }, []);
-  const choosePerspective = (value: "capital" | "risk") => {
-    manualPerspective.current = true;
-    setPerspective(value);
-  };
   const goTo = (id: string) => (event: React.MouseEvent<HTMLAnchorElement>) => {
     event.preventDefault();
     setMenuOpen(false);
@@ -245,11 +217,10 @@ export default function Landing() {
           id="perspective"
           tabIndex={-1}
           className="lp-perspective"
-          data-sc-act="pin"
-          data-sc-span="1.8"
+          data-sc-act="flow"
           aria-labelledby="perspective-heading"
         >
-          <div data-sc-stage className="lp-perspective-stage">
+          <div className="lp-perspective-stage">
             <div className="lp-perspective-inner lp-wrap">
               <div className="lp-perspective-copy">
                 <p className="lp-kicker">THROUGH PANDA’S EYES</p>
@@ -272,7 +243,7 @@ export default function Landing() {
                 >
                   <button
                     aria-pressed={perspective === "capital"}
-                    onClick={() => choosePerspective("capital")}
+                    onClick={() => setPerspective("capital")}
                   >
                     <span className="lp-eye">
                       <i />
@@ -281,7 +252,7 @@ export default function Landing() {
                   </button>
                   <button
                     aria-pressed={perspective === "risk"}
-                    onClick={() => choosePerspective("risk")}
+                    onClick={() => setPerspective("risk")}
                   >
                     <span className="lp-eye">
                       <i />
@@ -293,7 +264,7 @@ export default function Landing() {
                   Choose an eye. See the difference.
                 </p>
               </div>
-              <div className="lp-chart-panel">
+              <div className="lp-chart-panel" data-lp-arrival>
                 <div className="lp-chart-heading">
                   <h3>
                     {perspective === "capital"

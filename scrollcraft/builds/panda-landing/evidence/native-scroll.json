@@ -1,0 +1,43 @@
+[
+  {
+    "name": "desktop",
+    "width": 1440,
+    "height": 900,
+    "reducedMotion": "no-preference",
+    "checks": "overflow, keyboard skip, menu and Escape, both chart controls, sample values, workflow links, closing action, console",
+    "errors": []
+  },
+  {
+    "name": "mobile",
+    "width": 390,
+    "height": 844,
+    "reducedMotion": "no-preference",
+    "checks": "overflow, keyboard skip, menu and Escape, both chart controls, sample values, workflow links, closing action, console",
+    "errors": []
+  },
+  {
+    "name": "compact",
+    "width": 360,
+    "height": 640,
+    "reducedMotion": "no-preference",
+    "checks": "overflow, keyboard skip, menu and Escape, both chart controls, sample values, workflow links, closing action, console",
+    "errors": []
+  },
+  {
+    "name": "reduced",
+    "width": 1440,
+    "height": 900,
+    "reducedMotion": "reduce",
+    "checks": "overflow, keyboard skip, menu and Escape, both chart controls, sample values, workflow links, closing action, console",
+    "errors": []
+  },
+  {
+    "nativeComparisonScroll": "no pinning across entry, middle, or exit; manual chart choice persists"
+  },
+  {
+    "dashboardNavigationAndUnavailableState": "passed (API failure simulated)"
+  },
+  {
+    "legacyHashLinks": "all four dashboard routes preserved"
+  }
+]

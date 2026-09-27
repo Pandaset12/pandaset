@@ -56,3 +56,10 @@ Verification of the final production bundle: all 19 tests, build, formatting, ex
 Visual review: curious → recognition → discovery → confidence → readiness. The new acknowledgement by Panda makes curiosity more personal, while the dark capital/risk section remains the peak. The first motion pass needed no layout repair. Word emphasis uses a visible 0.6 opacity floor and resolves fully before the sentence leaves. The cue-only contrast harness no longer measures that bespoke sentence; its appearance was inspected directly rather than treating the absence of cue warnings as a contrast audit.
 
 Final motion screenshots and the interaction report are in `evidence/motion/`; these supersede the earlier static presentation evidence. Reproduce with `node scrollcraft/builds/panda-landing/verify-motion.mjs` against the production preview. Real-device Safari/iPhone testing remains unverified.
+
+
+## Continuous scrolling correction
+
+The black comparison now stays in native document flow. Removing its sticky stage and extra scroll span eliminates the stop and release at its boundaries. Its chart eases upward into place once, and Capital/Risk changes only through the selectors. This supersedes the earlier pinned comparison and automatic scroll selection described above. No wheel interception or simulated inertia was added; the contrast still gives this section its emphasis.
+
+Verification: all 19 tests, production build, formatting, functional checks, and motion checks passed. The functional check now measures section movement across entry, middle, and exit and verifies that a manual perspective choice persists. Desktop, mobile, and reduced-motion captures each cover 25 scroll positions with no reported dead scroll or errors. All three contact sheets were visually inspected. Latest sheets replace `evidence/motion/*-scroll.png`; `evidence/native-scroll.json` records the updated functional checks. Physical-device Safari testing remains unverified.

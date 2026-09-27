@@ -408,7 +408,6 @@ a {
 .lp-perspective-stage {
   display: flex;
   align-items: center;
-  overflow: hidden;
 }
 .lp-perspective-inner {
   width: 100%;
@@ -897,14 +896,6 @@ a {
     font-size: 13px;
     line-height: 1.8;
   }
-  .lp-perspective {
-    height: auto !important;
-  }
-  .lp-perspective-stage {
-    position: relative !important;
-    height: auto !important;
-    overflow: visible;
-  }
   .lp-perspective-inner {
     grid-template-columns: 1fr;
     padding-block: 64px;
@@ -1079,13 +1070,6 @@ a {
     transition: none !important;
     animation: none !important;
   }
-  .lp-perspective {
-    height: auto !important;
-  }
-  .lp-perspective-stage {
-    position: relative !important;
-    height: auto !important;
-  }
   .lp-perspective-inner {
     padding-block: 75px;
   }
@@ -1255,5 +1239,20 @@ a {
   .lp-panda-head,
   .lp-panda-gaze {
     transform: none;
+  }
+}
+
+/* Keep the comparison in native document flow; only its chart eases into place. */
+@media (prefers-reduced-motion: no-preference) {
+  .lp-motion-ready .lp-chart-panel[data-lp-arrival] {
+    opacity: 0.7;
+    transform: translateY(24px);
+    transition:
+      transform 800ms cubic-bezier(0.22, 1, 0.36, 1),
+      opacity 650ms ease-out;
+  }
+  .lp-motion-ready .lp-chart-panel.lp-arrived {
+    opacity: 1;
+    transform: translateY(0);
   }
 }

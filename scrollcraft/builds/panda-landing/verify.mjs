@@ -126,16 +126,46 @@ await page.goto(url);
 await page.waitForSelector("html.sc-ready");
 const peak = await page.locator("#perspective").evaluate((el) => ({
   top: el.offsetTop,
-  travel: el.offsetHeight - innerHeight,
+  height: el.offsetHeight,
 }));
-await page.evaluate(
-  (y) => scrollTo({ top: y, behavior: "instant" }),
-  peak.top + peak.travel * 0.7,
-);
+assert.equal(await page.locator(".sc-act--pinned").count(), 0);
+let previous;
+for (const y of [
+  peak.top - 150,
+  peak.top,
+  peak.top + 160,
+  peak.top + 320,
+  peak.top + peak.height - 100,
+]) {
+  await page.evaluate((y) => scrollTo({ top: y, behavior: "instant" }), y);
+  await page.waitForTimeout(40);
+  const position = await page
+    .locator(".lp-perspective-stage")
+    .evaluate((el) => ({
+      top: el.getBoundingClientRect().top,
+      scroll: scrollY,
+    }));
+  if (previous) {
+    assert.ok(
+      Math.abs(
+        position.top - previous.top + (position.scroll - previous.scroll),
+      ) < 1,
+      "black section moves with the document without sticking",
+    );
+  }
+  previous = position;
+}
+await page.getByRole("heading", { name: "Where the money sits" }).waitFor();
+await page.getByRole("button", { name: "Risk", exact: true }).click();
+await page.evaluate(() => scrollTo({ top: 0, behavior: "instant" }));
+await page.locator("#perspective").scrollIntoViewIfNeeded();
 await page
   .getByRole("heading", { name: "Where the risk comes from" })
   .waitFor();
-report.push({ automaticScrollPerspective: "passed" });
+report.push({
+  nativeComparisonScroll:
+    "no pinning across entry, middle, or exit; manual chart choice persists",
+});
 // Confirm the CTA loads the existing app and its honest backend error state.
 await page.route(
   (url) => url.pathname.startsWith("/api/"),
