@@ -20,6 +20,13 @@
   --data-primary: #2f7652;
   --data-primary-on-dark: #8bd6a8;
   --data-negative: #a84f43;
+  --data-surface: #f0f7f2;
+  --data-border: #c9dfcf;
+  --data-ink: #245f40;
+  --data-deep: #14251d;
+  --data-on-deep: #f5faf6;
+  --data-muted-on-deep: #bdcec2;
+  --data-accent-on-deep: #a9dcbc;
   --chart-primary: var(--data-primary);
   --chart-comparison: #777;
   --positive: var(--data-primary);
@@ -127,8 +134,8 @@
 }
 
 .dashboard-overview .performance-panel {
-  background: #f0f7f2;
-  border-color: #c9dfcf;
+  background: var(--data-surface);
+  border-color: var(--data-border);
 }
 
 .dashboard-overview .large-value {
@@ -140,7 +147,7 @@
 
 .dashboard-overview .large-value.positive,
 .dashboard-overview .return-caption.positive {
-  color: #245f40;
+  color: var(--data-ink);
 }
 
 .dashboard-overview .large-value.negative,
@@ -153,20 +160,20 @@
 }
 
 .dashboard-overview .focus-panel {
-  background: #14251d;
-  color: #f5faf6;
+  background: var(--data-deep);
+  color: var(--data-on-deep);
 }
 
 .dashboard-overview .focus-panel :is(h2, strong, .focus-link) {
-  color: #f5faf6;
+  color: var(--data-on-deep);
 }
 
 .dashboard-overview .focus-panel :is(p, .focus-bars > div:not(.focus-track)) {
-  color: #bdcec2;
+  color: var(--data-muted-on-deep);
 }
 
 .dashboard-overview .focus-panel .focus-label {
-  color: #a9dcbc;
+  color: var(--data-accent-on-deep);
 }
 
 .dashboard-overview .focus-panel .focus-track {
@@ -188,7 +195,7 @@
 
 .dashboard-overview .focus-panel .focus-link {
   border-color: #43544a;
-  color: #a9dcbc;
+  color: var(--data-accent-on-deep);
 }
 
 .dashboard-overview .focus-panel .focus-link:hover {
@@ -197,7 +204,7 @@
 
 .dashboard-overview .holdings-table .numeric.positive,
 .dashboard-overview .return-drivers strong.positive {
-  color: #245f40;
+  color: var(--data-ink);
 }
 
 .dashboard-overview .holdings-table .numeric.negative,
@@ -258,29 +265,31 @@
 
 .dashboard-risk .risk-intro {
   padding: 27px;
-  background: var(--panel-deep);
-  border: 1px solid color-mix(in srgb, var(--bamboo) 20%, var(--border));
+  background: var(--data-deep);
+  border: 1px solid var(--data-deep);
   border-radius: var(--radius);
+  color: var(--data-on-deep);
 }
 
-.dashboard-risk .risk-intro {
-  background: #181818;
-  border-color: #181818;
-  color: #f8f8f8;
+.dashboard-risk .risk-intro :is(p, .sample-context) {
+  color: var(--data-muted-on-deep);
 }
 
-.dashboard-risk .risk-intro :is(.label-chip, p, .sample-context) {
-  color: #b5b5b5;
+.dashboard-risk .risk-intro .label-chip {
+  color: var(--data-accent-on-deep);
 }
 
-.dashboard-risk .risk-intro .sample-context strong,
+.dashboard-risk .risk-intro .sample-context strong {
+  color: var(--data-on-deep);
+}
+
 .dashboard-risk .risk-intro .text-link {
-  color: #f8f8f8;
+  color: var(--data-accent-on-deep);
 }
 
 .dashboard-risk .risk-intro h2 em {
-  background: #f8f8f8;
-  color: #171717;
+  background: var(--data-accent-on-deep);
+  color: var(--data-deep);
 }
 
 .dashboard-risk .risk-intro h2 {
@@ -294,7 +303,10 @@
 
 .dashboard-risk .risk-bars-panel {
   min-width: 0;
-  padding: 27px 0 0;
+  padding: 27px;
+  border: 1px solid var(--data-border);
+  border-radius: var(--radius);
+  background: var(--data-surface);
 }
 
 .dashboard-risk .risk-bar-row {
@@ -324,6 +336,10 @@
   background: var(--data-negative);
 }
 
+.dashboard-risk .note-panel {
+  background: var(--data-surface);
+}
+
 /* Research: a directory, a desk, then further reading. */
 .dashboard-research .research-workspace {
   border-radius: var(--radius);
@@ -331,16 +347,19 @@
 }
 
 .dashboard-research .research-index {
-  background: color-mix(in srgb, var(--raised) 58%, var(--surface));
+  background: var(--data-surface);
+  border-color: var(--data-border);
+}
+
+.dashboard-research .index-filter button[aria-pressed="true"],
+.dashboard-research .underlined-tabs button[aria-pressed="true"] {
+  border-color: var(--data-primary);
+  color: var(--data-ink);
 }
 
 .dashboard-research .asset-index-item.active {
-  box-shadow: inset 3px 0 0 var(--bamboo);
-}
-
-.dashboard-research .asset-index-item.active {
-  background: #171717;
-  border-color: #171717;
+  background: var(--data-deep);
+  border-color: var(--data-deep);
   color: #fff;
 }
 
@@ -362,6 +381,18 @@
   font-size: clamp(2.1rem, 3vw, 3rem);
 }
 
+.dashboard-research .company-price.positive {
+  color: var(--data-ink);
+}
+
+.dashboard-research .company-price.negative {
+  color: var(--data-negative);
+}
+
+.dashboard-research .company-price > span {
+  color: var(--muted);
+}
+
 .dashboard-research .research-reading {
   padding-top: 38px;
 }
@@ -376,6 +407,7 @@
 
 .dashboard-research .reading-note:hover,
 .dashboard-research .reading-note:focus-visible {
+  background: var(--data-surface);
   transform: translateY(-3px);
 }
 
@@ -414,8 +446,8 @@
 
 .dashboard-what-if .scenario-presets > button:not(:disabled):hover,
 .dashboard-what-if .scenario-presets > button:not(:disabled):focus-visible {
-  background: var(--selected);
-  border-color: var(--bamboo);
+  background: var(--data-surface);
+  border-color: var(--data-primary);
 }
 
 .dashboard-what-if .scenario-workspace {
@@ -435,7 +467,30 @@
 }
 
 .dashboard-what-if .scenario-results {
-  background: color-mix(in srgb, var(--panel-deep) 47%, var(--surface));
+  background: var(--data-surface);
+  border-color: var(--data-border);
+}
+
+.dashboard-what-if .scenario-results > .section-heading .eyebrow,
+.dashboard-what-if .scenario-results .results-status {
+  color: var(--data-ink);
+}
+
+.dashboard-what-if .scenario-results .results-status.stale {
+  color: var(--data-negative);
+}
+
+.dashboard-what-if .scenario-editor .weight-input:focus-within {
+  outline-color: var(--data-primary);
+}
+
+.dashboard-what-if .scenario-editor .allocation-total.valid strong {
+  color: var(--data-ink);
+}
+
+.dashboard-what-if .scenario-changes li {
+  background: var(--data-surface);
+  color: var(--data-ink);
 }
 
 .dashboard-what-if .scenario-editor > .section-heading,

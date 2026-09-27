@@ -277,7 +277,9 @@ export default function Research({
               <div className="company-chart-head">
                 <div>
                   <span className="eyebrow">NORMALIZED PRICE HISTORY</span>
-                  <div className="company-price">
+                  <div
+                    className={`company-price ${sampleReturn === null ? "" : sampleReturn > 0 ? "positive" : sampleReturn < 0 ? "negative" : ""}`}
+                  >
                     {sampleReturn === null
                       ? "Unavailable"
                       : signedPct(sampleReturn)}
