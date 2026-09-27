@@ -92,6 +92,31 @@ def test_scenario_request_is_validated_and_does_not_mutate_portfolio(tmp_path):
         assert client.get("/api/v1/portfolios/demo").json() == before
 
 
+def test_scenario_explanation_enforces_saved_and_proposed_symbol_union(tmp_path):
+    settings = Settings(_env_file=None, analyst_mode="demo", storage_path=tmp_path / "scenario-limit.sqlite3")
+    symbols = ["NVDA", "MSFT", "AAPL", "JPM", "VTI", "TLT", "AMD", "GLD"]
+    with TestClient(create_app(settings)) as client:
+        created = client.post("/api/v1/portfolios", json={
+            "name": "Eight symbols",
+            "holdings": [{"symbol": symbol, "weight": 0.125} for symbol in symbols],
+        })
+        assert created.status_code == 201, created.text
+        portfolio_id = created.json()["portfolio_id"]
+        analysis = client.post(f"/api/v1/portfolios/{portfolio_id}/analysis")
+        assert analysis.status_code == 200, analysis.text
+
+        response = client.post(
+            f"/api/v1/portfolios/{portfolio_id}/what-if/explanation",
+            json={
+                "analysis_id": analysis.json()["analysis_id"],
+                "proposed_weights": {"SPY": 1.0},
+            },
+        )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "SYMBOL_LIMIT_EXCEEDED"
+
+
 def test_scenario_evidence_must_match_the_saved_snapshot():
     metrics = demo_metrics()
     comparison = {

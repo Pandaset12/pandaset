@@ -2,6 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowPath, ArrowUpRight, InformationCircle } from "./icons";
 import { Modal } from "./UI";
 import {
+  requestSavedAnalysisBriefing,
+  requestSavedRiskExplanation,
+} from "../api/eventLab";
+import {
   createRequestGuard,
   requestAnalysisBriefing,
   requestResearchSummary,
@@ -13,7 +17,11 @@ import {
 export type AIWorkflowAction =
   | { workflow: "analysis_briefing" }
   | { workflow: "risk_explanation"; question: string }
-  | { workflow: "scenario_explanation"; proposedWeights: number[] }
+  | {
+      workflow: "scenario_explanation";
+      proposedWeights: number[];
+      symbols: string[];
+    }
   | { workflow: "research_summary"; symbol: string };
 
 const workflowTitles = {
@@ -61,11 +69,13 @@ export function AIWorkflowModal({
   action,
   portfolioId,
   analysisId,
+  authenticated = false,
   onClose,
 }: {
   action: AIWorkflowAction;
   portfolioId: string;
   analysisId: string;
+  authenticated?: boolean;
   onClose: () => void;
 }) {
   const [response, setResponse] = useState<AIWorkflowResponse | null>(null);
@@ -81,18 +91,27 @@ export function AIWorkflowModal({
     try {
       const result =
         action.workflow === "analysis_briefing"
-          ? await requestAnalysisBriefing(portfolioId, analysisId)
+          ? await (authenticated
+              ? requestSavedAnalysisBriefing(portfolioId, analysisId)
+              : requestAnalysisBriefing(portfolioId, analysisId))
           : action.workflow === "risk_explanation"
-            ? await requestRiskExplanation(
-                portfolioId,
-                analysisId,
-                action.question,
-              )
+            ? await (authenticated
+                ? requestSavedRiskExplanation(
+                    portfolioId,
+                    analysisId,
+                    action.question,
+                  )
+                : requestRiskExplanation(
+                    portfolioId,
+                    analysisId,
+                    action.question,
+                  ))
             : action.workflow === "scenario_explanation"
               ? await requestScenarioExplanation(
                   portfolioId,
                   analysisId,
                   action.proposedWeights,
+                  action.symbols,
                 )
               : await requestResearchSummary(action.symbol);
       if (requestGuard.current.isCurrent(id)) setResponse(result);

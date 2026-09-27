@@ -63,3 +63,10 @@ Final motion screenshots and the interaction report are in `evidence/motion/`; t
 The black comparison now stays in native document flow. Removing its sticky stage and extra scroll span eliminates the stop and release at its boundaries. Its chart eases upward into place once, and Capital/Risk changes only through the selectors. This supersedes the earlier pinned comparison and automatic scroll selection described above. No wheel interception or simulated inertia was added; the contrast still gives this section its emphasis.
 
 Verification: all 19 tests, production build, formatting, functional checks, and motion checks passed. The functional check now measures section movement across entry, middle, and exit and verifies that a manual perspective choice persists. Desktop, mobile, and reduced-motion captures each cover 25 scroll positions with no reported dead scroll or errors. All three contact sheets were visually inspected. Latest sheets replace `evidence/motion/*-scroll.png`; `evidence/native-scroll.json` records the updated functional checks. Physical-device Safari testing remains unverified.
+
+
+## Main integration
+
+Merged the latest main into the landing branch before publication. Conflict resolutions retain main's current dashboard, methodology, saved allocation behavior, and Vite environment directory, plus the landing entry and Pandaset capitalization. The root entry now forwards authentication callbacks to app.html, preserving query parameters and fragments for the existing authentication handler. Reference: https://supabase.com/docs/guides/auth/sessions/implicit-flow.
+
+The integrated tree passed all 72 frontend/quant tests, the production build, and landing functional/motion browser checks. New regression tests cover dashboard bookmarks, authentication callbacks, and landing anchors. Desktop and mobile screenshots were inspected. The browser navigation check now expects the authentication boundary introduced on main instead of an unauthenticated portfolio error. No live email sign-in was performed.

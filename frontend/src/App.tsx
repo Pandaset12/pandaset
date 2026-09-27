@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import type { Session } from "@supabase/supabase-js";
 import {
   ArrowUpRight,
   ChatBubbleLeftRight,
@@ -7,10 +8,15 @@ import {
   InformationCircle as Info,
   XMark as X,
 } from "./components/icons";
-import { assets, initialWeights } from "../../quant/data";
+import { assets } from "../../quant/data";
 import {
-  analyzePortfolio,
+  analyzeExistingPortfolio,
+  createPortfolio,
   createRequestGuard,
+  verifyPortfolioHistory,
+  listPortfolios,
+  setApiAccessToken,
+  updatePortfolio,
   type AnalysisResponse,
   type Portfolio,
 } from "./api/portfolio";
@@ -19,6 +25,14 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 import { EditPortfolio } from "./components/EditPortfolio";
 import { MethodologyModal } from "./components/MethodologyModal";
 import { Analyst } from "./components/Analyst";
+import { AuthScreen } from "./components/AuthScreen";
+import { AuthBoundary } from "./components/AuthBoundary";
+import { PortfolioOnboarding } from "./components/onboarding/PortfolioOnboarding";
+import { EventApplication } from "./EventApplication";
+import {
+  EventLabError,
+  listPortfolios as listEventPortfolios,
+} from "./api/eventLab";
 import {
   AIWorkflowModal,
   type AIWorkflowAction,
@@ -27,26 +41,34 @@ import Overview from "./pages/Overview";
 import Risk from "./pages/Risk";
 import Research from "./pages/Research";
 import WhatIf from "./pages/WhatIf";
+import {
+  portfolioFromPercentages,
+  portfolioPercentages,
+  workspaceAssets,
+} from "./workspace/holdings";
 
 type ActiveAnalysis = { portfolio: Portfolio; analysis: AnalysisResponse };
 
-function weightsFromAnalysis(analysis: AnalysisResponse) {
-  return assets.map((asset) =>
-    Math.round((analysis.weights[asset.symbol] ?? 0) * 100),
-  );
-}
-
-function Application() {
+export function Application({ onSignOut }: { onSignOut: () => Promise<void> }) {
   const [hash, setHash] = useState(location.hash || "#/");
-  const [weights, setWeights] = useState([...initialWeights]);
+  const [weights, setWeights] = useState<number[]>([]);
   const [edit, setEdit] = useState(false);
   const [method, setMethod] = useState(false);
   const [analyst, setAnalyst] = useState<string | null>(null);
   const [aiWorkflow, setAiWorkflow] = useState<AIWorkflowAction | null>(null);
   const [toast, setToast] = useState("");
   const [active, setActive] = useState<ActiveAnalysis | null>(null);
-  const [analysisLoading, setAnalysisLoading] = useState(true);
+  const [analysisLoading, setAnalysisLoading] = useState(false);
   const [analysisError, setAnalysisError] = useState("");
+  const [portfolioState, setPortfolioState] = useState<
+    "loading" | "empty" | "error" | "ready"
+  >("loading");
+  const [selectedPortfolio, setSelectedPortfolio] = useState<Portfolio | null>(
+    null,
+  );
+  const [portfolios, setPortfolios] = useState<Portfolio[]>([]);
+  const [portfolioMenuOpen, setPortfolioMenuOpen] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
   const analysisRequest = useRef(createRequestGuard());
 
   useEffect(() => {
@@ -63,15 +85,15 @@ function Application() {
     return () => clearTimeout(id);
   }, [toast]);
 
-  async function loadAnalysis(nextWeights: number[]) {
+  async function loadAnalysis(portfolio: Portfolio) {
     const request = analysisRequest.current.begin();
     setAnalysisLoading(true);
     setAnalysisError("");
     try {
-      const result = await analyzePortfolio(nextWeights);
+      const result = await analyzeExistingPortfolio(portfolio);
       if (!analysisRequest.current.isCurrent(request)) return false;
       setActive(result);
-      setWeights(weightsFromAnalysis(result.analysis));
+      setWeights(portfolioPercentages(portfolio));
       return true;
     } catch (error) {
       if (analysisRequest.current.isCurrent(request)) {
@@ -87,8 +109,37 @@ function Application() {
     }
   }
 
+  async function loadPortfolios() {
+    setPortfolioState("loading");
+    try {
+      const portfolios = await listPortfolios();
+      setPortfolios(portfolios);
+      if (!portfolios.length) setPortfolioState("empty");
+      else {
+        setSelectedPortfolio(portfolios[0]);
+        setPortfolioState("ready");
+        void loadAnalysis(portfolios[0]);
+      }
+    } catch {
+      setPortfolioState("error");
+    }
+  }
+
+  function selectPortfolio(portfolio: Portfolio) {
+    setPortfolioMenuOpen(false);
+    if (portfolio.portfolio_id === selectedPortfolio?.portfolio_id) return;
+    setSelectedPortfolio(portfolio);
+    setActive(null);
+    setAnalysisError("");
+    setEdit(false);
+    setAnalyst(null);
+    setAiWorkflow(null);
+    setShowOnboarding(false);
+    void loadAnalysis(portfolio);
+  }
+
   useEffect(() => {
-    void loadAnalysis(initialWeights);
+    void loadPortfolios();
     return () => {
       analysisRequest.current.invalidate();
     };
@@ -97,13 +148,54 @@ function Application() {
   async function apply(
     nextWeights: number[],
     source: "edit" | "scenario" = "edit",
+    symbols = selectedPortfolio?.holdings.map(({ symbol }) => symbol) ?? [],
   ) {
-    if (!(await loadAnalysis(nextWeights))) return false;
+    try {
+      if (!selectedPortfolio) return false;
+      const input = portfolioFromPercentages(
+        source === "edit"
+          ? selectedPortfolio.name
+          : `${selectedPortfolio.name} scenario`,
+        symbols,
+        nextWeights,
+      );
+      await verifyPortfolioHistory(input.holdings);
+      if (source === "edit") {
+        const updated = await updatePortfolio(
+          selectedPortfolio.portfolio_id,
+          input,
+        );
+        setSelectedPortfolio(updated);
+        setPortfolios((current) =>
+          current.map((portfolio) =>
+            portfolio.portfolio_id === updated.portfolio_id
+              ? updated
+              : portfolio,
+          ),
+        );
+        setActive(null);
+        setWeights(portfolioPercentages(updated));
+        setEdit(false);
+        setAnalyst(null);
+        setAiWorkflow(null);
+        if (!(await loadAnalysis(updated))) return false;
+      } else {
+        const created = await createPortfolio(input);
+        setPortfolios((current) => [created, ...current]);
+        if (!(await loadAnalysis(created))) return false;
+        setSelectedPortfolio(created);
+      }
+    } catch (error) {
+      setAnalysisError(
+        error instanceof Error ? error.message : "Could not save portfolio.",
+      );
+      return false;
+    }
     setEdit(false);
     setToast(
       source === "scenario"
-        ? "Scenario saved as the active sample portfolio."
-        : "Sample portfolio updated.",
+        ? "Scenario saved as the active portfolio."
+        : "Portfolio updated.",
     );
     return true;
   }
@@ -131,7 +223,56 @@ function Application() {
         timeZone: "UTC",
       })
     : "Unavailable";
+  const workspaceHoldings = selectedPortfolio
+    ? workspaceAssets(selectedPortfolio)
+    : [];
+  const searchTickers = async (query: string) =>
+    assets
+      .filter((asset) =>
+        asset.symbol.toLowerCase().includes(query.toLowerCase()),
+      )
+      .map((asset) => ({ symbol: asset.symbol, name: asset.name }));
 
+  if (portfolioState !== "ready" || showOnboarding)
+    return (
+      <>
+        <button
+          className="text-button sign-out-button"
+          onClick={() => void onSignOut()}
+        >
+          Sign out
+        </button>
+        {showOnboarding && (
+          <button
+            className="text-button"
+            onClick={() => setShowOnboarding(false)}
+          >
+            Back to saved portfolios
+          </button>
+        )}
+        <PortfolioOnboarding
+          loadState={
+            showOnboarding || portfolioState === "ready"
+              ? "empty"
+              : portfolioState
+          }
+          hasExistingPortfolios={portfolios.length > 0}
+          onRetryLoad={() => void loadPortfolios()}
+          searchTickers={searchTickers}
+          createPortfolio={async (input, options) => {
+            await verifyPortfolioHistory(input.holdings, options.signal);
+            return createPortfolio(input, options.signal);
+          }}
+          onOpenPortfolio={(portfolio) => {
+            setSelectedPortfolio(portfolio);
+            setPortfolios((current) => [portfolio, ...current]);
+            setPortfolioState("ready");
+            setShowOnboarding(false);
+            void loadAnalysis(portfolio);
+          }}
+        />
+      </>
+    );
   return (
     <>
       <a
@@ -168,19 +309,57 @@ function Application() {
             <span>Ask Panda</span>
             <span className="key-hint">↗</span>
           </button>
+          <button
+            className="text-button sign-out-button"
+            onClick={() => void onSignOut()}
+          >
+            Sign out
+          </button>
         </div>
       </header>
       <div className="workspace-bar">
         <div>
-          <button
-            className="portfolio-selector"
-            onClick={() => setEdit(true)}
-            disabled={!active || analysisLoading}
+          <div
+            className="portfolio-picker"
+            onKeyDown={(event) => {
+              if (event.key === "Escape") setPortfolioMenuOpen(false);
+            }}
           >
-            <span className="portfolio-initial">L</span>
-            {active?.portfolio.name ?? "Long-term portfolio"}
-            <ChevronDown size={14} />
-          </button>
+            <button
+              className="portfolio-selector"
+              aria-expanded={portfolioMenuOpen}
+              aria-controls="saved-portfolios"
+              onClick={() => setPortfolioMenuOpen((open) => !open)}
+            >
+              <span className="portfolio-initial">
+                {selectedPortfolio?.name.slice(0, 1).toUpperCase() ?? "P"}
+              </span>
+              {selectedPortfolio?.name ?? "Choose portfolio"}
+              <ChevronDown size={14} />
+            </button>
+            {portfolioMenuOpen && (
+              <div
+                id="saved-portfolios"
+                className="portfolio-menu"
+                aria-label="Saved portfolios"
+              >
+                {portfolios.map((portfolio) => (
+                  <button
+                    key={portfolio.portfolio_id}
+                    type="button"
+                    aria-current={
+                      portfolio.portfolio_id === selectedPortfolio?.portfolio_id
+                        ? "true"
+                        : undefined
+                    }
+                    onClick={() => selectPortfolio(portfolio)}
+                  >
+                    {portfolio.name}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           <button className="demo-badge" onClick={() => setMethod(true)}>
             {active?.analysis.data_mode === "live"
               ? "LIVE DATA"
@@ -197,26 +376,44 @@ function Application() {
         {analysisLoading && !active ? (
           <section className="api-state" role="status">
             <strong>Loading portfolio analysis…</strong>
-            <p>
-              Connecting to the backend and calculating the sample portfolio.
-            </p>
+            <p>Connecting to the backend and calculating this portfolio.</p>
           </section>
         ) : analysisError && !active ? (
-          <section className="api-state" role="alert">
-            <strong>Portfolio analysis is unavailable.</strong>
-            <p>{analysisError}</p>
+          <section className="api-state api-state-featured" role="alert">
+            <span className="api-state-kicker">PORTFOLIO ANALYSIS</span>
+            <h1>We couldn’t load the portfolio analysis.</h1>
+            <p>
+              Your saved portfolio is still available. Try again, choose another
+              portfolio above, or create a replacement with supported prices.
+            </p>
             <button
               className="button dark"
-              onClick={() => void loadAnalysis(initialWeights)}
+              onClick={() =>
+                selectedPortfolio && void loadAnalysis(selectedPortfolio)
+              }
               disabled={analysisLoading}
             >
               Retry analysis
             </button>
+            <button
+              className="button subtle"
+              onClick={() => setShowOnboarding(true)}
+            >
+              Create another portfolio
+            </button>
+            <button className="text-button" onClick={() => setMethod(true)}>
+              Data & methodology
+            </button>
+            <details>
+              <summary>Technical details</summary>
+              <p>{analysisError}</p>
+            </details>
           </section>
         ) : active ? (
           <ErrorBoundary>
             {route === "/" ? (
               <Overview
+                holdings={workspaceHoldings}
                 analysis={active.analysis}
                 onEdit={() => setEdit(true)}
                 onAsk={(q) => setAnalyst(q || "")}
@@ -225,6 +422,7 @@ function Application() {
               />
             ) : route === "/risk" ? (
               <Risk
+                holdings={workspaceHoldings}
                 analysis={active.analysis}
                 onExplain={() =>
                   setAiWorkflow({
@@ -238,6 +436,7 @@ function Application() {
             ) : route === "/research" ? (
               <Research
                 key={hash}
+                holdings={workspaceHoldings}
                 weights={weights}
                 onAsk={(q) => setAnalyst(q || "")}
                 onSummarizeSource={(symbol) =>
@@ -248,13 +447,15 @@ function Application() {
             ) : (
               <WhatIf
                 key={hash}
+                holdings={workspaceHoldings}
                 analysis={active.analysis}
                 weights={weights}
-                onApply={(w) => apply(w, "scenario")}
-                onExplainScenario={(proposedWeights) =>
+                onApply={(w, symbols) => apply(w, "scenario", symbols)}
+                onExplainScenario={(proposedWeights, symbols) =>
                   setAiWorkflow({
                     workflow: "scenario_explanation",
                     proposedWeights,
+                    symbols,
                   })
                 }
                 query={query}
@@ -266,15 +467,22 @@ function Application() {
               </p>
             )}
             {analysisError && (
-              <p className="analysis-saving error" role="alert">
-                The active analysis is unchanged. {analysisError}{" "}
+              <div className="analysis-saving error" role="alert">
+                The analysis couldn’t be updated. Your active portfolio is
+                unchanged.{" "}
                 <button
                   className="text-button"
-                  onClick={() => void loadAnalysis(weights)}
+                  onClick={() =>
+                    selectedPortfolio && void loadAnalysis(selectedPortfolio)
+                  }
                 >
                   Retry
                 </button>
-              </p>
+                <details>
+                  <summary>Technical details</summary>
+                  {analysisError}
+                </details>
+              </div>
             )}
           </ErrorBoundary>
         ) : null}
@@ -285,20 +493,27 @@ function Application() {
           you own.
         </span>
         <button className="text-button" onClick={() => setMethod(true)}>
-          Sample data & methodology
+          Data & methodology
           <ArrowUpRight size={13} />
         </button>
       </footer>
       {edit && active && (
         <EditPortfolio
+          holdings={workspaceHoldings}
           weights={weights}
+          searchTickers={searchTickers}
           busy={analysisLoading}
           error={analysisError}
           onClose={() => setEdit(false)}
-          onSave={(w) => apply(w)}
+          onSave={(w, symbols) => apply(w, "edit", symbols)}
         />
       )}
-      {method && <MethodologyModal onClose={() => setMethod(false)} />}
+      {method && (
+        <MethodologyModal
+          analysis={active?.analysis ?? null}
+          onClose={() => setMethod(false)}
+        />
+      )}
       {analyst !== null && active && (
         <Analyst
           portfolioId={active.portfolio.portfolio_id}
@@ -335,7 +550,96 @@ function Application() {
 export default function App() {
   return (
     <ErrorBoundary>
-      <Application />
+      <AuthBoundary
+        renderDashboard={(currentSession, signOut) => (
+          <AuthenticatedApplication
+            session={currentSession}
+            onSignOut={signOut}
+          />
+        )}
+        renderSignedOut={(client) => {
+          setApiAccessToken(null);
+          return <AuthScreen client={client} />;
+        }}
+      />
     </ErrorBoundary>
+  );
+}
+
+function AuthenticatedApplication({
+  session,
+  onSignOut,
+}: {
+  session: Session;
+  onSignOut: () => Promise<void>;
+}) {
+  setApiAccessToken(session.access_token);
+  const [mode, setMode] = useState<"loading" | "standard" | "event" | "error">(
+    "loading",
+  );
+  const [modeError, setModeError] = useState("");
+  const [retry, setRetry] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+    setMode("loading");
+    setModeError("");
+    const selectMode = async () => {
+      try {
+        try {
+          await listEventPortfolios();
+          if (active) setMode("event");
+        } catch (cause) {
+          if (
+            cause instanceof EventLabError &&
+            [
+              "EVENT_LAB_NOT_INVITED",
+              "EVENT_LAB_UNAVAILABLE",
+              "AUTH_UNAVAILABLE",
+            ].includes(cause.code)
+          ) {
+            if (active) setMode("standard");
+          } else {
+            throw cause;
+          }
+        }
+      } catch (cause) {
+        if (!active) return;
+        setModeError(
+          cause instanceof Error
+            ? cause.message
+            : "The portfolio service is unavailable.",
+        );
+        setMode("error");
+      }
+    };
+    void selectMode();
+    return () => {
+      active = false;
+    };
+  }, [session.user.id, retry]);
+
+  if (mode === "loading")
+    return (
+      <main className="auth-loading" role="status">
+        Opening your workspace…
+      </main>
+    );
+  if (mode === "error")
+    return (
+      <main className="auth-loading" role="alert">
+        <p>{modeError}</p>
+        <button
+          className="button dark"
+          onClick={() => setRetry((value) => value + 1)}
+        >
+          Retry
+        </button>
+      </main>
+    );
+  return mode === "event" ? (
+    <EventApplication key={session.user.id} onSignOut={onSignOut} />
+  ) : (
+    <Application key={session.user.id} onSignOut={onSignOut} />
   );
 }

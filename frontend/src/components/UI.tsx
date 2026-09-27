@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import type { ReactNode } from "react";
 import { ArrowRight, ArrowUpRight, XMark } from "./icons";
-import type { Asset } from "../../../quant/data";
+import type { PortfolioAsset } from "../types/portfolioAsset";
 
 export function PandaMark({ className }: { className?: string }) {
   return (
@@ -61,7 +61,7 @@ export function AssetMark({
   asset,
   small = false,
 }: {
-  asset: Asset;
+  asset: PortfolioAsset;
   small?: boolean;
 }) {
   return (
@@ -89,13 +89,15 @@ export function AssetMark({
         "J"
       ) : asset.symbol === "AMD" ? (
         "A"
-      ) : (
+      ) : asset.symbol === "AAPL" ? (
         <svg viewBox="0 0 24 24">
           <path
             d="M15.4 3.3c-.9.1-2 .6-2.6 1.3-.6.7-1.1 1.7-.9 2.7 1 .1 2-.5 2.7-1.2.6-.8 1-1.7.8-2.8ZM18.5 14.8c-.5 1.3-.8 1.9-1.5 3-1 1.5-2.5 3.4-4.2 3.4-1.5 0-1.9-.9-3.9-.9s-2.5.9-3.9.9c-1.6 0-3.1-1.7-4.1-3.2-2.8-4.2-3.1-9.1-1.4-11.6C.7 4.6 2.8 3.6 4.8 3.6c1.5 0 2.5.9 3.8.9s2.1-.9 3.8-.9c1.6 0 3.3.9 4.4 2.3-3.8 2.1-3.2 7.5 1.7 8.9Z"
             transform="translate(4 4) scale(.75)"
           />
         </svg>
+      ) : (
+        asset.symbol.slice(0, 2)
       )}
     </span>
   );

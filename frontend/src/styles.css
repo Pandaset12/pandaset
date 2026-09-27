@@ -6,3 +6,6 @@
 @import "./styles/dialogs.css";
 @import "./styles/responsive.css";
 @import "./styles/refinements.css";
+@import "./styles/auth.css";
+@import "./components/onboarding/onboarding.css";
+@import "./styles/live-quotes.css";

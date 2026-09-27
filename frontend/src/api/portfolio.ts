@@ -33,6 +33,9 @@ export type MetricSnapshot = {
   freshness: Freshness;
   notes: string[];
   assumptions: string[];
+  observation_count: number | null;
+  return_frequency: "daily";
+  volatility_unit: "annualized_decimal";
 };
 export type AnalysisResponse = Omit<
   MetricSnapshot,
@@ -58,6 +61,19 @@ export type MarketHistoryResponse = {
   requested_lookback_days: number;
   observation_count: number;
   warnings: string[];
+};
+export type LiveQuote = {
+  symbol: string;
+  last_price: number | null;
+  last_trade_at: string | null;
+  bid: number | null;
+  ask: number | null;
+  quote_at: string | null;
+};
+export type LiveQuotesResponse = {
+  feed: "IEX";
+  source: "alpaca";
+  quotes: LiveQuote[];
 };
 export type AskResponse = {
   analyst_mode: "demo" | "gemini";
@@ -107,6 +123,7 @@ export class ApiError extends Error {
     message: string,
     readonly status: number,
     readonly requestId?: string,
+    readonly code?: string,
   ) {
     super(message);
     this.name = "ApiError";
@@ -143,18 +160,43 @@ export function portfolioInput(
   };
 }
 
-function allocation(weights: number[]) {
-  return portfolioInput(weights).holdings;
+function allocation(weights: number[], symbols?: string[]) {
+  if (!symbols) return portfolioInput(weights).holdings;
+  if (
+    weights.length !== symbols.length ||
+    !weights.every(
+      (weight) => Number.isFinite(weight) && weight >= 0 && weight <= 100,
+    ) ||
+    Math.abs(weights.reduce((sum, weight) => sum + weight, 0) - 100) >= 0.000001
+  ) {
+    throw new Error("Allocations must total 100%.");
+  }
+  return symbols.flatMap((symbol, index) =>
+    weights[index] > 0 ? [{ symbol, weight: weights[index] / 100 }] : [],
+  );
 }
 
 const requestsInFlight = new Map<string, Promise<unknown>>();
+let accessToken: string | null = null;
+let tokenVersion = 0;
+
+export function setApiAccessToken(token: string | null) {
+  if (token !== accessToken) tokenVersion += 1;
+  accessToken = token;
+}
 
 function request<T>(url: string, init: RequestInit = {}): Promise<T> {
-  const key = `${init.method ?? "GET"} ${url} ${typeof init.body === "string" ? init.body : ""}`;
-  const existing = requestsInFlight.get(key);
+  const token = accessToken;
+  const protectedRoute =
+    url.startsWith("/api/v1/portfolios") || url.startsWith("/api/v1/quotes");
+  const headers = new Headers(init.headers);
+  if (protectedRoute && token) headers.set("Authorization", `Bearer ${token}`);
+  const key = `${protectedRoute ? tokenVersion : "public"} ${init.method ?? "GET"} ${url} ${typeof init.body === "string" ? init.body : ""}`;
+  // A caller-owned signal must not cancel another consumer's request.
+  const existing = init.signal ? undefined : requestsInFlight.get(key);
   if (existing) return existing as Promise<T>;
   const pending = (async () => {
-    const response = await fetch(url, init);
+    const response = await fetch(url, { ...init, headers });
     const payload = await response.json().catch(() => null);
     if (!response.ok) {
       const error = payload?.error;
@@ -164,10 +206,12 @@ function request<T>(url: string, init: RequestInit = {}): Promise<T> {
           : `Pandaset API request failed (${response.status}).`,
         response.status,
         typeof error?.request_id === "string" ? error.request_id : undefined,
+        typeof error?.code === "string" ? error.code : undefined,
       );
     }
     return payload as T;
   })();
+  if (init.signal) return pending;
   requestsInFlight.set(key, pending);
   void pending.then(
     () => {
@@ -186,6 +230,36 @@ const post = <T>(url: string, body?: object) =>
     headers: body ? { "Content-Type": "application/json" } : undefined,
     body: body ? JSON.stringify(body) : undefined,
   });
+
+export function listPortfolios() {
+  return request<Portfolio[]>("/api/v1/portfolios");
+}
+
+export function createPortfolio(input: PortfolioInput, signal?: AbortSignal) {
+  return request<Portfolio>("/api/v1/portfolios", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+    signal,
+  });
+}
+
+export function updatePortfolio(portfolioId: string, input: PortfolioInput) {
+  return request<Portfolio>(
+    `/api/v1/portfolios/${encodeURIComponent(portfolioId)}`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export function analyzeExistingPortfolio(portfolio: Portfolio) {
+  return post<AnalysisResponse>(
+    `/api/v1/portfolios/${encodeURIComponent(portfolio.portfolio_id)}/analysis`,
+  ).then((analysis) => ({ portfolio, analysis }));
+}
 
 export async function analyzePortfolio(weights: number[]) {
   const portfolio = await post<Portfolio>(
@@ -222,10 +296,56 @@ export function getMarketHistory(symbols: string[], lookbackDays = 252) {
   return request<MarketHistoryResponse>(`/api/v1/market-history?${query}`);
 }
 
-export function comparePortfolio(portfolioId: string, weights: number[]) {
+export async function verifyPortfolioHistory(
+  holdings: Holding[],
+  signal?: AbortSignal,
+) {
+  for (const holding of holdings) {
+    if (signal?.aborted) throw new DOMException("Cancelled", "AbortError");
+    try {
+      await getMarketHistory([holding.symbol], 2);
+    } catch {
+      throw new Error(
+        `Could not verify sample price history for ${holding.symbol}. Try again or choose another ticker.`,
+      );
+    }
+  }
+  if (signal?.aborted) throw new DOMException("Cancelled", "AbortError");
+}
+
+export async function getLiveQuotes(symbols: string[], signal?: AbortSignal) {
+  signal?.throwIfAborted();
+  const query = new URLSearchParams();
+  symbols.forEach((symbol) => query.append("symbols", symbol));
+  const controller = new AbortController();
+  const cancel = () => controller.abort(signal?.reason);
+  signal?.addEventListener("abort", cancel, { once: true });
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, 20_000);
+  try {
+    return await request<LiveQuotesResponse>(`/api/v1/quotes?${query}`, {
+      signal: controller.signal,
+    });
+  } catch (cause) {
+    if (timedOut) throw new ApiError("Live quote request timed out.", 408);
+    throw cause;
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener("abort", cancel);
+  }
+}
+
+export function comparePortfolio(
+  portfolioId: string,
+  weights: number[],
+  symbols?: string[],
+) {
   return post<WhatIfResponse>(
     `/api/v1/portfolios/${encodeURIComponent(portfolioId)}/what-if`,
-    { holdings: allocation(weights) },
+    { holdings: allocation(weights, symbols) },
   );
 }
 
@@ -265,13 +385,17 @@ export function requestScenarioExplanation(
   portfolioId: string,
   analysisId: string,
   weights: number[],
+  symbols?: string[],
 ) {
   return post<AIWorkflowResponse>(
     `/api/v1/portfolios/${encodeURIComponent(portfolioId)}/what-if/explanation`,
     {
       analysis_id: analysisId,
       proposed_weights: Object.fromEntries(
-        allocation(weights).map(({ symbol, weight }) => [symbol, weight]),
+        allocation(weights, symbols).map(({ symbol, weight }) => [
+          symbol,
+          weight,
+        ]),
       ),
       question:
         "Explain the trade-offs across the current, proposed, and change metrics.",

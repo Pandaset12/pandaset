@@ -9,6 +9,7 @@ export default defineConfig(({ mode }) => {
         input: { landing: "frontend/index.html", app: "frontend/app.html" },
       },
     },
+    envDir: process.cwd(),
     server: {
       proxy: { "/api": env.API_PROXY_TARGET || "http://127.0.0.1:8000" },
     },

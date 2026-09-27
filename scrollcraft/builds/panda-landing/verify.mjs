@@ -166,30 +166,16 @@ report.push({
   nativeComparisonScroll:
     "no pinning across entry, middle, or exit; manual chart choice persists",
 });
-// Confirm the CTA loads the existing app and its honest backend error state.
-await page.route(
-  (url) => url.pathname.startsWith("/api/"),
-  (route) =>
-    route.fulfill({
-      status: 503,
-      contentType: "application/json",
-      body: JSON.stringify({ detail: "Verification: backend unavailable" }),
-    }),
-);
+// The merged dashboard requires authentication before loading portfolio data.
 await page.locator(".lp-nav-cta").click();
+await page.waitForURL("**/app.html#/");
 await page
-  .getByRole("heading", { name: "Where the risk comes from" })
-  .waitFor({ state: "detached" });
-await page
-  .getByText("Portfolio analysis is unavailable.", { exact: true })
-  .waitFor();
-assert.match(page.url(), /app.html#\/$/);
-await page.getByRole("button", { name: "Retry analysis", exact: true }).click();
-await page
-  .getByText("Portfolio analysis is unavailable.", { exact: true })
+  .getByRole("heading", {
+    name: /Welcome back|authentication is not configured/,
+  })
   .waitFor();
 report.push({
-  dashboardNavigationAndUnavailableState: "passed (API failure simulated)",
+  dashboardNavigation: "passed (authentication boundary reached)",
 });
 for (const hash of ["#/", "#/risk", "#/research?symbol=NVDA", "#/what-if"]) {
   await page.goto(`${url}/${hash}`);

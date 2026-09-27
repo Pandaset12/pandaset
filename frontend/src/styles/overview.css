@@ -332,6 +332,25 @@
   width: 23px;
   color: var(--muted);
 }
+.holdings-table .table-asset {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+.holding-identity {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: left;
+}
+.holding-identity strong {
+  color: var(--ink);
+}
+.holding-identity small {
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 400;
+}
 .sub-label {
   font-size: 0.75rem;
   display: block;
@@ -527,8 +546,8 @@
   gap: 1rem;
   padding: 1rem 1.25rem;
   margin-bottom: 1.5rem;
-  border: 1px solid var(--border, #d9d9d9);
-  border-radius: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
 }
 
 .backend-analysis > * {
@@ -552,4 +571,13 @@
 .backend-analysis-results small {
   width: 100%;
   overflow-wrap: anywhere;
+}
+.backend-analysis details {
+  width: 100%;
+  color: var(--muted);
+  font-size: 0.8125rem;
+}
+.backend-analysis summary {
+  cursor: pointer;
+  width: fit-content;
 }

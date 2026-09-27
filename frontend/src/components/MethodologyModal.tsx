@@ -1,26 +1,36 @@
 import { InformationCircle as Info } from "./icons";
 import { Modal } from "./UI";
+import type { AnalysisResponse } from "../api/portfolio";
+import { observationCount } from "./AnalysisContext";
 
-export function MethodologyModal({ onClose }: { onClose: () => void }) {
+export function MethodologyModal({
+  analysis,
+  onClose,
+}: {
+  analysis: AnalysisResponse | null;
+  onClose: () => void;
+}) {
   return (
     <Modal title="The numbers behind the view" onClose={onClose}>
       <div className="method-intro">
         <Info size={20} />
         <p>
-          Pandaset is an interactive interface demo. Prices, returns, and
-          portfolio values are illustrative, not live market data.
+          Pandaset models portfolio results from the available price history.
+          Results are estimates, not executed trades. The active analysis shows
+          its price source and freshness.
         </p>
       </div>
       <dl className="method-list">
         <dt>Sample period</dt>
         <dd>
-          252 synthetic daily returns ending September 25, 2026. Every page uses
-          the same observations.
+          {analysis
+            ? `${observationCount(analysis)} daily return observations in the active ${analysis.data_mode === "demo" ? "fictional" : "modeled"} analysis. Research history can cover a different period.`
+            : "The active observation count appears with each analysis after it loads."}
         </dd>
         <dt>Portfolio model</dt>
         <dd>
           Constant daily allocations, with no deposits, withdrawals, fees, or
-          taxes. Displayed value is a sample balance of $128,450.
+          taxes. Portfolio values are illustrative.
         </dd>
         <dt>Risk & correlation</dt>
         <dd>
@@ -36,9 +46,9 @@ export function MethodologyModal({ onClose }: { onClose: () => void }) {
         </dd>
         <dt>Research & explanations</dt>
         <dd>
-          Research primers link to official sources. The analyst uses curated
-          explanations and computed metrics; Gemini and news feeds are not
-          connected.
+          Research primers link to official sources. Explanations, when
+          available, describe supplied evidence; they do not change the modeled
+          portfolio figures.
         </dd>
       </dl>
     </Modal>

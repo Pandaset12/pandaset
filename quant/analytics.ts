@@ -20,6 +20,45 @@ export function validateWeights(weights: number[]) {
     Math.abs(weights.reduce((s, w) => s + w, 0) - 100) < 0.001
   );
 }
+
+// A full trading year is the minimum period for displaying an annualized return.
+// This is a display guard, not a claim that a year makes an estimate predictive.
+export const MIN_ANNUALIZED_RETURN_OBSERVATIONS = 252;
+export const showAnnualizedReturn = (observations: number | null) =>
+  observations !== null && observations >= MIN_ANNUALIZED_RETURN_OBSERVATIONS;
+
+export function transferAllocation(
+  weights: number[],
+  from: number,
+  to: number,
+  amount: number,
+) {
+  if (
+    weights.length < 2 ||
+    !weights.every(
+      (weight) => Number.isFinite(weight) && weight >= 0 && weight <= 100,
+    ) ||
+    Math.abs(weights.reduce((sum, weight) => sum + weight, 0) - 100) >= 0.001 ||
+    !Number.isInteger(from) ||
+    !Number.isInteger(to) ||
+    from < 0 ||
+    to < 0 ||
+    from >= weights.length ||
+    to >= weights.length ||
+    from === to ||
+    !Number.isFinite(amount) ||
+    amount <= 0 ||
+    amount > weights[from]
+  ) {
+    throw new Error("Choose two holdings and an amount available to transfer.");
+  }
+  const next = [...weights];
+  const scale = 1_000_000;
+  const units = Math.round(amount * scale);
+  next[from] = (Math.round(next[from] * scale) - units) / scale;
+  next[to] = (Math.round(next[to] * scale) + units) / scale;
+  return next;
+}
 export function analyze(weights: number[], days = 252) {
   if (!validateWeights(weights))
     throw new Error(

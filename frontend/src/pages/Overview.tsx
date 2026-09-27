@@ -8,8 +8,13 @@ import {
   MagnifyingGlass as Search,
   InformationCircle as Info,
 } from "../components/icons";
-import { assets, researchNotes } from "../../../quant/data";
-import { pct, signedPct } from "../../../quant/analytics";
+import { researchNotes, type Asset } from "../../../quant/data";
+import { pct, showAnnualizedReturn, signedPct } from "../../../quant/analytics";
+import {
+  AnalysisDetails,
+  observationCount,
+  SampleContext,
+} from "../components/AnalysisContext";
 import {
   AssetMark,
   PageHeading,
@@ -18,16 +23,20 @@ import {
   Empty,
 } from "../components/UI";
 import { LineChart } from "../components/LineChart";
+import { LiveQuotesPanel } from "../components/LiveQuotesPanel";
+import { allocationPercent } from "../workspace/holdings";
 import type { AnalysisResponse } from "../api/portfolio";
 
 export default function Overview({
   analysis,
+  holdings: portfolioAssets,
   onEdit,
   onAsk,
   onBrief,
   onMethod,
 }: {
   analysis: AnalysisResponse;
+  holdings: Asset[];
   onEdit: () => void;
   onAsk: (q?: string) => void;
   onBrief: () => void;
@@ -36,11 +45,15 @@ export default function Overview({
   const [view, setView] = useState<"holdings" | "drivers">("holdings");
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<"weight" | "return">("weight");
-  const holdings = assets
+  const symbols = Object.keys(analysis.weights).filter(
+    (symbol) => analysis.weights[symbol] > 0,
+  );
+  const holdings = portfolioAssets
     .map((asset) => ({
       asset,
       weight: analysis.weights[asset.symbol] ?? 0,
       symbol: asset.symbol,
+      returnImpact: analysis.return_contribution?.[asset.symbol] ?? null,
     }))
     .filter(
       ({ asset, weight }) =>
@@ -49,16 +62,22 @@ export default function Overview({
           .toLowerCase()
           .includes(search.toLowerCase()),
     )
-    .sort((a, b) =>
-      sort === "weight"
-        ? b.weight - a.weight
-        : (analysis.return_contribution?.[b.symbol] ?? -Infinity) -
-          (analysis.return_contribution?.[a.symbol] ?? -Infinity),
-    );
+    .sort((a, b) => {
+      if (sort === "weight")
+        return b.weight - a.weight || a.symbol.localeCompare(b.symbol);
+      if (a.returnImpact === null)
+        return b.returnImpact === null ? a.symbol.localeCompare(b.symbol) : 1;
+      if (b.returnImpact === null) return -1;
+      return (
+        b.returnImpact - a.returnImpact || a.symbol.localeCompare(b.symbol)
+      );
+    });
   const topRisk = Object.entries(analysis.risk_contribution)
     .filter(([, value]) => value !== null)
     .sort((a, b) => (b[1] ?? 0) - (a[1] ?? 0))[0];
-  const topAsset = assets.find((asset) => asset.symbol === topRisk?.[0]);
+  const topAsset = portfolioAssets.find(
+    (asset) => asset.symbol === topRisk?.[0],
+  );
   const chartValues = analysis.series?.portfolio_index;
   const chartDates = analysis.series?.dates ?? [];
   const portfolioSeries = chartValues?.every(
@@ -73,7 +92,7 @@ export default function Overview({
     ? benchmark
     : undefined;
   const sectors = Object.entries(
-    assets.reduce<Record<string, number>>((grouped, asset) => {
+    portfolioAssets.reduce<Record<string, number>>((grouped, asset) => {
       grouped[asset.sector] =
         (grouped[asset.sector] ?? 0) + (analysis.weights[asset.symbol] ?? 0);
       return grouped;
@@ -103,25 +122,7 @@ export default function Overview({
           Brief this portfolio
         </button>
       </PageHeading>
-      <section className="backend-analysis" aria-label="Saved backend analysis">
-        <div>
-          <strong>
-            {analysis.data_mode === "demo"
-              ? "Backend demo analysis"
-              : "Backend analysis"}
-          </strong>
-          <p>
-            Analysis {analysis.analysis_id} · portfolio {analysis.portfolio_id}{" "}
-            · {analysis.observation_count ?? "—"} daily return observations
-          </p>
-        </div>
-        <span>
-          {analysis.data_quality.source} · {analysis.data_quality.freshness}
-        </span>
-        {analysis.data_quality.warnings.length > 0 && (
-          <small>{analysis.data_quality.warnings[0]}</small>
-        )}
-      </section>
+      <LiveQuotesPanel symbols={symbols} />
       <div className="overview-top">
         <section
           className="performance-panel"
@@ -144,30 +145,33 @@ export default function Overview({
                   ? "Unavailable"
                   : signedPct(analysis.portfolio_return)}
               </div>
-              <div
-                className={`return-caption ${(analysis.portfolio_return ?? 0) >= 0 ? "positive" : "negative"}`}
-              >
-                {(analysis.portfolio_return ?? 0) >= 0 ? (
-                  <ArrowUpRight size={17} />
-                ) : (
-                  <ArrowDownRight size={17} />
-                )}
-                {analysis.annualized_return === null
-                  ? "Annualized return unavailable"
-                  : `${signedPct(analysis.annualized_return)} annualized`}
-                <span className="muted"> over the available sample</span>
-              </div>
+              {showAnnualizedReturn(observationCount(analysis)) &&
+              analysis.annualized_return !== null ? (
+                <div
+                  className={`return-caption ${(analysis.portfolio_return ?? 0) >= 0 ? "positive" : "negative"}`}
+                >
+                  {(analysis.portfolio_return ?? 0) >= 0 ? (
+                    <ArrowUpRight size={17} />
+                  ) : (
+                    <ArrowDownRight size={17} />
+                  )}
+                  {signedPct(analysis.annualized_return)} annualized
+                  <span className="muted"> over the available sample</span>
+                </div>
+              ) : (
+                <p className="return-caption muted">
+                  Annualized return withheld for this short sample.
+                </p>
+              )}
+              <SampleContext analysis={analysis} />
             </div>
-            <span className="label-chip">
-              {analysis.lookback_days} return observations
-            </span>
           </div>
           {portfolioSeries && portfolioSeries.length > 1 ? (
             <LineChart
               dates={chartDates}
               series={portfolioSeries}
               secondary={benchmarkSeries}
-              secondaryLabel="VTI sample history"
+              secondaryLabel="VTI history"
               label="Portfolio index"
               compact
             />
@@ -178,8 +182,7 @@ export default function Overview({
           )}
           <div className="performance-bottom">
             <span>
-              Normalized portfolio value · based on the backend’s available
-              dates
+              Normalized portfolio value · based on the available sample dates
             </span>
             <button className="text-button" onClick={onMethod}>
               Data & methodology
@@ -197,15 +200,16 @@ export default function Overview({
               <h2>{topAsset.short} leads estimated risk contribution.</h2>
               <p>
                 {topAsset.symbol} is{" "}
-                {pct(analysis.weights[topAsset.symbol] ?? 0, 0)} of capital and
-                accounts for {pct(topRisk[1] ?? 0, 0)} of estimated portfolio
-                volatility.
+                {allocationPercent(analysis.weights[topAsset.symbol] ?? 0)} of
+                capital and accounts for {pct(topRisk[1] ?? 0, 0)} of estimated
+                portfolio volatility over {observationCount(analysis)} daily
+                return observations.
               </p>
               <div className="focus-bars">
                 <div>
                   <span>Capital allocated</span>
                   <strong>
-                    {pct(analysis.weights[topAsset.symbol] ?? 0, 0)}
+                    {allocationPercent(analysis.weights[topAsset.symbol] ?? 0)}
                   </strong>
                 </div>
                 <div className="focus-track">
@@ -243,6 +247,7 @@ export default function Overview({
           </a>
         </aside>
       </div>
+      <AnalysisDetails analysis={analysis} />
       <div className="metric-strip">
         <div>
           <span>Annualized volatility</span>
@@ -339,15 +344,20 @@ export default function Overview({
                         <a
                           href={`#/research?symbol=${asset.symbol}`}
                           className="table-asset"
+                          aria-label={`Research ${asset.symbol}, ${asset.name}`}
                         >
                           <AssetMark asset={asset} />
-                          <span>
+                          <span className="holding-identity">
                             <strong>{asset.symbol}</strong>
-                            <small>{asset.short}</small>
+                            {asset.name !== asset.symbol && (
+                              <small>{asset.name}</small>
+                            )}
                           </span>
                         </a>
                       </th>
-                      <td className="align-right">{pct(weight, 0)}</td>
+                      <td className="align-right">
+                        {allocationPercent(weight)}
+                      </td>
                       <td className="align-right numeric">
                         {analysis.return_contribution?.[asset.symbol] == null
                           ? "Unavailable"
@@ -424,7 +434,7 @@ export default function Overview({
             </Empty>
           )}
           <p className="table-footnote">
-            Return contribution comes from the saved backend analysis. Undefined
+            Return contribution comes from the saved modeled analysis. Undefined
             values stay unavailable.
           </p>
         </section>

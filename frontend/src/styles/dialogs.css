@@ -55,7 +55,7 @@
 .edit-weights {
   border-top: 1px solid var(--border);
 }
-.edit-weights > label {
+.edit-holding-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -63,7 +63,7 @@
   border-bottom: 1px solid var(--border);
   gap: 10px;
 }
-.edit-weights > label > span:first-child {
+.edit-holding-name {
   display: flex;
   gap: 9px;
   align-items: center;
@@ -89,13 +89,19 @@
   color: var(--muted);
 }
 .edit-weight-input input {
-  width: 35px;
+  width: 65px;
   text-align: right;
   border: 0;
   background: transparent;
   color: var(--ink);
   font-variant-numeric: tabular-nums;
   font-size: 0.8125rem;
+}
+.edit-holding-row .text-button {
+  flex: 0 0 auto;
+}
+.edit-add-holding {
+  margin: 14px 0;
 }
 .method-intro {
   display: flex;

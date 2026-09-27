@@ -5,8 +5,49 @@ saved snapshots, Gemini prompts, and error handling. Market ingestion, Tiger Dat
 MongoDB infrastructure and financial formulas belong to the data/quant teammates.
 See [the shared HLD](../PortfolioLens-HLD.md) and [integration design](INTEGRATION.md).
 
-The default provider connects the quant engine to fictional sample prices for an
-offline demo. Real market-data access remains unconnected. Gemini is optional and needs a team API key.
+The default v1 provider connects the quant engine to fictional sample prices for
+an offline demo. V1 can use adjusted daily end-of-day prices from Twelve Data
+when `MARKET_DATA_PROVIDER=twelvedata`; see [setup guide](docs/TWELVE_DATA.md).
+The gated v2 event lab requires adjusted Twelve Data history.
+Gemini is optional for v1 and designs v2 scenario assumptions. V2 event research
+uses Tavily retrieval and DeepSeek fact extraction.
+
+## Authenticated event lab (`/api/v2`)
+
+The event lab is disabled by default. Copy `backend/.env.example` to the ignored
+`backend/.env`, then set `EVENT_LAB_ENABLED=true`, the Supabase project origin and
+publishable key, `SUPABASE_SIGNING_MODE`, Mongo URI, Twelve Data key, Gemini key,
+`TAVILY_API_KEY`, and `DEEPSEEK_API_KEY`. All v2 routes verify a bearer access
+token and derive the Mongo owner from its verified subject. V1 uses Supabase Auth
+to resolve portfolio ownership and remains separate. V2 analyses request
+adjusted daily history from Twelve Data and never substitute demo prices.
+
+For an internal release, keep `EVENT_LAB_PUBLIC_ENABLED=false` and populate
+`EVENT_LAB_ALLOWED_USER_IDS` with a comma-separated list of invited Supabase
+user UUIDs. An empty list denies every account. Public enablement additionally
+requires the explicit rights and source flags in `backend/.env.example` and the
+recorded checks in `docs/event-lab-release-gates.md`. `EVENT_LAB_PROBABILITY_ENABLED`
+does not by itself release probabilities; the quant engine also needs accepted
+held-out calibration evidence. Current v2 runs omit conditional ranges and show
+the reason while returning deterministic cases.
+
+The scenario workflow is: save a portfolio, create an immutable analysis, choose
+an event area and suggested situation or describe a custom one, create a draft,
+review cited facts and proposed shocks, confirm the
+shocks, then poll the run. Mongo stores queued jobs, leases, attempts, pinned
+snapshots, and run chat so work can resume after a process restart. The `rates`
+factor means **TLT adjusted return**, not a yield change. FRED yield observations
+are contextual evidence. Tavily searches only curated official hosts and news
+hosts listed in `APPROVED_NEWS_DOMAINS`; search snippets are not evidence. A
+page is cited only after Tavily Extract returns its content. DeepSeek converts
+that content into bounded facts with checked evidence IDs. Failed extraction
+stops draft preparation. Current-event searches filter out pages without a
+recent detected date; an explicitly historical question can retrieve older pages.
+Search and extraction use basic depth, at most five search results and three
+extracted pages per draft. Gemini proposes shocks for user review, with DeepSeek
+as a bounded fallback when Gemini fails or is rate limited. The quant engine
+calculates the final numbers. V2 error responses use
+`{"error":{"code":"...","message":"...","request_id":"..."}}`.
 
 ## Run locally
 
@@ -33,10 +74,11 @@ Open [interactive API docs](http://127.0.0.1:8000/docs) or
 [health](http://127.0.0.1:8000/health). Health confirms the API process/configuration,
 not connectivity to Gemini, databases, or real quant services.
 
-No environment file or API key is needed in default demo mode. Portfolios and
-immutable analysis snapshots are stored in ignored `backend/data/portfoliolens.sqlite3`.
-This local store is permitted by the HLD for the first demo; MongoDB integration
-is still pending. There is no login or multi-user authorization in this starter.
+The v1 market-data provider defaults to fictional sample prices. V1 portfolio
+routes require `SUPABASE_URL` and either `SUPABASE_PUBLISHABLE_KEY` or the legacy
+`SUPABASE_ANON_KEY` to verify the bearer session and scope SQLite portfolios and
+analysis snapshots to the user. The gated v2
+routes use verified Supabase identity and owner-scoped MongoDB records.
 
 ## First frontend flow
 
@@ -59,8 +101,10 @@ The default answer has `status: "demo"` and explicitly labels the fixture as
 fictional. It is a deterministic snapshot summary, not an arbitrary-question AI.
 The seeded allocation is NVDA 30%, SPY 40%, JPM 20%, TLT 10%. Any valid allocation
 using NVDA, MSFT, AAPL, JPM, VTI, TLT, AMD, GLD, or SPY can be analyzed and compared
-using seven fictional price rows (six daily returns). Unsupported symbols fail with 502; prices are never
+using seven fictional price rows (six daily returns). Unsupported symbols return 404; prices are never
 invented or filled. Weights must total one within 1e-10 and are never renormalized.
+Portfolios and proposed allocations accept at most eight symbols; a what-if comparison
+also requires the combined saved/proposed symbol set to stay within eight.
 Undefined risk shares and correlation cells remain `null`. The UTC midnight `as_of`
 is a sample session-date label, not a live quote or exchange closing timestamp.
 
@@ -70,11 +114,13 @@ is a sample session-date label, not a live quote or exchange closing timestamp.
 | --- | --- | --- |
 | GET | `/health` | Process/configuration status |
 | POST | `/api/v1/portfolios` | Validate and save `name` plus `holdings`; returns 201 |
+| PUT | `/api/v1/portfolios/{id}` | Replace the authenticated owner's portfolio name and holdings; retains ID and creation time |
 | GET | `/api/v1/portfolios/{id}` | Read saved portfolio |
 | POST | `/api/v1/portfolios/{id}/analysis` | Validate provider output and save a snapshot |
 | GET | `/api/v1/portfolios/{id}/analyses/{analysis_id}` | Read that snapshot |
+| GET | `/api/v1/quotes?symbols=AAPL&symbols=MSFT` | Optional Alpaca IEX latest-trade snapshots; separate from daily portfolio analysis |
 | POST | `/api/v1/portfolios/{id}/ask` | Explain exactly the selected saved snapshot |
-| POST | `/api/v1/portfolios/{id}/what-if` | Compare saved and proposed holdings on common sample prices |
+| POST | `/api/v1/portfolios/{id}/what-if` | Compare saved and proposed holdings on the selected market-data history |
 | POST | `/api/v1/portfolios/{id}/briefing` | Write a briefing from one saved analysis |
 | POST | `/api/v1/portfolios/{id}/risk/explanation` | Explain risk using one saved analysis |
 | POST | `/api/v1/portfolios/{id}/what-if/explanation` | Recalculate and explain a proposal against a saved analysis |
@@ -115,19 +161,61 @@ is not used by this service. Never commit actual keys.
 | ANALYST_MODE | `demo` or `gemini` |
 | GEMINI_API_KEY | Server-side key; required in Gemini mode |
 | GEMINI_MODEL | `gemini-3.8-flash`; confirm team account access |
-| GEMINI_FALLBACK_MODEL | `gemini-3.5-flash-lite`; tried after a failed Gemini response. Set empty to disable. |
+| GEMINI_FALLBACK_MODEL | `gemini-3.5-flash-lite`; tried after non-quota Gemini failures. Set empty to disable. |
 | GEMINI_TIMEOUT_SECONDS | 45 per model; maximum 120 |
 | CORS_ORIGINS | Comma-separated frontend origins; localhost ports 3000 and 5173 |
 | STORAGE_PATH | Optional override for the SQLite file |
+| ALPACA_API_KEY / ALPACA_API_SECRET | Optional server-side credentials for real-time IEX quote snapshots; never expose them to the frontend |
+
+The Overview and Event Lab's optional live-price strip polls the authenticated
+`/api/v1/quotes` endpoint every 15 seconds while the page is visible. It accepts
+1–25 unique symbols (at most 20 characters each), including Event Lab's larger
+portfolios. This quote limit is independent of the eight-symbol v1 analysis limit.
+It uses Alpaca's free IEX feed, which covers one exchange rather than consolidated
+US market activity; it is labeled IEX and is not used by the quant engine or
+saved risk metrics. A successful free API call does not itself establish public
+display rights: verify Alpaca's applicable market-data agreements before showing
+prices to judges or other users. When keys are absent, `ALPACA_NOT_CONFIGURED`
+hides this optional strip and stops polling until it remounts (for example after
+a reload or portfolio change). Vendor outages show an unavailable state instead;
+the strip never substitutes sample prices.
+
+The vendor socket timeout is capped at 10 seconds (or a smaller configured
+`MARKET_DATA_TIMEOUT_SECONDS`); the browser cancels after 20 seconds and when
+switching portfolios or leaving the page. Failed refreshes back off to 30 then
+60 seconds. Previously received prices remain visible with an explicit warning.
+Trade timestamps identify the last IEX trade, not the time the page refreshed;
+they may be old outside trading hours or for thinly traded instruments. A missing
+trade is shown as unavailable. There is no quote persistence or shared quote
+cache, so each active client consumes vendor requests. Restrict demo access and
+add server-side rate limiting before an unrestricted public rollout.
+
+For a read-only live credential check (two symbols; no trading API calls):
+
+~~~powershell
+.\backend\.venv\Scripts\python.exe -m backend.check_alpaca_quotes
+~~~
+
+The command reads ignored `backend/.env`; `--env-file <path>` selects another
+local file. It prints only the feed, symbols, last prices, and trade timestamps,
+and exits nonzero on an error or missing trades. Do not put keys on the command
+line. Mocked unit tests do not contact Alpaca; this opt-in check does. Successful
+vendor access does not verify production sign-in, deployment, or display rights.
 
 All Gemini-backed actions use one server-side adapter with a versioned,
 workflow-specific prompt and JSON response schema. The primary model has a
 bounded timeout and at most two HTTP attempts. If it fails or returns an invalid
 response, the adapter tries the configured fallback model with the same prompt,
 context, validation, and timeout. The fallback is skipped in demo mode, without
-an API key, or when its model name matches the primary. An exhausted fallback
-returns the existing safe partial response; sequential attempts can take up to
-twice `GEMINI_TIMEOUT_SECONDS`. Each action receives only its scoped context:
+an API key, when its model name matches the primary, or after a 429 rate-limit
+response. On 429, the adapter honors the provider's `Retry-After` or retry delay
+when present (otherwise 60 seconds), pauses new Gemini requests locally, and
+returns a specific rate-limit message. The event worker leaves queued drafts
+untouched during that pause and does not immediately rerun a draft that hit 429;
+deterministic calculation runs continue. An exhausted fallback
+returns the existing safe partial response for v1 or fails the v2 draft;
+sequential attempts can take up to twice `GEMINI_TIMEOUT_SECONDS`. Each action
+receives only its scoped context:
 Ask Panda gets its selected snapshot and explicitly requested web inputs;
 Overview and Risk get one validated snapshot; What-if gets the server-calculated
 baseline, proposal, differences, and assumptions; Research gets one curated
@@ -226,3 +314,10 @@ ephemeral filesystem survives rebuilds or is shared across replicas. Confirm a
 single-instance persistent volume or complete the team's MongoDB adapter before
 claiming durable shared persistence. See the rollout gates in
 [INTEGRATION.md](INTEGRATION.md).
+# Investor ownership
+
+Set `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` in `backend/.env` to the same project used by frontend authentication. V1 also accepts a legacy `SUPABASE_ANON_KEY`; when it is set, that key takes precedence for v1 Supabase Auth requests. The backend validates Bearer tokens through Supabase Auth. New portfolios are owned by the authenticated user; legacy SQLite rows are retained with no owner and are not returned to investors. `/api/v1/portfolios` lists only the caller's portfolios. No Supabase service role secret is needed.
+
+Updating a portfolio preserves its `portfolio_id`, `owner_id`, and original `created_at`. When its allocation changes, saved analyses for that portfolio are deleted in the same SQLite transaction. Old analysis IDs then return 404; the client creates a fresh analysis for the new allocation. An analysis computed before an update cannot be saved afterward.
+
+Market-history preflight and subsequent analysis reuse successful per-symbol daily price frames for 60 seconds. The cache obtains an analysis-length window even when preflight requests only two days, so the immediate analysis does not fetch those symbols again. Failed history requests are not cached. The cache lives in the API process; separate workers have separate caches.
