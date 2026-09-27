@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { Brand } from "./UI";
+import { LandingPanda } from "./LandingPanda";
 import { getSupabase } from "../lib/supabase";
 
 type Mode = "signin" | "signup";
@@ -81,6 +82,30 @@ export function AuthScreen({
           <div className="auth-sample-note">
             Pandaset currently uses illustrative portfolio data and modeled
             results.
+          </div>
+          <div className="auth-scene" aria-hidden="true">
+            <div className="auth-scene-orbit" />
+            <div className="auth-scene-panda">
+              <LandingPanda />
+            </div>
+            <div className="auth-scene-paper">
+              <span className="auth-scene-paper-dots">
+                <i />
+                <i />
+                <i />
+              </span>
+              <svg viewBox="0 0 180 82" fill="none">
+                <path d="M0 78H180M0 39H180M0 1H180" stroke="#dedede" />
+                <path
+                  d="M2 63 26 58 48 65 75 41 99 47 122 24 149 33 178 10"
+                  stroke="#191919"
+                  strokeWidth="3"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+                <circle cx="178" cy="10" r="5" fill="#191919" />
+              </svg>
+            </div>
           </div>
         </section>
         <section className="auth-card" aria-labelledby="auth-title">
