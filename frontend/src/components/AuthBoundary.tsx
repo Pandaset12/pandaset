@@ -21,7 +21,7 @@ export function AuthBoundary({
     if (!(cause instanceof SupabaseConfigurationError)) throw cause;
     return (
       <main className="auth-loading" role="alert">
-        <h1>PandaSet authentication is not configured.</h1>
+        <h1>Pandaset authentication is not configured.</h1>
         <p>{cause.message}</p>
       </main>
     );
@@ -94,7 +94,7 @@ function AuthSessionBoundary({
   if (loading)
     return (
       <main className="auth-loading" role="status">
-        Restoring your PandaSet session…
+        Restoring your Pandaset session…
       </main>
     );
   return (

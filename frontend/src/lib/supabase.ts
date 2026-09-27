@@ -5,7 +5,7 @@ let client: SupabaseClient | undefined;
 export class SupabaseConfigurationError extends Error {
   constructor() {
     super(
-      "PandaSet authentication is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY, then restart the frontend.",
+      "Pandaset authentication is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY, then restart the frontend.",
     );
     this.name = "SupabaseConfigurationError";
   }

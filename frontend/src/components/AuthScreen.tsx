@@ -80,7 +80,7 @@ export function AuthScreen({
             workspace.
           </p>
           <div className="auth-sample-note">
-            PandaSet currently uses illustrative portfolio data and modeled
+            Pandaset currently uses illustrative portfolio data and modeled
             results.
           </div>
         </section>
@@ -108,8 +108,8 @@ export function AuthScreen({
               </h2>
               <p>
                 {mode === "signin"
-                  ? "Sign in to enter PandaSet."
-                  : "Start with the PandaSet sample portfolio."}
+                  ? "Sign in to enter Pandaset."
+                  : "Start with the Pandaset sample portfolio."}
               </p>
               <form onSubmit={(event) => void submit(event)} noValidate>
                 <label htmlFor="auth-email">Email address</label>
@@ -154,7 +154,7 @@ export function AuthScreen({
               </form>
               <p className="auth-switch">
                 {mode === "signin"
-                  ? "New to PandaSet?"
+                  ? "New to Pandaset?"
                   : "Already have an account?"}{" "}
                 <button
                   className="text-button"

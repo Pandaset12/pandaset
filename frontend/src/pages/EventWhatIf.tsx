@@ -1627,7 +1627,7 @@ export default function WhatIf({
                     <p>{record.message.content}</p>
                   </article>
                   <article className="event-chat-message assistant">
-                    <strong>PandaSet</strong>
+                    <strong>Pandaset</strong>
                     <p>
                       {typeof record.message.answer === "string"
                         ? record.message.answer

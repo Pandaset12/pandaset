@@ -190,7 +190,7 @@ export function PortfolioOnboarding({
       </h1>
       <p>
         A clearer picture starts with what you own. Bring your holdings
-        together, then explore them with PandaSet.
+        together, then explore them with Pandaset.
       </p>
       <ol className="po-steps">
         {steps.map(([label, description], index) => {

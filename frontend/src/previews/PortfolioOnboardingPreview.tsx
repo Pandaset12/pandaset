@@ -165,7 +165,7 @@ function Preview() {
         )}
       </details>
       <footer className="po-preview-footer">
-        PandaSet · A clearer view of what you own.
+        Pandaset · A clearer view of what you own.
       </footer>
     </div>
   );

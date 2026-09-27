@@ -216,7 +216,7 @@ export function EventApplication({
     : "/";
   const query = new URLSearchParams(search);
   useEffect(() => {
-    document.title = `${route === "/" ? "Overview" : route === "/risk" ? "Risk & exposure" : route === "/research" ? "Research" : "What-if lab"} — PandaSet`;
+    document.title = `${route === "/" ? "Overview" : route === "/risk" ? "Risk & exposure" : route === "/research" ? "Research" : "What-if lab"} — Pandaset`;
   }, [route]);
   const analysisMismatch = Boolean(
     savedAnalysis &&
@@ -466,7 +466,7 @@ export function EventApplication({
       </main>
       <footer className="site-footer">
         <span>
-          PandaSet<span className="footer-slash">/</span>A clearer view of what
+          Pandaset<span className="footer-slash">/</span>A clearer view of what
           you own.
         </span>
         <span>
