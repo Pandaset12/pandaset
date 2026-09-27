@@ -1,7 +1,8 @@
 # Integrated smoke test — September 26, 2026
 
 Initial baseline: `main` at `5ccba9b`; then incorporated `5d66be8` (Nel's
-What-if layout fix) and repeated the frontend/build and live scenario checks.
+What-if layout fix) and `00882a3` (Alpaca Overview and company-name search).
+Final automated, live API, and browser scenario checks use `00882a3` plus this fix.
 Tested locally with the real Alpaca account,
 `MARKET_DATA_PROVIDER=alpaca`, `ALPACA_HISTORY_FEED=iex`, and isolated SQLite
 storage. History caching was left disabled. No keys or local test harnesses are
@@ -10,9 +11,11 @@ included in this change.
 ## Result
 
 No blocking 500s or fictional-price fallback reproduced in the tested standard
-workspace. Fixed two incorrect source labels: holdings outside the built-in
+workspace. The initial smoke found two incorrect source labels: holdings outside the built-in
 library (tested with SPY) claimed to use sample prices, and the ticker preflight
-error did the same. Both now defer to the configured provider.
+error did the same. The later `00882a3` update independently corrected both.
+Its newer provider messaging and company lookup are retained unchanged; this PR
+keeps a regression test against invented source labels.
 
 The follow-up found a stale-data bug after **Use this allocation**: the new
 portfolio became active, but the old comparison stayed visible, mixing its old
@@ -40,9 +43,10 @@ failure behavior. Event Lab was disabled, not tested as a working live service.
 | Saved snapshots | Read-back matches the saved analysis. Edits invalidate old snapshots. Recreating the API app with the same SQLite file preserves portfolio and snapshot. |
 | Ownership | No bearer token: 401. Different synthetic owner: 404 for portfolio and analysis. Not a real Supabase test. |
 | Overview | Real IEX last-trade prices/timestamps render separately from adjusted-history risk calculations. |
+| Company search | Real authenticated `/assets/search?q=Apple` returns AAPL first. No trading operations were used. |
 | Risk | Saved allocation, risk contributions and correlation matrix render from the live analysis. |
 | Research | 252-return histories load. All eight built-in tickers return aligned history together; direct-entry SPY and comparison history also load. Source identifies `alpaca_adjusted_daily` and IEX. |
-| Allocation What-if | API comparisons with changed weights and a new symbol pass without mutating saved holdings. Browser five-point transfer passes. On `5d66be8`, added AAPL to a single-holding SPY portfolio, compared 74.5/25.5, applied it, then compared/applied 70.5/29.5. After the parent-state fix, old results disappear and the new allocation survives reload. |
+| Allocation What-if | API comparisons with changed weights and a new symbol pass without mutating saved holdings. Browser five-point transfer passes. Added AAPL to a single-holding SPY portfolio, compared/applied 74.5/25.5, then 70.5/29.5. Repeated with 70/30 after merging `00882a3`. Old results disappear after application and the new allocation survives reload. |
 | Gemini actions | Ask, briefing, risk explanation, scenario explanation and research summary return explicit unavailable states with `GEMINI_NOT_CONFIGURED`, not invented AI success or 500s. Briefing fallback also verified in browser. |
 | Missing Alpaca keys | Analysis returns safe 502; optional quotes return 503. No sample fallback. |
 | Unknown ticker | History returns 404, not a 500. |
@@ -55,13 +59,16 @@ continuously updating weekend feed. Daily history is not an intraday risk model.
 
 ## Automated validation
 
-- Backend: 218 tests passed.
+- Backend: 226 tests passed.
 - Python quant engine: 88 tests passed.
-- Frontend/TypeScript quant: 75 tests passed after both fixes and Nel's update
+- Frontend/TypeScript quant: 80 tests passed after incorporating `00882a3`
   (72 on the initial baseline).
-- Production build, backend compilation, changed-file formatting and
+- Production build, backend compilation, changed-file Prettier checks
+  (`--end-of-line auto` for this Windows checkout) and
   `git diff --check`: passed.
-- Both provenance assertions failed before the fix and passed afterward.
+- The scenario regression test failed before the state-reset fix and passed
+  afterward. The initial provenance assertions also reproduced the old labels;
+  the latest main corrections and retained regression check pass.
 
 ## Still needed on the judging setup
 
@@ -80,6 +87,8 @@ continuously updating weekend feed. Daily history is not an intraday risk model.
    compare/apply flows passed locally; the eight-symbol union is covered by the
    automated suite. A minor horizontal overflow (400px content at a 390px viewport)
    remains on the mobile What-if page; controls were usable. Left layout to Nel.
+   The comparison table also still calls the historical-period result "Sample
+   return"; "Period return" would be clearer, but this was not fictional input.
 5. Confirm applicable Alpaca display/retention rights before external judging;
    this test does not establish those rights or change the release-gate settings.
 
