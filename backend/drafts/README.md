@@ -7,7 +7,7 @@ reference code, not a MongoDB implementation or an active market-data pipeline.
 | --- | --- |
 | `data_pipeline/DESIGN.md` | Proposed data/storage design |
 | `data_pipeline/models.py` | Initial price, provenance and quant-input schemas |
-| `data_pipeline/providers.py` | Fictional fixture reader and initial Twelve Data adapter |
+| `data_pipeline/providers.py` | Fictional fixture reader; the obsolete vendor adapter was removed |
 | `data_pipeline/sample_prices.json` | Clearly fictional test prices |
 | `requirements-data.txt` | Dependencies proposed for completing the data layer |
 
@@ -16,10 +16,8 @@ reference code, not a MongoDB implementation or an active market-data pipeline.
 exist yet. Neither MongoDB nor Tiger Data has been connected or tested.
 The current API uses `backend/storage.py` (SQLite).
 
-The fixture reader has been smoke-tested after restoration. The live market
-adapter has not been tested against a provider account. Do not enable it as a
-production data source without review of provider permissions, adjustment
-semantics, date coverage, error handling and credentials.
+The fixture reader has been smoke-tested after restoration. The active Alpaca
+history adapter lives in `backend/alpaca_history.py` outside this draft.
 
 These drafts are not imported by the running API. Financial formulas remain in
 the quant teammate's module. The fictional price fixture here is unrelated to

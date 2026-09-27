@@ -28,4 +28,4 @@ None.
 
 ## Impact
 
-Python API, storage, provider and quant modules; React app routing and What-if workflow; Supabase Auth, MongoDB, Twelve Data, FRED, Gemini, and approved news-source configuration. Public enablement remains gated by external data rights and a documented calibration report.
+Python API, storage, provider and quant modules; React app routing and What-if workflow; Supabase Auth, MongoDB, Alpaca adjusted daily history, FRED, Gemini, and approved news-source configuration. The `replace-twelve-data-with-alpaca` change supersedes the original provider choice. Public enablement remains gated by external data rights and a documented calibration report.

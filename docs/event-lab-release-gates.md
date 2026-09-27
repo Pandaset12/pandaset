@@ -4,7 +4,7 @@ The feature is disabled by default. Internal checks may enable `EVENT_LAB_ENABLE
 
 ## Data rights and provenance
 
-- Confirm Twelve Data contract permits public display of adjusted history, derived analytics, and the intended cache lifetime. Set display and cache rights flags only after written approval.
+- Confirm the applicable Alpaca agreement permits public display of the selected IEX or SIP adjusted history, derived analytics, latest IEX snapshots, and the intended cache lifetime. Set Alpaca display and cache rights flags only after written approval.
 - Confirm approved news domains permit retrieval, excerpting, storage, and public display of citations. Keep the allowlist explicit.
 - Show source, adjusted-price basis, as-of date, and missing evidence for every run. Never replace a failed real-data request with demo fixtures.
 - Confirm FRED API access and attribution requirements for the selected series.

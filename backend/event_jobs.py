@@ -18,7 +18,7 @@ from .event_research_services import EventResearchUnavailable
 from .event_templates import get_event_template
 from .gemini_service import GeminiRateLimited, GeminiUnavailable, gemini_cooldown_remaining
 from .mongo_store import InvalidTransition, MongoPortfolioStore
-from .twelve_data import ProviderUnavailable
+from .market_data_errors import ProviderUnavailable
 
 MAX_ATTEMPTS = 3
 LEASE_SECONDS = 120

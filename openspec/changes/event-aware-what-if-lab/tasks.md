@@ -6,7 +6,7 @@
 
 ## 2. Market and event evidence
 
-- [x] 2.1 Reconcile Twelve Data provider for up to 25 classified holdings, adjusted-price provenance, quota-aware caching, and explicit failures.
+- [x] 2.1 Integrate adjusted history for up to 25 classified holdings, provenance, quota-aware caching, and explicit failures. The subsequent `replace-twelve-data-with-alpaca` change migrates this provider to Alpaca.
 - [x] 2.2 Add versioned macro, sector, and issuer templates and FRED/current-source evidence with timestamps and missing statuses.
 
 ## 3. Quant engine

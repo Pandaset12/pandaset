@@ -6,9 +6,9 @@ MongoDB infrastructure and financial formulas belong to the data/quant teammates
 See [the shared HLD](../PortfolioLens-HLD.md) and [integration design](INTEGRATION.md).
 
 The default v1 provider connects the quant engine to fictional sample prices for
-an offline demo. V1 can use adjusted daily end-of-day prices from Twelve Data
-when `MARKET_DATA_PROVIDER=twelvedata`; see [setup guide](docs/TWELVE_DATA.md).
-The gated v2 event lab requires adjusted Twelve Data history.
+an offline demo. V1 can use adjusted daily end-of-day prices from Alpaca
+when `MARKET_DATA_PROVIDER=alpaca`; see [setup guide](docs/ALPACA_HISTORY.md).
+The gated v2 event lab requires adjusted Alpaca history.
 Gemini is optional for v1 and designs v2 scenario assumptions. V2 event research
 uses Tavily retrieval and DeepSeek fact extraction.
 
@@ -16,11 +16,12 @@ uses Tavily retrieval and DeepSeek fact extraction.
 
 The event lab is disabled by default. Copy `backend/.env.example` to the ignored
 `backend/.env`, then set `EVENT_LAB_ENABLED=true`, the Supabase project origin and
-publishable key, `SUPABASE_SIGNING_MODE`, Mongo URI, Twelve Data key, Gemini key,
+publishable key, `SUPABASE_SIGNING_MODE`, Mongo URI, Alpaca key and secret,
+`ALPACA_HISTORY_FEED`, Gemini key,
 `TAVILY_API_KEY`, and `DEEPSEEK_API_KEY`. All v2 routes verify a bearer access
 token and derive the Mongo owner from its verified subject. V1 uses Supabase Auth
 to resolve portfolio ownership and remains separate. V2 analyses request
-adjusted daily history from Twelve Data and never substitute demo prices.
+adjusted daily history from Alpaca and never substitute demo prices.
 
 For an internal release, keep `EVENT_LAB_PUBLIC_ENABLED=false` and populate
 `EVENT_LAB_ALLOWED_USER_IDS` with a comma-separated list of invited Supabase
@@ -165,7 +166,9 @@ is not used by this service. Never commit actual keys.
 | GEMINI_TIMEOUT_SECONDS | 45 per model; maximum 120 |
 | CORS_ORIGINS | Comma-separated frontend origins; localhost ports 3000 and 5173 |
 | STORAGE_PATH | Optional override for the SQLite file |
-| ALPACA_API_KEY / ALPACA_API_SECRET | Optional server-side credentials for real-time IEX quote snapshots; never expose them to the frontend |
+| ALPACA_API_KEY / ALPACA_API_SECRET | Server-side credentials for optional history and IEX quote snapshots; never expose them to the frontend |
+| ALPACA_HISTORY_FEED | Explicit `iex` or entitled `sip` selection for adjusted daily history; separate from IEX quote snapshots |
+| ALPACA_DISPLAY_RIGHTS_CONFIRMED / ALPACA_CACHE_RIGHTS_CONFIRMED | Public event-lab display and history-retention gates; default false |
 
 The Overview and Event Lab's optional live-price strip polls the authenticated
 `/api/v1/quotes` endpoint every 15 seconds while the page is visible. It accepts

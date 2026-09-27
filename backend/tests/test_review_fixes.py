@@ -117,13 +117,13 @@ def test_unhandled_failure_is_safe_and_request_ids_are_unique(tmp_path, monkeypa
     assert "private-storage-value" not in response.text + caplog.text
 
 
-def test_live_health_reports_missing_twelve_data_key(tmp_path):
-    app = create_app(Settings(_env_file=None, market_data_provider="twelvedata",
+def test_live_health_reports_missing_alpaca_history_configuration(tmp_path):
+    app = create_app(Settings(_env_file=None, market_data_provider="alpaca",
                               storage_path=tmp_path / "test.sqlite3"))
     with TestClient(app) as api:
         health = api.get("/health").json()
     assert health["status"] == "degraded"
-    assert health["quant_integration"] == "quant_engine_twelvedata"
-    assert health["market_data_provider"] == "twelvedata"
+    assert health["quant_integration"] == "quant_engine_alpaca"
+    assert health["market_data_provider"] == "alpaca"
     assert health["market_data_ready"] is False
     assert health["data_mode"] == "live"
