@@ -446,7 +446,7 @@ export function Application({ onSignOut }: { onSignOut: () => Promise<void> }) {
               />
             ) : (
               <WhatIf
-                key={hash}
+                key={`${hash}:${active.analysis.analysis_id}`}
                 holdings={workspaceHoldings}
                 analysis={active.analysis}
                 weights={weights}

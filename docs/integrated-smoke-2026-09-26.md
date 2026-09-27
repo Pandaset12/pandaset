@@ -1,6 +1,8 @@
 # Integrated smoke test — September 26, 2026
 
-Baseline: `main` at `5ccba9b`. Tested locally with the real Alpaca account,
+Initial baseline: `main` at `5ccba9b`; then incorporated `5d66be8` (Nel's
+What-if layout fix) and repeated the frontend/build and live scenario checks.
+Tested locally with the real Alpaca account,
 `MARKET_DATA_PROVIDER=alpaca`, `ALPACA_HISTORY_FEED=iex`, and isolated SQLite
 storage. History caching was left disabled. No keys or local test harnesses are
 included in this change.
@@ -10,8 +12,16 @@ included in this change.
 No blocking 500s or fictional-price fallback reproduced in the tested standard
 workspace. Fixed two incorrect source labels: holdings outside the built-in
 library (tested with SPY) claimed to use sample prices, and the ticker preflight
-error did the same. Both now defer to the configured provider. No What-if UI,
-quant formulas, auth implementation, or Event Lab code changed.
+error did the same. Both now defer to the configured provider.
+
+The follow-up found a stale-data bug after **Use this allocation**: the new
+portfolio became active, but the old comparison stayed visible, mixing its old
+baseline metrics with the new current holdings. The parent workspace now keys
+What-if by the analysis ID as well as the route, clearing the old comparison
+when the analysis changes. The regression test failed before this fix and passed
+afterward; real Alpaca compare/apply/reload was also rechecked successfully.
+Nel's `WhatIf.tsx` and layout CSS are unchanged by this PR. No quant formulas,
+auth implementation, or Event Lab code changed.
 
 This is **not a full deployment sign-off**. Only Alpaca credentials were available
 locally. Auth used a synthetic upstream user response against the real v1 API
@@ -32,7 +42,7 @@ failure behavior. Event Lab was disabled, not tested as a working live service.
 | Overview | Real IEX last-trade prices/timestamps render separately from adjusted-history risk calculations. |
 | Risk | Saved allocation, risk contributions and correlation matrix render from the live analysis. |
 | Research | 252-return histories load. All eight built-in tickers return aligned history together; direct-entry SPY and comparison history also load. Source identifies `alpaca_adjusted_daily` and IEX. |
-| Allocation What-if | API comparisons with changed weights and a new symbol pass without mutating saved holdings. Browser five-point transfer/comparison passes. Did not change Nel's UI. |
+| Allocation What-if | API comparisons with changed weights and a new symbol pass without mutating saved holdings. Browser five-point transfer passes. On `5d66be8`, added AAPL to a single-holding SPY portfolio, compared 74.5/25.5, applied it, then compared/applied 70.5/29.5. After the parent-state fix, old results disappear and the new allocation survives reload. |
 | Gemini actions | Ask, briefing, risk explanation, scenario explanation and research summary return explicit unavailable states with `GEMINI_NOT_CONFIGURED`, not invented AI success or 500s. Briefing fallback also verified in browser. |
 | Missing Alpaca keys | Analysis returns safe 502; optional quotes return 503. No sample fallback. |
 | Unknown ticker | History returns 404, not a 500. |
@@ -47,7 +57,8 @@ continuously updating weekend feed. Daily history is not an intraday risk model.
 
 - Backend: 218 tests passed.
 - Python quant engine: 88 tests passed.
-- Frontend/TypeScript quant: 73 tests passed after the fix (72 on baseline).
+- Frontend/TypeScript quant: 75 tests passed after both fixes and Nel's update
+  (72 on the initial baseline).
 - Production build, backend compilation, changed-file formatting and
   `git diff --check`: passed.
 - Both provenance assertions failed before the fix and passed afterward.
@@ -65,9 +76,10 @@ continuously updating weekend feed. Daily history is not an intraday risk model.
    portfolio/analysis persistence, event draft/confirm, worker completion,
    saved-run reload and chat. Keep it disabled if those dependencies/release
    gates are unavailable. See [Event Lab release gates](event-lab-release-gates.md).
-4. Retest Nel's final allocation UI on the resulting main commit, including a
-   single holding, adding a symbol, fractional percentages and the eight-symbol
-   baseline/proposal union.
+4. Recheck the final deployed What-if build. Single-holding/add-symbol/fractional
+   compare/apply flows passed locally; the eight-symbol union is covered by the
+   automated suite. A minor horizontal overflow (400px content at a 390px viewport)
+   remains on the mobile What-if page; controls were usable. Left layout to Nel.
 5. Confirm applicable Alpaca display/retention rights before external judging;
    this test does not establish those rights or change the release-gate settings.
 

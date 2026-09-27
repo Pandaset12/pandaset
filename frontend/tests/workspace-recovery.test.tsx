@@ -32,6 +32,140 @@ const { workspaceAssets, portfolioPercentages } =
   await import("../src/workspace/holdings");
 const originalFetch = globalThis.fetch;
 
+test("applying a scenario resets comparisons pinned to the previous analysis", async () => {
+  const saved = {
+    portfolio_id: "before",
+    name: "Snapshot reset",
+    created_at: "2026-09-26T00:00:00Z",
+    holdings: [{ symbol: "SPY", weight: 1 }],
+  };
+  const created = {
+    ...saved,
+    portfolio_id: "after",
+    name: "Snapshot reset scenario",
+    holdings: [
+      { symbol: "SPY", weight: 0.745 },
+      { symbol: "AAPL", weight: 0.255 },
+    ],
+  };
+  const analysis = (portfolio: typeof saved) => ({
+    analysis_id: `analysis_${portfolio.portfolio_id}`,
+    portfolio_id: portfolio.portfolio_id,
+    weights: Object.fromEntries(
+      portfolio.holdings.map((h) => [h.symbol, h.weight]),
+    ),
+    risk_contribution: { SPY: 0.8, AAPL: 0.2 },
+    portfolio_return: 0.1,
+    annualized_return: 0.1,
+    max_drawdown: 0.05,
+    portfolio_volatility: 0.2,
+    observation_count: 252,
+    lookback_days: 252,
+    data_mode: "demo",
+    data_quality: { source: "sample", freshness: "unknown", warnings: [] },
+    as_of: null,
+    series: null,
+  });
+  let creates = 0;
+  const response = (body: unknown) => new Response(JSON.stringify(body));
+  globalThis.fetch = (async (url, init) => {
+    const path = String(url);
+    if (path === "/api/v1/portfolios" && init?.method === "POST") {
+      creates += 1;
+      assert.deepEqual(
+        JSON.parse(String(init.body)).holdings,
+        created.holdings,
+      );
+      return response(created);
+    }
+    if (path === "/api/v1/portfolios") return response([saved]);
+    if (path.includes("/market-history")) return response({});
+    if (path === "/api/v1/portfolios/before/analysis")
+      return response(analysis(saved));
+    if (path === "/api/v1/portfolios/after/analysis")
+      return response(analysis(created));
+    if (path === "/api/v1/portfolios/before/what-if")
+      return response({
+        current_analysis: analysis(saved),
+        proposed_analysis: analysis(created),
+        delta: {
+          portfolio_return: 0,
+          portfolio_volatility: 0,
+          annualized_return: 0,
+          max_drawdown: 0,
+        },
+      });
+    throw new Error(`Unexpected request: ${path}`);
+  }) as typeof fetch;
+  dom.window.location.hash = "#/what-if";
+  try {
+    render(createElement(Application, { onSignOut: async () => {} }));
+    const ticker = await screen.findByRole("textbox", {
+      name: "Ticker to add",
+    });
+    fireEvent.change(ticker, { target: { value: "AAPL" } });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Add holding", exact: true }),
+    );
+    fireEvent.change(
+      screen.getByRole("textbox", { name: "SPY proposed allocation" }),
+      { target: { value: "74.5" } },
+    );
+    fireEvent.change(
+      screen.getByRole("textbox", { name: "AAPL proposed allocation" }),
+      { target: { value: "25.5" } },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Compare portfolios" }));
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Use this allocation",
+        exact: true,
+      }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Use allocation", exact: true }),
+    );
+    await screen.findByRole("button", { name: /Snapshot reset scenario/ });
+    await waitFor(() =>
+      assert.ok(
+        screen.queryByRole("button", {
+          name: "Use this allocation",
+          exact: true,
+        }) === null,
+      ),
+    );
+    assert.ok(screen.queryByRole("table") === null);
+    assert.ok(
+      (
+        screen.getByRole("button", {
+          name: "Compare portfolios",
+        }) as HTMLButtonElement
+      ).disabled,
+    );
+    assert.equal(
+      (
+        screen.getByRole("textbox", {
+          name: "SPY proposed allocation",
+        }) as HTMLInputElement
+      ).value,
+      "74.5",
+    );
+    assert.equal(
+      (
+        screen.getByRole("textbox", {
+          name: "AAPL proposed allocation",
+        }) as HTMLInputElement
+      ).value,
+      "25.5",
+    );
+    assert.equal(creates, 1);
+  } finally {
+    cleanup();
+    globalThis.fetch = originalFetch;
+    dom.window.location.hash = "";
+  }
+});
+
 after(() => {
   globalThis.fetch = originalFetch;
   cleanup();
