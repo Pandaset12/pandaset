@@ -1,0 +1,677 @@
+{
+  "doc": {
+    "height": 3844,
+    "vh": 844,
+    "acts": [
+      "flow",
+      "flow",
+      "pin",
+      "flow",
+      "flow"
+    ],
+    "world": null
+  },
+  "report": [
+    {
+      "i": 0,
+      "y": 0,
+      "pct": 0,
+      "settled": true,
+      "contrast": [],
+      "cues": [],
+      "clips": [],
+      "rails": [],
+      "wipes": [
+        "none"
+      ],
+      "act": "flow",
+      "stages": [
+        1322
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#fafafa"
+    },
+    {
+      "i": 1,
+      "y": 111,
+      "pct": 4,
+      "settled": true,
+      "contrast": [],
+      "cues": [],
+      "clips": [],
+      "rails": [],
+      "wipes": [
+        "none"
+      ],
+      "act": "flow",
+      "stages": [
+        1211
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#fafafa"
+    },
+    {
+      "i": 2,
+      "y": 247,
+      "pct": 8,
+      "settled": true,
+      "contrast": [
+        {
+          "t": "Owning investments is one thing. Underst",
+          "dir": "dark-on-light",
+          "worst": 17.18,
+          "mean": 17.18
+        }
+      ],
+      "cues": [
+        {
+          "t": "Owning investments is one thing. Understanding",
+          "o": 1
+        }
+      ],
+      "clips": [],
+      "rails": [],
+      "wipes": [
+        "none"
+      ],
+      "act": "flow",
+      "stages": [
+        1075
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#fafafa"
+    },
+    {
+      "i": 3,
+      "y": 348,
+      "pct": 12,
+      "settled": true,
+      "contrast": [
+        {
+          "t": "Owning investments is one thing. Underst",
+          "dir": "dark-on-light",
+          "worst": 17.18,
+          "mean": 17.18
+        }
+      ],
+      "cues": [
+        {
+          "t": "Owning investments is one thing. Understanding",
+          "o": 1
+        }
+      ],
+      "clips": [],
+      "rails": [],
+      "wipes": [
+        "none"
+      ],
+      "act": "flow",
+      "stages": [
+        974
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#fafafa"
+    },
+    {
+      "i": 4,
+      "y": 572,
+      "pct": 19,
+      "settled": true,
+      "contrast": [
+        {
+          "t": "Owning investments is one thing. Underst",
+          "dir": "dark-on-light",
+          "worst": 17.18,
+          "mean": 17.18
+        }
+      ],
+      "cues": [
+        {
+          "t": "Owning investments is one thing. Understanding",
+          "o": 1
+        }
+      ],
+      "clips": [],
+      "rails": [],
+      "wipes": [
+        "none"
+      ],
+      "act": "flow",
+      "stages": [
+        750
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#fafafa"
+    },
+    {
+      "i": 5,
+      "y": 586,
+      "pct": 20,
+      "settled": true,
+      "contrast": [
+        {
+          "t": "Owning investments is one thing. Underst",
+          "dir": "dark-on-light",
+          "worst": 17.18,
+          "mean": 17.18
+        }
+      ],
+      "cues": [
+        {
+          "t": "Owning investments is one thing. Understanding",
+          "o": 1
+        }
+      ],
+      "clips": [],
+      "rails": [],
+      "wipes": [
+        "none"
+      ],
+      "act": "flow",
+      "stages": [
+        736
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#fafafa"
+    },
+    {
+      "i": 6,
+      "y": 823,
+      "pct": 27,
+      "settled": true,
+      "contrast": [
+        {
+          "t": "Owning investments is one thing. Underst",
+          "dir": "dark-on-light",
+          "worst": 17.18,
+          "mean": 17.18
+        }
+      ],
+      "cues": [
+        {
+          "t": "Owning investments is one thing. Understanding",
+          "o": 1
+        }
+      ],
+      "clips": [],
+      "rails": [],
+      "wipes": [
+        "none"
+      ],
+      "act": "flow",
+      "stages": [
+        499
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#fafafa"
+    },
+    {
+      "i": 7,
+      "y": 896,
+      "pct": 30,
+      "settled": true,
+      "contrast": [
+        {
+          "t": "Owning investments is one thing. Underst",
+          "dir": "dark-on-light",
+          "worst": 17.18,
+          "mean": 17.18
+        }
+      ],
+      "cues": [
+        {
+          "t": "Owning investments is one thing. Understanding",
+          "o": 1
+        }
+      ],
+      "clips": [],
+      "rails": [],
+      "wipes": [
+        "none"
+      ],
+      "act": "flow",
+      "stages": [
+        426
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#fafafa"
+    },
+    {
+      "i": 8,
+      "y": 1060,
+      "pct": 35,
+      "settled": true,
+      "contrast": [
+        {
+          "t": "Owning investments is one thing. Underst",
+          "dir": "dark-on-light",
+          "worst": 17.18,
+          "mean": 17.18
+        }
+      ],
+      "cues": [
+        {
+          "t": "Owning investments is one thing. Understanding",
+          "o": 1
+        }
+      ],
+      "clips": [],
+      "rails": [],
+      "wipes": [
+        "none"
+      ],
+      "act": "pin",
+      "stages": [
+        262
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#fafafa"
+    },
+    {
+      "i": 9,
+      "y": 1298,
+      "pct": 43,
+      "settled": true,
+      "contrast": [],
+      "cues": [],
+      "clips": [],
+      "rails": [],
+      "wipes": [
+        "none"
+      ],
+      "act": "pin",
+      "stages": [
+        24
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#fafafa"
+    },
+    {
+      "i": 10,
+      "y": 1327,
+      "pct": 44,
+      "settled": true,
+      "contrast": [],
+      "cues": [],
+      "clips": [],
+      "rails": [],
+      "wipes": [
+        "none"
+      ],
+      "act": "pin",
+      "stages": [
+        -5
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#fafafa"
+    },
+    {
+      "i": 11,
+      "y": 1373,
+      "pct": 46,
+      "settled": true,
+      "contrast": [],
+      "cues": [],
+      "clips": [],
+      "rails": [],
+      "wipes": [
+        "inset(0px 0px 100%)"
+      ],
+      "act": "pin",
+      "stages": [
+        -51
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#fafafa"
+    },
+    {
+      "i": 12,
+      "y": 1420,
+      "pct": 47,
+      "settled": true,
+      "contrast": [],
+      "cues": [],
+      "clips": [],
+      "rails": [],
+      "wipes": [
+        "inset(0px 0px 100%)"
+      ],
+      "act": "pin",
+      "stages": [
+        -98
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#fafafa"
+    },
+    {
+      "i": 13,
+      "y": 1466,
+      "pct": 49,
+      "settled": true,
+      "contrast": [],
+      "cues": [],
+      "clips": [],
+      "rails": [],
+      "wipes": [
+        "inset(0px 0px 100%)"
+      ],
+      "act": "pin",
+      "stages": [
+        -144
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#fafafa"
+    },
+    {
+      "i": 14,
+      "y": 1513,
+      "pct": 50,
+      "settled": true,
+      "contrast": [],
+      "cues": [],
+      "clips": [],
+      "rails": [],
+      "wipes": [
+        "inset(0px 0px 100%)"
+      ],
+      "act": "pin",
+      "stages": [
+        -191
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#fafafa"
+    },
+    {
+      "i": 15,
+      "y": 1559,
+      "pct": 52,
+      "settled": true,
+      "contrast": [],
+      "cues": [],
+      "clips": [],
+      "rails": [],
+      "wipes": [
+        "inset(0px 0px 100%)"
+      ],
+      "act": "pin",
+      "stages": [
+        -237
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#fafafa"
+    },
+    {
+      "i": 16,
+      "y": 1598,
+      "pct": 53,
+      "settled": true,
+      "contrast": [],
+      "cues": [],
+      "clips": [],
+      "rails": [],
+      "wipes": [
+        "inset(0px 0px 100%)"
+      ],
+      "act": "pin",
+      "stages": [
+        -276
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#fafafa"
+    },
+    {
+      "i": 17,
+      "y": 1921,
+      "pct": 64,
+      "settled": true,
+      "contrast": [],
+      "cues": [],
+      "clips": [],
+      "rails": [],
+      "wipes": [
+        "inset(0px 0px 28.53%)"
+      ],
+      "act": "pin",
+      "stages": [
+        -599
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#fafafa"
+    },
+    {
+      "i": 18,
+      "y": 2245,
+      "pct": 75,
+      "settled": true,
+      "contrast": [],
+      "cues": [],
+      "clips": [],
+      "rails": [],
+      "wipes": [
+        "inset(0px 0px 0%)"
+      ],
+      "act": "flow",
+      "stages": [
+        -923
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#fafafa"
+    },
+    {
+      "i": 19,
+      "y": 2433,
+      "pct": 81,
+      "settled": true,
+      "contrast": [],
+      "cues": [],
+      "clips": [],
+      "rails": [],
+      "wipes": [
+        "inset(0px 0px 0%)"
+      ],
+      "act": "flow",
+      "stages": [
+        -1111
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#fafafa"
+    },
+    {
+      "i": 20,
+      "y": 2568,
+      "pct": 86,
+      "settled": true,
+      "contrast": [],
+      "cues": [],
+      "clips": [],
+      "rails": [],
+      "wipes": [
+        "inset(0px 0px 0%)"
+      ],
+      "act": "flow",
+      "stages": [
+        -1246
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#fafafa"
+    },
+    {
+      "i": 21,
+      "y": 2709,
+      "pct": 90,
+      "settled": true,
+      "contrast": [],
+      "cues": [],
+      "clips": [],
+      "rails": [],
+      "wipes": [
+        "inset(0px 0px 0%)"
+      ],
+      "act": "flow",
+      "stages": [
+        -1387
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#fafafa"
+    },
+    {
+      "i": 22,
+      "y": 2891,
+      "pct": 96,
+      "settled": true,
+      "contrast": [],
+      "cues": [],
+      "clips": [],
+      "rails": [],
+      "wipes": [
+        "inset(0px 0px 0%)"
+      ],
+      "act": "flow",
+      "stages": [
+        -1569
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#fafafa"
+    },
+    {
+      "i": 23,
+      "y": 2986,
+      "pct": 100,
+      "settled": true,
+      "contrast": [],
+      "cues": [],
+      "clips": [],
+      "rails": [],
+      "wipes": [
+        "inset(0px 0px 0%)"
+      ],
+      "act": "flow",
+      "stages": [
+        -1664
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#fafafa"
+    },
+    {
+      "i": 24,
+      "y": 3000,
+      "pct": 100,
+      "settled": true,
+      "contrast": [],
+      "cues": [],
+      "clips": [],
+      "rails": [],
+      "wipes": [
+        "inset(0px 0px 0%)"
+      ],
+      "act": "flow",
+      "stages": [
+        -1678
+      ],
+      "segs": [],
+      "custom": [],
+      "customHold": false,
+      "seg": null,
+      "segp": null,
+      "bg": "#fafafa"
+    }
+  ],
+  "consoleErrors": [],
+  "failed": []
+}

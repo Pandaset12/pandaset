@@ -22,7 +22,7 @@ npm install
 npm run dev
 ```
 
-Open the local URL printed by Vite. Run all commands from the repository root.
+Open the local URL printed by Vite for the black-and-white PandaSet landing page. **Explore the demo** opens `app.html`, where the dashboard keeps its existing hash routes. Previously shared root hash routes also redirect to the dashboard. Run all commands from the repository root.
 
 | Command           | Purpose                                                       |
 | ----------------- | ------------------------------------------------------------- |
@@ -30,7 +30,7 @@ Open the local URL printed by Vite. Run all commands from the repository root.
 | `npm run build`   | Type-check and create the production app in `frontend/dist/`. |
 | `npm run preview` | Serve the production build locally.                           |
 
-The app uses hash routes, so the built `frontend/dist/` directory can be served from a static host without route rewrites.
+Vite builds both `index.html` (landing) and `app.html` (dashboard). The app uses hash routes, so the built `frontend/dist/` directory can be served from a static host without route rewrites.
 
 ## Project map
 
