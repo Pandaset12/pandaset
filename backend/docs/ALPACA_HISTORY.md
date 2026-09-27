@@ -67,6 +67,17 @@ establish account entitlement. To roll back, set `MARKET_DATA_PROVIDER=sample` a
 the event lab; saved analyses remain readable. Remove old Twelve Data secrets
 and caches only after verifying saved records can still be read.
 
+### Opt-in account check (2026-09-26)
+
+The user-authorized account passed the read-only check with the `iex` feed and
+`adjustment=all`. AAPL, MSFT, SPY, TLT, and GLD had 252 aligned daily return
+observations through the 2026-09-25 session. This confirms IEX historical
+access and coverage for those symbols and that window. The check encountered no
+rate-limit response; it did not measure the account's request ceiling or test
+SIP access. Applicable public display and retention rights remain unconfirmed,
+so this check alone does not authorize a vendor-backed public release. No keys
+or prices were retained in this record.
+
 See Alpaca's [historical bars reference](https://docs.alpaca.markets/us/reference/stockbars)
 for parameters and pagination, its [market-data FAQ](https://docs.alpaca.markets/us/docs/market-data-faq)
 for feed differences, and the [release gates](../../docs/event-lab-release-gates.md).

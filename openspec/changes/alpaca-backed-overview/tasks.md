@@ -14,5 +14,5 @@
 ## 3. Rollout
 
 - [x] 3.1 Update deployment guidance for server-side `MARKET_DATA_PROVIDER=alpaca`, key/secret/feed selection, data rights, historical versus latest-price labels, and expected quote-polling load; keep sample mode documented.
-- [ ] 3.2 With rotated local credentials, run the existing opt-in Alpaca history check for representative holdings and factor ETFs; record selected feed, coverage, entitlement, and quota observations without storing secrets or prices. Complete the corresponding live-check task in `replace-twelve-data-with-alpaca` only after this succeeds.
+- [x] 3.2 With user-authorized account credentials, run the existing opt-in Alpaca history check for representative holdings and factor ETFs; record selected feed, coverage, entitlement, and observed throttling without storing secrets or prices. Complete the corresponding live-check task in `replace-twelve-data-with-alpaca` only after this succeeds.
 - [x] 3.3 Run backend tests, `npm test`, `npm run build`, and strict OpenSpec validation; inspect Overview at desktop and mobile widths plus keyboard, empty, missing-quote, and provider-error states.

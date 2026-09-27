@@ -58,7 +58,7 @@ Alternative considered: fetch VTI independently for every Overview. That adds ra
 
 1. Update Overview and shared holding/source presentation; keep sample mode working for local/demo use.
 2. Add frontend and API-level tests for user-specific allocations, Alpaca versus sample provenance, missing/partial history, quote separation, and arbitrary tickers.
-3. Configure Alpaca only through the deployment's server-side environment. Run the existing opt-in history check with rotated credentials and confirm the chosen feed, coverage, quota, and applicable display/retention rights before enabling vendor-backed Overview use.
+3. Configure Alpaca only through the deployment's server-side environment. Run the existing opt-in history check with the account credentials authorized by the user and record the chosen feed, coverage, and observed throttling. Confirm the applicable display/retention rights and production quota before enabling vendor-backed Overview use.
 4. Roll back by selecting sample mode and clearly labeling new sample analyses; leave previously saved analyses readable with their original provenance.
 
 ## Open Questions
