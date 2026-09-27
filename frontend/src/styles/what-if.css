@@ -204,6 +204,98 @@
 .event-research-controls > .button {
   justify-self: start;
 }
+.event-research-progress {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+}
+.event-research-progress ol {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.event-research-progress li {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+.event-research-progress li[data-state="active"],
+.event-research-progress li[data-state="complete"] {
+  color: var(--ink);
+}
+.event-research-progress-track {
+  position: relative;
+  display: block;
+  height: 3px;
+  overflow: hidden;
+  background: var(--border);
+}
+.event-research-progress
+  li[data-state="complete"]
+  .event-research-progress-track,
+.event-research-progress
+  li[data-state="active"][data-animate="false"]
+  .event-research-progress-track {
+  background: var(--ink);
+}
+.event-research-progress li[data-state="stopped"] {
+  color: var(--negative);
+}
+.event-research-progress
+  li[data-state="stopped"]
+  .event-research-progress-track {
+  background: var(--negative);
+}
+.event-research-progress
+  li[data-animate="true"]
+  .event-research-progress-track::after {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 34%;
+  background: var(--ink);
+  content: "";
+  animation: event-research-scan 1.6s linear infinite;
+}
+.event-research-progress[data-playing="false"]
+  .event-research-progress-track::after {
+  animation-play-state: paused;
+}
+.event-research-progress > p {
+  margin: 14px 0 0;
+  color: var(--ink);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+.event-research-proposal,
+.event-research-outcome {
+  animation: event-research-arrive 380ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@keyframes event-research-scan {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(294%);
+  }
+}
+@keyframes event-research-arrive {
+  from {
+    opacity: 0.78;
+    clip-path: inset(0 0 7% 0);
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    clip-path: inset(0);
+    transform: translateY(0);
+  }
+}
 .event-research-unavailable,
 .event-research-review,
 .event-research-results,
@@ -356,5 +448,19 @@
   }
   .scenario-editor .scenario-add-holding .button {
     justify-content: center;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .event-research-progress
+    li[data-animate="true"]
+    .event-research-progress-track {
+    background: var(--ink);
+  }
+  .event-research-progress
+    li[data-animate="true"]
+    .event-research-progress-track::after,
+  .event-research-proposal,
+  .event-research-outcome {
+    animation: none;
   }
 }

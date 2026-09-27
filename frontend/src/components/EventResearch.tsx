@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   confirmDraft,
   createDraft,
@@ -60,6 +60,119 @@ export function sameWeights(
   if (!left) return false;
   return [...new Set([...Object.keys(left), ...Object.keys(right)])].every(
     (symbol) => Math.abs((left[symbol] ?? 0) - (right[symbol] ?? 0)) < 1e-10,
+  );
+}
+
+type ProgressState = "waiting" | "active" | "complete" | "stopped";
+
+function ResearchProgress({
+  busy,
+  draft,
+  run,
+}: {
+  busy: boolean;
+  draft: ScenarioDraft | null;
+  run: ScenarioRun | null;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [playing, setPlaying] = useState(false);
+
+  useEffect(() => {
+    const node = ref.current;
+    if (!node) return;
+    if (!("IntersectionObserver" in window)) {
+      setPlaying(!document.hidden);
+      return;
+    }
+    let intersects = false;
+    const sync = () => setPlaying(intersects && !document.hidden);
+    const observer = new IntersectionObserver(([entry]) => {
+      intersects = entry.isIntersecting;
+      sync();
+    });
+    observer.observe(node);
+    document.addEventListener("visibilitychange", sync);
+    return () => {
+      observer.disconnect();
+      document.removeEventListener("visibilitychange", sync);
+    };
+  }, []);
+
+  const research: ProgressState = run
+    ? "complete"
+    : !draft
+      ? "active"
+      : draft.status === "failed"
+        ? "stopped"
+        : ["pending", "queued", "running"].includes(draft.status)
+          ? "active"
+          : "complete";
+  const review: ProgressState =
+    run || draft?.status === "confirmed" || (busy && draft?.status === "ready")
+      ? "complete"
+      : draft?.status === "ready"
+        ? "active"
+        : "waiting";
+  const model: ProgressState = run
+    ? run.result
+      ? "complete"
+      : ["failed", "cancelled", "completed"].includes(run.status)
+        ? "stopped"
+        : "active"
+    : busy && draft?.status === "ready"
+      ? "active"
+      : "waiting";
+  const status = run
+    ? run.result
+      ? "Modeled outcomes are ready."
+      : run.status === "failed"
+        ? "Calculation stopped. Details below."
+        : run.status === "cancelled"
+          ? "Calculation was cancelled."
+          : run.status === "completed"
+            ? "Calculation finished without results."
+            : run.status === "running"
+              ? "Calculating one- and three-month modeled outcomes…"
+              : "Calculation queued."
+    : busy && draft?.status === "ready"
+      ? "Starting the calculation…"
+      : !draft
+        ? "Starting the research request…"
+        : draft.status === "failed"
+          ? "Research stopped. Details below."
+          : draft.status === "running"
+            ? "Researching evidence and proposed shocks…"
+            : draft.status === "pending" || draft.status === "queued"
+              ? "Research request queued."
+              : draft.status === "ready"
+                ? "Research ready. Review the evidence and proposed shocks."
+                : "Assumptions confirmed.";
+  const stages = [
+    { label: "Research", state: research },
+    { label: "Review", state: review },
+    { label: "Model", state: model },
+  ] as const;
+
+  return (
+    <div className="event-research-progress" data-playing={playing} ref={ref}>
+      <ol aria-label="Event research stages">
+        {stages.map(({ label, state }) => (
+          <li
+            key={label}
+            data-state={state}
+            data-animate={state === "active" && label !== "Review"}
+            aria-current={state === "active" ? "step" : undefined}
+          >
+            <span
+              className="event-research-progress-track"
+              aria-hidden="true"
+            />
+            <span>{label}</span>
+          </li>
+        ))}
+      </ol>
+      <p role="status">{status}</p>
+    </div>
   );
 }
 
@@ -447,6 +560,9 @@ export function EventResearch({
               </p>
             )}
           </div>
+          {(busy || draft || run) && (
+            <ResearchProgress busy={busy} draft={draft} run={run} />
+          )}
           {error && (
             <p className="field-error" role="alert">
               {error}
@@ -472,11 +588,6 @@ export function EventResearch({
                   Review its assumptions before calculating.
                 </p>
               )}
-              {["pending", "queued", "running"].includes(draft.status) && (
-                <p role="status">
-                  Gathering evidence and modeling assumptions…
-                </p>
-              )}
               {draft.status === "failed" && (
                 <p role="alert">
                   {draft.last_error ||
@@ -484,7 +595,7 @@ export function EventResearch({
                 </p>
               )}
               {draft.proposal && (
-                <>
+                <div className="event-research-proposal">
                   <p className="event-research-provenance">
                     Pinned to{" "}
                     {draft.allocation_snapshot?.name ?? "this portfolio"},
@@ -622,28 +733,27 @@ export function EventResearch({
                           disabled={!validShocks || draftStale || busy}
                           onClick={() => void confirm()}
                         >
-                          Confirm assumptions and calculate
+                          {busy
+                            ? "Starting calculation…"
+                            : "Confirm assumptions and calculate"}
                         </button>
                       )}
                     </div>
                   )}
-                </>
+                </div>
               )}
             </div>
           )}
           {run && (
             <div className="event-research-results">
               <h3>Event-conditioned results</h3>
-              {["pending", "queued", "running"].includes(run.status) && (
-                <p role="status">Calculating one- and three-month outcomes…</p>
-              )}
               {run.status === "failed" && (
                 <p role="alert">
                   {run.last_error || "The calculation could not finish."}
                 </p>
               )}
               {run.result && (
-                <>
+                <div className="event-research-outcome">
                   <p>
                     Hypothetical modeled estimates, not a forecast or live
                     quote.
@@ -758,7 +868,7 @@ export function EventResearch({
                     </button>
                   </form>
                   {answer && <p className="event-chat-answer">{answer}</p>}
-                </>
+                </div>
               )}
             </div>
           )}

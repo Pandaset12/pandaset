@@ -117,6 +117,12 @@ test("event research reviews saved evidence and refuses stale confirmation", asy
       screen.getByRole("button", { name: "Research this event" }),
     );
     await screen.findByText("Policy rate recorded");
+    assert.equal(
+      screen
+        .getByRole("list", { name: "Event research stages" })
+        .querySelector('li[data-state="active"]')?.textContent,
+      "Review",
+    );
     assert.match(
       screen.getByText(/Missing evidence:/).textContent ?? "",
       /Forward guidance/,
@@ -183,6 +189,64 @@ test("event outage keeps allocation comparison available and offers retry", asyn
       /compare and apply/,
     );
     assert.ok(screen.getByRole("button", { name: "Try event research again" }));
+  } finally {
+    view.unmount();
+    cleanup();
+  }
+});
+
+test("event research shows queued work without advancing the review stage", async () => {
+  const api = {
+    ...eventResearchApi,
+    listTemplates: async () => [
+      {
+        template_id: "fed_policy",
+        version: "1",
+        category: "macro",
+        title: "Federal Reserve policy decision",
+        description: "",
+        factor_ids: ["equity"],
+        situations: [
+          { situation_id: "cuts", title: "Rates fall", description: "" },
+        ],
+      },
+    ],
+    listDrafts: async () => [],
+    listRuns: async () => [],
+    createDraft: async () => ({ draft_id: "queued-1", status: "queued" }),
+    getDraft: async () => ({ draft_id: "queued-1", status: "queued" }),
+  } as unknown as typeof eventResearchApi;
+  const view = render(
+    createElement(EventResearch, {
+      portfolioId: "portfolio-queued",
+      portfolioRevision: 1,
+      proposedWeights: { SPY: 1 },
+      validAllocation: true,
+      api,
+    }),
+  );
+  try {
+    fireEvent.change(
+      await screen.findByRole("combobox", { name: "Situation" }),
+      {
+        target: { value: "cuts" },
+      },
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Research this event" }),
+    );
+    await screen.findByText("Research request queued.");
+    const stages = screen.getByRole("list", { name: "Event research stages" });
+    assert.equal(
+      stages.querySelector('li[data-state="active"]')?.textContent,
+      "Research",
+    );
+    assert.deepEqual(
+      [...stages.querySelectorAll('li[data-state="waiting"]')].map(
+        (item) => item.textContent,
+      ),
+      ["Review", "Model"],
+    );
   } finally {
     view.unmount();
     cleanup();
@@ -293,6 +357,12 @@ test("a saved-run revision opens its new pinned draft for review", async () => {
   try {
     fireEvent.click(await screen.findByText("Saved event research and runs"));
     fireEvent.click(await screen.findByRole("button", { name: /completed/ }));
+    assert.equal(
+      screen
+        .getByRole("list", { name: "Event research stages" })
+        .querySelectorAll('li[data-state="complete"]').length,
+      3,
+    );
     fireEvent.change(
       screen.getByRole("textbox", { name: "Ask about this result" }),
       {
