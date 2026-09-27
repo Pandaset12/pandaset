@@ -499,30 +499,6 @@
   margin-left: auto;
   color: var(--muted);
 }
-.analyst-callout {
-  display: flex;
-  gap: 12px;
-  align-items: flex-start;
-  background: var(--raised);
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  padding: 17px 15px;
-  margin-top: 19px;
-}
-.analyst-callout > svg {
-  margin-top: 1px;
-  color: var(--muted);
-}
-.analyst-callout strong {
-  display: block;
-  font-size: 0.75rem;
-  font-weight: 500;
-  margin-bottom: 7px;
-}
-.analyst-callout .text-button {
-  font-size: 0.75rem;
-  color: var(--muted);
-}
 .site-footer {
   max-width: 1336px;
   margin: 0 auto;

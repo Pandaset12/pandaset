@@ -607,6 +607,10 @@ test("repeated workspace edits PUT one selected portfolio and refresh its analys
   }) as typeof fetch;
   render(createElement(Application, { onSignOut: async () => {} }));
   await screen.findByText("analysis_1");
+  assert.equal(screen.queryByRole("button", { name: "Ask Panda" }), null);
+  assert.equal(screen.queryByRole("link", { name: "Explore a what-if" }), null);
+  assert.equal(document.querySelector(".demo-badge"), null);
+  assert.equal(document.querySelector(".as-of"), null);
   for (const [index, [first, second]] of [
     ["75", "25"],
     ["50", "50"],

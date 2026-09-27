@@ -352,11 +352,6 @@ svg {
   stroke-width: 1.1;
   stroke-linecap: round;
 }
-.analyst-panda-mark {
-  width: 38px;
-  height: 38px;
-  display: block;
-}
 .brand-light {
   font-weight: 400;
 }
@@ -383,27 +378,6 @@ svg {
   border-color: var(--bamboo);
   color: var(--ink);
   font-weight: 600;
-}
-.analyst-button {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  background: var(--action);
-  color: var(--ink-on-accent);
-  font-size: 0.875rem;
-  font-weight: 600;
-  border-radius: 5px;
-  padding: 11px 14px;
-  white-space: nowrap;
-}
-.analyst-button:hover {
-  background: var(--action-hover);
-}
-.key-hint {
-  font-size: 1.125rem;
-  line-height: 16px;
-  margin-left: 12px;
-  font-weight: 400;
 }
 .workspace-bar {
   max-width: 1440px;
@@ -468,30 +442,6 @@ svg {
   font-family: var(--serif);
   font-size: 1.0625rem;
   border-radius: 4px;
-}
-.demo-badge {
-  font-size: 0.75rem;
-  letter-spacing: 0.8px;
-  font-weight: 600;
-  padding: 4px 7px;
-  display: flex;
-  gap: 5px;
-  align-items: center;
-  background: var(--raised);
-  color: var(--muted);
-  border: 1px solid var(--control-border);
-  border-radius: 3px;
-}
-.demo-badge:hover {
-  background: var(--selected);
-}
-.as-of {
-  color: var(--muted);
-  font-size: 0.75rem;
-}
-.separator {
-  margin: 0 12px;
-  color: var(--muted);
 }
 .main-content {
   max-width: 1440px;

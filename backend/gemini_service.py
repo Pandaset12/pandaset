@@ -17,7 +17,6 @@ from pydantic import BaseModel
 
 from .config import Settings
 from .schemas import (
-    AnalystRequest,
     AnalyticsSnapshot,
     GroundedAnswer,
     MetricCitation,
@@ -26,11 +25,6 @@ from .schemas import (
 
 
 logger = logging.getLogger("portfoliolens")
-
-
-@lru_cache(maxsize=1)
-def analyst_prompt() -> str:
-    return (Path(__file__).parent / "prompts" / "analyst.txt").read_text("utf-8")
 
 
 @lru_cache(maxsize=4)
@@ -495,46 +489,6 @@ async def _generate_structured(
                 models[index + 1],
             )
     raise AssertionError("Gemini model list cannot be empty.")
-
-
-async def generate_answer(
-    request: AnalystRequest,
-    metrics: AnalyticsSnapshot,
-    settings: Settings,
-    *,
-    client_factory=None,
-) -> dict[str, Any]:
-    tools: list[types.Tool] = []
-    if request.web_search:
-        tools.append(types.Tool(google_search=types.GoogleSearch()))
-    if request.web_search or request.source_urls:
-        tools.append(types.Tool(url_context=types.UrlContext()))
-    context = {
-        "question": request.question,
-        "portfolio_metrics": metrics.model_dump(mode="json"),
-        "available_metrics": metric_catalog(metrics),
-        "source_urls": [str(url) for url in request.source_urls],
-    }
-
-    def validate_result(draft, evidence):
-        render_grounded_answer(draft, metrics)
-
-    draft, raw_text, evidence = await _generate_structured(
-        settings=settings,
-        prompt=analyst_prompt(),
-        context=context,
-        response_schema=GroundedAnswer,
-        tools=tools,
-        client_factory=client_factory,
-        validate_result=validate_result,
-    )
-    answer, citations = render_grounded_answer(draft, metrics)
-    return {
-        "answer": answer,
-        "citations": citations,
-        "grounding_text": raw_text,
-        **evidence,
-    }
 
 
 async def generate_analysis_workflow(

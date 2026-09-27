@@ -123,12 +123,6 @@
   .header-inner nav a {
     font-size: 0.8125rem;
   }
-  .key-hint {
-    display: none;
-  }
-  .analyst-button {
-    padding: 10px;
-  }
   .main-content {
     padding: 29px 24px 40px;
   }
@@ -189,10 +183,6 @@
   }
   .briefing > .section-heading {
     grid-column: 1/-1;
-  }
-  .analyst-callout {
-    grid-column: 1/-1;
-    max-width: 350px;
   }
   .briefing-item {
     border: 0;
@@ -379,11 +369,6 @@
     padding-top: 0;
     flex-shrink: 0;
   }
-  .analyst-button {
-    margin-left: auto;
-    padding: 9px 12px;
-    font-size: 0.8125rem;
-  }
   .header-inner nav a.active {
     border-bottom-width: 2px;
   }
@@ -402,25 +387,6 @@
   .portfolio-initial {
     width: 22px;
     height: 22px;
-  }
-  .demo-badge {
-    font-size: 0.75rem;
-    padding: 3px 4px;
-    gap: 3px;
-    letter-spacing: 0.5px;
-    margin-top: 3px;
-  }
-  .demo-badge svg {
-    width: 10px;
-  }
-  .as-of {
-    font-size: 0.75rem;
-    line-height: 1.6;
-    text-align: right;
-    max-width: 83px;
-  }
-  .separator {
-    margin: 0 5px;
   }
   .main-content {
     padding: 27px 20px 32px;
@@ -640,16 +606,6 @@
     font-size: 1.125rem;
   }
   .briefing-meta > span {
-    font-size: 0.75rem;
-  }
-  .analyst-callout {
-    max-width: none;
-    margin-top: 20px;
-  }
-  .analyst-callout strong {
-    font-size: 0.8125rem;
-  }
-  .analyst-callout .text-button {
     font-size: 0.75rem;
   }
   .site-footer {

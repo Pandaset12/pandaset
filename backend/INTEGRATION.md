@@ -92,16 +92,13 @@ snapshot or comparison. This guard does not prove qualitative accuracy or detect
 every possible numerical paraphrase. Tests cover malformed output, invented
 numbers, timeouts, model fallback, and safe unavailable responses.
 
-Ask uses no web tools by default. Explicit `web_search: true` enables Search and
-URL Context; explicit `source_urls` enables URL Context alone. Briefing, Risk,
-and What-if use their calculated context without web tools. Research summarizes
+Briefing, Risk, and What-if use their calculated context without web tools. Research summarizes
 an allowlisted issuer source using URL Context and requires successful retrieval.
 
 `ANALYST_MODE=demo` returns a labelled offline response. In Gemini mode a failed
 call returns `status: unavailable`; HTTP 200 alone is not AI success. Numeric
 citations refer to backend facts; external evidence retains the original source
-indices and raw grounding text. Ask cannot execute trades, change holdings, or
-run a natural-language What-if request.
+indices and raw grounding text.
 
 ## Readiness and verification
 
