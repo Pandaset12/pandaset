@@ -411,75 +411,83 @@
   transform: translateY(-3px);
 }
 
-/* What-if: restore the two-part workbench and separate prompts from inputs. */
-.dashboard-what-if .whatif-path-chooser {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-  margin: 0 0 22px;
-}
-
-.dashboard-what-if .whatif-path-chooser button {
-  position: relative;
-  display: grid;
-  justify-items: start;
-  gap: 8px;
-  min-height: 132px;
-  padding: 18px 52px 18px 20px;
+/* The allocation is shared context; each analysis has a distinct view. */
+.dashboard-what-if .whatif-mode-switch {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 4px;
+  margin-bottom: 20px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--surface);
-  color: var(--ink);
-  cursor: pointer;
-  text-align: left;
+}
+
+.dashboard-what-if .whatif-mode-switch button {
+  min-height: 42px;
+  padding: 9px 16px;
+  border-radius: calc(var(--radius) - 2px);
+  color: var(--muted);
+  font-size: 0.875rem;
+  font-weight: 650;
   transition:
     background 160ms ease,
-    border-color 160ms ease,
-    transform 160ms ease;
+    color 160ms ease;
 }
 
-.dashboard-what-if .whatif-path-chooser button:hover,
-.dashboard-what-if .whatif-path-chooser button:focus-visible {
-  border-color: var(--data-primary);
-  background: var(--data-surface);
+.dashboard-what-if .whatif-mode-switch button:hover,
+.dashboard-what-if .whatif-mode-switch button:focus-visible {
+  background: var(--raised);
+  color: var(--ink);
 }
 
-.dashboard-what-if .whatif-path-chooser button:hover {
-  transform: translateY(-2px);
+.dashboard-what-if .whatif-mode-switch button[aria-pressed="true"] {
+  background: var(--ink);
+  color: var(--surface);
 }
 
-.dashboard-what-if .whatif-path-index {
-  color: var(--data-ink);
-  font-size: 0.66rem;
+.dashboard-what-if .whatif-allocation-context {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 20px 24px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.dashboard-what-if .whatif-allocation-context > div {
+  min-width: 0;
+}
+
+.dashboard-what-if .whatif-context-label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--muted);
+  font-size: 0.6875rem;
   font-weight: 700;
-  letter-spacing: 0.09em;
+  letter-spacing: 0.08em;
 }
 
-.dashboard-what-if .whatif-path-chooser strong {
+.dashboard-what-if .whatif-allocation-context strong {
   font-size: 1rem;
 }
 
-.dashboard-what-if .whatif-path-chooser button > span:last-of-type {
+.dashboard-what-if .whatif-allocation-context p {
+  margin-top: 5px;
   color: var(--muted);
-  font-size: 0.8rem;
-  line-height: 1.45;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
 }
 
-.dashboard-what-if .whatif-path-chooser button > svg {
-  position: absolute;
-  top: 19px;
-  right: 18px;
-  color: var(--data-primary);
+.dashboard-what-if .whatif-allocation-context .button {
+  flex: none;
 }
 
-.dashboard-what-if #allocation-comparison,
-.dashboard-what-if #event-research-panel {
-  scroll-margin-top: 24px;
-}
-
-.dashboard-what-if #allocation-comparison:focus,
-.dashboard-what-if #event-research-panel:focus {
-  outline: none;
+.dashboard-what-if #event-research-view .event-research {
+  margin-top: 16px;
 }
 
 .dashboard-what-if .scenario-presets {
@@ -487,11 +495,8 @@
   align-items: center;
   flex-wrap: wrap;
   gap: 9px;
-  padding: 13px 16px;
-  margin-bottom: 23px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--surface);
+  padding: 0;
+  margin: 18px 0 23px;
 }
 
 .dashboard-what-if .scenario-presets > span {
@@ -525,6 +530,11 @@
   grid-template-columns: minmax(0, 0.96fr) minmax(0, 1.04fr);
   align-items: start;
   gap: 24px;
+}
+
+.dashboard-what-if .scenario-workspace[hidden],
+.dashboard-what-if #event-research-view[hidden] {
+  display: none;
 }
 
 .dashboard-what-if .scenario-editor,
@@ -586,8 +596,18 @@
 }
 
 @media (max-width: 720px) {
-  .dashboard-what-if .whatif-path-chooser {
-    grid-template-columns: minmax(0, 1fr);
+  .dashboard-what-if .whatif-mode-switch {
+    display: flex;
+  }
+
+  .dashboard-what-if .whatif-mode-switch button {
+    flex: 1 1 auto;
+  }
+
+  .dashboard-what-if .whatif-allocation-context {
+    align-items: stretch;
+    flex-direction: column;
+    padding: 19px;
   }
 
   .dashboard-shell .page-heading h1 {

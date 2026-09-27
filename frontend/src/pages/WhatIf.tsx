@@ -86,6 +86,9 @@ export default function WhatIf({
   );
   const [transferAmount, setTransferAmount] = useState("5");
   const [selectedPreset, setSelectedPreset] = useState("");
+  const [activeMode, setActiveMode] = useState<"allocation" | "event">(
+    "allocation",
+  );
   const requestId = useRef(createRequestGuard());
   useEffect(() => () => requestId.current.invalidate(), []);
   const draft = draftText.map((text) => {
@@ -228,18 +231,6 @@ export default function WhatIf({
     setApplying(false);
   }
 
-  function goToPath(id: string) {
-    const target = document.getElementById(id);
-    if (!target) return;
-    target.scrollIntoView({
-      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
-        ? "auto"
-        : "smooth",
-      block: "start",
-    });
-    target.focus({ preventScroll: true });
-  }
-
   return (
     <>
       <PageHeading
@@ -251,67 +242,32 @@ export default function WhatIf({
           Hypothetical portfolio
         </span>
       </PageHeading>
-      <nav className="whatif-path-chooser" aria-label="Explore What-if">
-        <button type="button" onClick={() => goToPath("allocation-comparison")}>
-          <span className="whatif-path-index">01 / ALLOCATION</span>
-          <strong>Compare an allocation</strong>
-          <span>Adjust your mix and compare modeled results.</span>
-          <ArrowRight size={18} aria-hidden="true" />
-        </button>
-        <button type="button" onClick={() => goToPath("event-research-panel")}>
-          <span className="whatif-path-index">02 / EVENT RESEARCH</span>
-          <strong>Explore an event</strong>
-          <span>Add sourced evidence and review assumptions for that mix.</span>
-          <ArrowRight size={18} aria-hidden="true" />
-        </button>
-      </nav>
-      <div className="scenario-presets">
-        <span>START WITH A QUESTION</span>
+      <div
+        className="whatif-mode-switch"
+        role="group"
+        aria-label="What-if tools"
+      >
         <button
-          disabled={
-            busy ||
-            scenarioAssets.length < 2 ||
-            !Object.values(analysis.risk_contribution).some(
-              (value) => value !== null,
-            )
-          }
-          onClick={() => preset("reduce")}
+          type="button"
+          aria-pressed={activeMode === "allocation"}
+          aria-controls="allocation-comparison"
+          onClick={() => setActiveMode("allocation")}
         >
-          Less single-stock risk
-          <ArrowRight size={14} />
+          Allocation
         </button>
         <button
-          disabled={
-            busy ||
-            !scenarioAssets.some((asset) => asset.symbol === "TLT") ||
-            scenarioAssets.length < 2
-          }
-          onClick={() => preset("bonds")}
+          type="button"
+          aria-pressed={activeMode === "event"}
+          aria-controls="event-research-view"
+          onClick={() => setActiveMode("event")}
         >
-          More Treasury exposure
-          <ArrowRight size={14} />
-        </button>
-        <button disabled={busy} onClick={() => preset("balanced")}>
-          A more balanced mix
-          <ArrowRight size={14} />
+          Event research
         </button>
       </div>
-      {draftChanges.length > 0 && (
-        <div className="scenario-changes" aria-live="polite">
-          <strong>{selectedPreset || "Proposed shifts"}</strong>
-          <ul>
-            {draftChanges.map(({ asset, current, proposed }) => (
-              <li key={asset.symbol}>
-                {asset.symbol} {current}% → {proposed}%
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
       <div
-        className="scenario-workspace"
         id="allocation-comparison"
-        tabIndex={-1}
+        className="scenario-workspace"
+        hidden={activeMode !== "allocation"}
       >
         <section className="scenario-editor">
           <SectionTitle eyebrow="01 / ADJUST" title="Build your scenario">
@@ -330,6 +286,49 @@ export default function WhatIf({
               Reset
             </button>
           </SectionTitle>
+          <div className="scenario-presets">
+            <span>START WITH A QUESTION</span>
+            <button
+              disabled={
+                busy ||
+                scenarioAssets.length < 2 ||
+                !Object.values(analysis.risk_contribution).some(
+                  (value) => value !== null,
+                )
+              }
+              onClick={() => preset("reduce")}
+            >
+              Less single-stock risk
+              <ArrowRight size={14} />
+            </button>
+            <button
+              disabled={
+                busy ||
+                !scenarioAssets.some((asset) => asset.symbol === "TLT") ||
+                scenarioAssets.length < 2
+              }
+              onClick={() => preset("bonds")}
+            >
+              More Treasury exposure
+              <ArrowRight size={14} />
+            </button>
+            <button disabled={busy} onClick={() => preset("balanced")}>
+              A more balanced mix
+              <ArrowRight size={14} />
+            </button>
+          </div>
+          {draftChanges.length > 0 && (
+            <div className="scenario-changes" aria-live="polite">
+              <strong>{selectedPreset || "Proposed shifts"}</strong>
+              <ul>
+                {draftChanges.map(({ asset, current, proposed }) => (
+                  <li key={asset.symbol}>
+                    {asset.symbol} {current}% → {proposed}%
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
           <div className="allocation-transfer">
             <strong>Move an allocation</strong>
             <div>
@@ -690,18 +689,45 @@ export default function WhatIf({
           </div>
         </section>
       </div>
-      <EventResearch
-        key={analysis.portfolio_id}
-        portfolioId={analysis.portfolio_id}
-        portfolioRevision={analysis.portfolio_revision ?? 1}
-        proposedWeights={Object.fromEntries(
-          scenarioAssets.map((asset, index) => [
-            asset.symbol,
-            draft[index] / 100,
-          ]),
-        )}
-        validAllocation={valid && combinedSymbols.size <= MAX_COMBINED_SYMBOLS}
-      />
+      <div id="event-research-view" hidden={activeMode !== "event"}>
+        <div className="whatif-allocation-context">
+          <div>
+            <span className="whatif-context-label">SCENARIO ALLOCATION</span>
+            <strong>
+              {changed ? "Proposed mix" : "Current portfolio mix"}
+            </strong>
+            <p>
+              {valid
+                ? scenarioAssets
+                    .map((asset, index) => `${asset.symbol} ${draft[index]}%`)
+                    .join(" · ")
+                : "Allocations must total 100% before researching an event."}
+            </p>
+          </div>
+          <button
+            className="button subtle"
+            type="button"
+            onClick={() => setActiveMode("allocation")}
+          >
+            Adjust allocation
+            <ArrowRight size={16} aria-hidden="true" />
+          </button>
+        </div>
+        <EventResearch
+          key={analysis.portfolio_id}
+          portfolioId={analysis.portfolio_id}
+          portfolioRevision={analysis.portfolio_revision ?? 1}
+          proposedWeights={Object.fromEntries(
+            scenarioAssets.map((asset, index) => [
+              asset.symbol,
+              draft[index] / 100,
+            ]),
+          )}
+          validAllocation={
+            valid && combinedSymbols.size <= MAX_COMBINED_SYMBOLS
+          }
+        />
+      </div>
       {confirm && comparison && (
         <Modal
           title="Use this allocation?"

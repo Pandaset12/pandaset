@@ -490,7 +490,7 @@ test("a single-holding SPY scenario can add a second ticker", () => {
   cleanup();
 });
 
-test("What-if editor groups holdings, allocations, and add controls", () => {
+test("What-if keeps a proposed allocation when switching between tools", () => {
   const saved = {
     portfolio_id: "layout",
     name: "Layout",
@@ -543,6 +543,25 @@ test("What-if editor groups holdings, allocations, and add controls", () => {
   assert.equal(
     container.querySelector(".allocation-total strong")?.textContent,
     "100%",
+  );
+  fireEvent.click(screen.getByRole("button", { name: "A more balanced mix" }));
+  fireEvent.click(screen.getByRole("button", { name: "Event research" }));
+  assert.equal(
+    container.querySelector("#allocation-comparison")?.hasAttribute("hidden"),
+    true,
+  );
+  assert.match(
+    container.querySelector(".whatif-allocation-context p")?.textContent ?? "",
+    /SPY 50% · TLT 50%/,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Adjust allocation" }));
+  assert.equal(
+    (
+      screen.getByRole("textbox", {
+        name: "SPY proposed allocation",
+      }) as HTMLInputElement
+    ).value,
+    "50",
   );
   cleanup();
 });

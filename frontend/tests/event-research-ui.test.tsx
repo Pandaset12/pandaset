@@ -207,10 +207,10 @@ test("event access denial stays inside the optional panel", async () => {
   );
   try {
     await screen.findByText("The event lab is not available to this account.");
+    assert.ok(screen.getByRole("heading", { name: "Research an event" }));
     assert.ok(
-      screen.getByRole("heading", { name: "Add an event to this scenario" }),
+      screen.getByText(/compare and apply allocations in the other view/),
     );
-    assert.ok(screen.getByText(/compare and apply allocations above/));
   } finally {
     view.unmount();
     cleanup();

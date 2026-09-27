@@ -344,14 +344,12 @@ export function EventResearch({
     >
       <div className="event-research-heading">
         <div>
-          <span className="eyebrow">03 / RESEARCH AN EVENT</span>
-          <h2 id="event-research-title">Add an event to this scenario</h2>
+          <h2 id="event-research-title">Research an event</h2>
           <p>
-            Research a possible event against the proposed mix above. Review the
-            evidence and assumptions before calculating.
+            Explore a possible event against the allocation shown above. Review
+            the evidence and assumptions before calculating.
           </p>
         </div>
-        <span className="event-research-label">Optional</span>
       </div>
       {availability === "loading" && (
         <p role="status">Checking event research availability…</p>
@@ -360,7 +358,7 @@ export function EventResearch({
         <div className="event-research-unavailable" role="status">
           <strong>Event research is unavailable right now.</strong>
           <p>{availabilityError}</p>
-          <p>You can still compare and apply allocations above.</p>
+          <p>You can still compare and apply allocations in the other view.</p>
           <button
             className="button subtle"
             type="button"
