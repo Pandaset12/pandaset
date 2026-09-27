@@ -1,10 +1,12 @@
 from datetime import datetime
 import math
+import re
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import ValidationError
 from starlette.concurrency import run_in_threadpool
 
+from .alpaca_quotes import AlpacaQuotesUnavailable, fetch_alpaca_quotes
 from .config import Settings, get_settings
 from .auth import current_user_id
 from .observability import log_failure
@@ -23,6 +25,7 @@ from .providers import IntegrationPending, QuantProvider, get_provider
 from .research_sources import curated_research_source
 from .schemas import (
     MAX_PORTFOLIO_SYMBOLS,
+    MAX_QUOTE_SYMBOLS,
     AIWorkflowResponse,
     AllocationInput,
     AnalysisResponse,
@@ -32,6 +35,7 @@ from .schemas import (
     AnalysisWorkflowRequest,
     AskRequest,
     MarketHistoryResponse,
+    LiveQuotesResponse,
     Portfolio,
     PortfolioInput,
     ResearchSummaryRequest,
@@ -50,6 +54,35 @@ def get_store(request: Request) -> PortfolioStore:
 
 def api_error(status: int, code: str, message: str) -> HTTPException:
     return HTTPException(status_code=status, detail={"code": code, "message": message})
+
+
+@router.get("/quotes")
+async def live_quotes(
+    symbols: list[str] = Query(min_length=1, max_length=MAX_QUOTE_SYMBOLS),
+    settings: Settings = Depends(get_settings),
+    _user_id: str = Depends(current_user_id),
+) -> LiveQuotesResponse:
+    normalized = [symbol.strip().upper() for symbol in symbols]
+    if (
+        any(len(symbol) > 20 or not re.fullmatch(r"[A-Z0-9]+(?:[.-][A-Z0-9]+)*", symbol, flags=re.ASCII) for symbol in normalized)
+        or len(set(normalized)) != len(normalized)
+    ):
+        raise api_error(422, "INVALID_QUOTES_REQUEST", f"Provide one to {MAX_QUOTE_SYMBOLS} unique stock symbols, each at most 20 characters.")
+    if not settings.has_alpaca_keys:
+        raise api_error(503, "ALPACA_NOT_CONFIGURED", "Live quotes are unavailable. Configure ALPACA_API_KEY and ALPACA_API_SECRET on the backend.")
+    try:
+        payload = await run_in_threadpool(
+            fetch_alpaca_quotes,
+            normalized,
+            settings.alpaca_api_key.get_secret_value().strip(),
+            settings.alpaca_api_secret.get_secret_value().strip(),
+            min(settings.market_data_timeout_seconds, 10),
+        )
+        return LiveQuotesResponse.model_validate(payload)
+    except (AlpacaQuotesUnavailable, ValidationError) as exc:
+        log_failure("ALPACA_QUOTES_UNAVAILABLE", exc)
+        message = str(exc) if isinstance(exc, AlpacaQuotesUnavailable) else "Alpaca returned an invalid snapshot response."
+        raise api_error(502, "ALPACA_QUOTES_UNAVAILABLE", message) from exc
 
 
 def require_portfolio(store: PortfolioStore, portfolio_id: str, owner_id: str) -> Portfolio:

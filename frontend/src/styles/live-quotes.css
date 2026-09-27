@@ -1,0 +1,46 @@
+.live-quotes {
+  margin: 0 0 1rem;
+  padding: 1rem 1.15rem;
+  border: 1px solid var(--line, #e4e2de);
+  border-radius: 14px;
+  background: var(--surface, #fff);
+}
+
+.live-quotes-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.65rem;
+  margin-bottom: 0.8rem;
+}
+
+.live-quotes-heading span,
+.live-quote small,
+.live-quotes-message {
+  color: var(--muted, #777);
+  font-size: 0.78rem;
+}
+
+.live-quotes-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+}
+
+.live-quote {
+  display: grid;
+  gap: 0.15rem;
+  min-width: 7.5rem;
+  padding: 0.65rem 0.75rem;
+  border-radius: 9px;
+  background: var(--subtle, #f7f6f3);
+}
+
+.live-quote span {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.live-quote small {
+  font-size: 0.68rem;
+}

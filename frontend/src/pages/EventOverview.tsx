@@ -17,6 +17,7 @@ import {
   Empty,
 } from "../components/UI";
 import { LineChart } from "../components/LineChart";
+import { LiveQuotesPanel } from "../components/LiveQuotesPanel";
 import type { AnalysisResponse } from "../api/portfolio";
 import type { PortfolioAsset } from "../types/portfolioAsset";
 
@@ -107,6 +108,11 @@ export default function Overview({
           Brief this portfolio
         </button>
       </PageHeading>
+      <LiveQuotesPanel
+        symbols={Object.keys(analysis.weights).filter(
+          (symbol) => analysis.weights[symbol] > 0,
+        )}
+      />
       <section className="backend-analysis" aria-label="Saved backend analysis">
         <div>
           <strong>

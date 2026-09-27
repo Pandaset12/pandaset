@@ -35,10 +35,12 @@ class Settings(BaseSettings):
     supabase_publishable_key: str = ""
     supabase_signing_mode: Literal["asymmetric", "legacy", "auto"] = "asymmetric"
     market_data_provider: Literal["sample", "twelvedata"] = "sample"
+    twelve_data_api_key: SecretStr | None = None
+    alpaca_api_key: SecretStr | None = None
+    alpaca_api_secret: SecretStr | None = None
     market_data_timeout_seconds: float = Field(default=15, gt=0, le=60)
     mongo_uri: SecretStr | None = None
     mongo_database: str = "portfoliolens"
-    twelve_data_api_key: SecretStr | None = None
     twelve_data_display_rights_confirmed: bool = False
     twelve_data_cache_rights_confirmed: bool = False
     fred_api_key: SecretStr | None = None
@@ -88,6 +90,13 @@ class Settings(BaseSettings):
     @property
     def has_twelve_data_key(self) -> bool:
         return bool(self.twelve_data_api_key and self.twelve_data_api_key.get_secret_value())
+
+    @property
+    def has_alpaca_keys(self) -> bool:
+        return bool(
+            self.alpaca_api_key and self.alpaca_api_key.get_secret_value().strip()
+            and self.alpaca_api_secret and self.alpaca_api_secret.get_secret_value().strip()
+        )
 
     @property
     def supabase_auth_api_key(self) -> str:
