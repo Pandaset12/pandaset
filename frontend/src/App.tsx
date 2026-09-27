@@ -8,11 +8,11 @@ import {
   InformationCircle as Info,
   XMark as X,
 } from "./components/icons";
-import { assets } from "../../quant/data";
 import {
   analyzeExistingPortfolio,
   createPortfolio,
   createRequestGuard,
+  searchAssets,
   verifyPortfolioHistory,
   listPortfolios,
   setApiAccessToken,
@@ -220,12 +220,10 @@ export function Application({ onSignOut }: { onSignOut: () => Promise<void> }) {
   const workspaceHoldings = selectedPortfolio
     ? workspaceAssets(selectedPortfolio)
     : [];
-  const searchTickers = async (query: string) =>
-    assets
-      .filter((asset) =>
-        asset.symbol.toLowerCase().includes(query.toLowerCase()),
-      )
-      .map((asset) => ({ symbol: asset.symbol, name: asset.name }));
+  const searchTickers = async (
+    query: string,
+    { signal }: { signal: AbortSignal },
+  ) => (await searchAssets(query, signal)).results;
 
   if (portfolioState !== "ready" || showOnboarding)
     return (

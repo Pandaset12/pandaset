@@ -38,6 +38,13 @@ identifies `alpaca_adjusted_daily`, the selected feed, adjustment, latest sessio
 and retrieval time. Missing entitlement, rate limits, invalid responses, and
 incomplete symbol coverage produce errors instead of silently changing sources.
 
+Portfolio entry searches Alpaca's read-only active US equity directory by symbol
+or company name. Its metadata is kept in memory for 15 minutes to avoid a vendor
+request on every keystroke; no prices are stored. The directory uses the paper
+account host by default. Set `ALPACA_ASSETS_BASE_URL=https://api.alpaca.markets`
+when using live account credentials. A listed symbol is still checked for
+historical coverage before the portfolio is saved.
+
 ## Overview rollout
 
 Overview calculates modeled returns, its normalized chart, risk, and holding

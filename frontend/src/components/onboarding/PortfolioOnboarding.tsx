@@ -468,7 +468,7 @@ export function PortfolioOnboarding({
                       <span>
                         <strong>{holding.symbol}</strong>
                         <small>
-                          {holding.name || "Manually entered ticker"}
+                          {holding.name || "Unverified exact ticker"}
                         </small>
                       </span>
                     </div>
@@ -614,7 +614,7 @@ export function PortfolioOnboarding({
                   />
                   <span>
                     <strong>{holding.symbol}</strong>
-                    <small>{holding.name || "Manually entered ticker"}</small>
+                    <small>{holding.name || "Unverified exact ticker"}</small>
                   </span>
                   <strong>
                     {formatPercentage(parsePercentage(holding.percentage) || 0)}
@@ -625,8 +625,8 @@ export function PortfolioOnboarding({
             </ul>
             <p className="po-review-note">
               <InformationCircle size={16} aria-hidden="true" />
-              Market-data availability is checked when your portfolio is
-              analyzed.
+              Market-data availability is checked before your portfolio is
+              saved. Manually entered tickers must match exchange symbols.
             </p>
             {saveError && (
               <div className="po-save-error" role="alert">

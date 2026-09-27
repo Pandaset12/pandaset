@@ -11,6 +11,7 @@ import {
   getLiveQuotes,
   portfolioInput,
   listPortfolios,
+  searchAssets,
   setApiAccessToken,
   verifyPortfolioHistory,
   updatePortfolio,
@@ -66,6 +67,44 @@ test("history preflight reports the selected provider's safe error for a user ti
     verifyPortfolioHistory([{ symbol: "TSLA", weight: 1 }]),
     /TSLA\. Alpaca history rate limit was reached/,
   );
+});
+
+test("company lookup uses the authenticated backend and failed history suggests a real symbol", async () => {
+  const calls: string[] = [];
+  stubFetch((url, init) => {
+    calls.push(url);
+    if (url.startsWith("/api/v1/assets/search")) {
+      assert.equal(
+        new Headers(init?.headers).get("Authorization"),
+        "Bearer owner-token",
+      );
+      return { results: [{ symbol: "AAPL", name: "Apple Inc." }] };
+    }
+    assert.match(url, /symbols=APPLE/);
+    return {
+      ok: false,
+      status: 404,
+      json: async () => ({
+        error: {
+          code: "MARKET_HISTORY_UNAVAILABLE",
+          message:
+            "Market history is unavailable for one or more requested symbols.",
+        },
+      }),
+    } as Response;
+  });
+  setApiAccessToken("owner-token");
+  assert.deepEqual((await searchAssets("Apple")).results[0].symbol, "AAPL");
+  await assert.rejects(
+    verifyPortfolioHistory([{ symbol: "APPLE", weight: 1 }]),
+    /select AAPL \(Apple Inc\.\)/,
+  );
+  setApiAccessToken(null);
+  assert.deepEqual(calls, [
+    "/api/v1/assets/search?q=Apple",
+    "/api/v1/market-history?lookback_days=2&symbols=APPLE",
+    "/api/v1/assets/search?q=APPLE",
+  ]);
 });
 
 test("Edit sends an authenticated PUT for the existing portfolio ID", async () => {

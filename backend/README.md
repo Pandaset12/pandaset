@@ -120,6 +120,7 @@ is a sample session-date label, not a live quote or exchange closing timestamp.
 | POST | `/api/v1/portfolios/{id}/analysis` | Validate provider output and save a snapshot |
 | GET | `/api/v1/portfolios/{id}/analyses/{analysis_id}` | Read that snapshot |
 | GET | `/api/v1/quotes?symbols=AAPL&symbols=MSFT` | Optional Alpaca IEX latest-trade snapshots; separate from daily portfolio analysis |
+| GET | `/api/v1/assets/search?q=Apple` | Authenticated company/symbol lookup; sample symbols in demo mode, read-only Alpaca US equity directory in Alpaca mode |
 | POST | `/api/v1/portfolios/{id}/ask` | Explain exactly the selected saved snapshot |
 | POST | `/api/v1/portfolios/{id}/what-if` | Compare saved and proposed holdings on the selected market-data history |
 | POST | `/api/v1/portfolios/{id}/briefing` | Write a briefing from one saved analysis |
@@ -168,6 +169,7 @@ is not used by this service. Never commit actual keys.
 | STORAGE_PATH | Optional override for the SQLite file |
 | ALPACA_API_KEY / ALPACA_API_SECRET | Server-side credentials for optional history and IEX quote snapshots; never expose them to the frontend |
 | ALPACA_HISTORY_FEED | Explicit `iex` or entitled `sip` selection for adjusted daily history; separate from IEX quote snapshots |
+| ALPACA_ASSETS_BASE_URL | Read-only stock-directory host, paper by default; use `https://api.alpaca.markets` with live account credentials |
 | ALPACA_DISPLAY_RIGHTS_CONFIRMED / ALPACA_CACHE_RIGHTS_CONFIRMED | Public event-lab display and history-retention gates; default false |
 
 The Overview and Event Lab's optional live-price strip polls the authenticated
