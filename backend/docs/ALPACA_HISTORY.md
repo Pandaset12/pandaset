@@ -38,6 +38,26 @@ identifies `alpaca_adjusted_daily`, the selected feed, adjustment, latest sessio
 and retrieval time. Missing entitlement, rate limits, invalid responses, and
 incomplete symbol coverage produce errors instead of silently changing sources.
 
+## Overview rollout
+
+Overview calculates modeled returns, its normalized chart, risk, and holding
+contributions from the user's saved symbols and allocation weights. With
+`MARKET_DATA_PROVIDER=alpaca`, those calculations use adjusted daily history
+through the shown as-of session. They are not brokerage positions, realized P&L,
+or intraday valuations. The header and analysis details identify the historical
+source; the separate IEX strip identifies its own latest-trade timestamps.
+Alpaca keys and feed selection belong only in the backend environment. A key
+configured for optional quotes alone does not switch historical analysis from
+the default fictional sample provider.
+
+Each visible Overview tab polls one multi-symbol quote request about every 15
+seconds, or roughly four requests per minute. For example, 50 simultaneously
+visible tabs would make roughly 200 snapshot requests per minute before history
+requests, retries, or other clients. There is no shared quote cache. Check the
+account's current request limit and expected concurrency, then restrict access
+or add an approved server-side quota strategy before a broad rollout. Do not
+retain or publicly display vendor data without confirming applicable rights.
+
 Before enabling vendor-backed release, run
 `PYTHONPATH=quant_engine/src backend/.venv/bin/python -m backend.check_alpaca_history`
 with an opted-in account. It checks AAPL, MSFT, SPY, TLT, and GLD for 252

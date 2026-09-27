@@ -24,6 +24,7 @@ import { Brand } from "./components/UI";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { EditPortfolio } from "./components/EditPortfolio";
 import { MethodologyModal } from "./components/MethodologyModal";
+import { historySessionLabel } from "./components/AnalysisContext";
 import { Analyst } from "./components/Analyst";
 import { AuthScreen } from "./components/AuthScreen";
 import { AuthBoundary } from "./components/AuthBoundary";
@@ -215,14 +216,7 @@ export function Application({ onSignOut }: { onSignOut: () => Promise<void> }) {
     ["/research", "Research"],
     ["/what-if", "What-if lab"],
   ];
-  const asOf = active?.analysis.as_of
-    ? new Date(active.analysis.as_of).toLocaleDateString("en-US", {
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-        timeZone: "UTC",
-      })
-    : "Unavailable";
+  const asOf = active ? historySessionLabel(active.analysis) : "Unavailable";
   const workspaceHoldings = selectedPortfolio
     ? workspaceAssets(selectedPortfolio)
     : [];
@@ -362,7 +356,9 @@ export function Application({ onSignOut }: { onSignOut: () => Promise<void> }) {
           </div>
           <button className="demo-badge" onClick={() => setMethod(true)}>
             {active?.analysis.data_mode === "live"
-              ? "LIVE DATA"
+              ? active.analysis.data_quality.source === "alpaca_adjusted_daily"
+                ? "ALPACA HISTORY"
+                : "MARKET HISTORY"
               : "SAMPLE DATA"}
             <Info size={12} />
           </button>

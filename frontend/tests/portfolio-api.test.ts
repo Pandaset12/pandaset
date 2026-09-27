@@ -51,18 +51,20 @@ test("What-if accepts persisted symbols and fractional allocations outside the s
   });
 });
 
-test("unsupported edited tickers fail sample-history verification before save", async () => {
+test("history preflight reports the selected provider's safe error for a user ticker", async () => {
   stubFetch((url) => {
     assert.match(url, /symbols=TSLA/);
     return {
       ok: false,
       status: 502,
-      json: async () => ({ error: { message: "Unavailable" } }),
+      json: async () => ({
+        error: { message: "Alpaca history rate limit was reached." },
+      }),
     } as Response;
   });
   await assert.rejects(
     verifyPortfolioHistory([{ symbol: "TSLA", weight: 1 }]),
-    /TSLA/,
+    /TSLA\. Alpaca history rate limit was reached/,
   );
 });
 

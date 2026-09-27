@@ -304,9 +304,14 @@ export async function verifyPortfolioHistory(
     if (signal?.aborted) throw new DOMException("Cancelled", "AbortError");
     try {
       await getMarketHistory([holding.symbol], 2);
-    } catch {
+    } catch (cause) {
+      if (signal?.aborted) throw new DOMException("Cancelled", "AbortError");
+      const detail =
+        cause instanceof ApiError
+          ? cause.message
+          : "Check the ticker or try again.";
       throw new Error(
-        `Could not verify sample price history for ${holding.symbol}. Try again or choose another ticker.`,
+        `Could not verify price history for ${holding.symbol}. ${detail}`,
       );
     }
   }
