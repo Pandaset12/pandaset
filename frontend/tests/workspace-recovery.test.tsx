@@ -63,12 +63,12 @@ test("a saved ticker rejected by sample prices offers retry, switching, and repl
     } as Response;
   }) as typeof fetch;
   render(createElement(Application, { onSignOut: async () => {} }));
-  await screen.findByText("Portfolio analysis is unavailable.");
+  await screen.findByText("We couldn’t load the portfolio analysis.");
   assert.ok(screen.getByRole("button", { name: "Retry analysis" }));
   fireEvent.click(screen.getByRole("button", { name: /TSLA portfolio/ }));
   assert.ok(screen.getByRole("button", { name: "Other portfolio" }));
   fireEvent.click(screen.getByRole("button", { name: "Other portfolio" }));
-  await screen.findByText("Portfolio analysis is unavailable.");
+  await screen.findByText("We couldn’t load the portfolio analysis.");
   assert.ok(screen.getByRole("button", { name: /Other portfolio/ }));
   fireEvent.click(
     screen.getByRole("button", { name: "Create another portfolio" }),
@@ -166,6 +166,15 @@ test("SPY and fractional saved allocations remain usable in edit and What-if", (
   const proposedTlt = screen.getByRole("textbox", {
     name: "TLT proposed allocation",
   }) as HTMLInputElement;
+  fireEvent.change(screen.getByRole("combobox", { name: "From" }), {
+    target: { value: "1" },
+  });
+  fireEvent.change(screen.getByRole("combobox", { name: "To" }), {
+    target: { value: "0" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Move 5 points" }));
+  assert.equal(proposedSpy.value, "30.5");
+  assert.equal(proposedTlt.value, "69.5");
   fireEvent.change(proposedSpy, { target: { value: "" } });
   assert.equal(proposedSpy.value, "");
   fireEvent.change(proposedSpy, { target: { value: "0" } });
@@ -219,6 +228,25 @@ test("a single-holding SPY scenario can add a second ticker", () => {
       }) as HTMLInputElement
     ).value,
     "0",
+  );
+  fireEvent.click(
+    screen.getByRole("button", { name: "Less single-stock risk" }),
+  );
+  assert.equal(
+    (
+      screen.getByRole("textbox", {
+        name: "SPY proposed allocation",
+      }) as HTMLInputElement
+    ).value,
+    "90",
+  );
+  assert.equal(
+    (
+      screen.getByRole("textbox", {
+        name: "TLT proposed allocation",
+      }) as HTMLInputElement
+    ).value,
+    "10",
   );
   cleanup();
 });
@@ -497,7 +525,7 @@ test("repeated workspace edits PUT one selected portfolio and refresh its analys
     throw new Error(`Unexpected request: ${init?.method ?? "GET"} ${path}`);
   }) as typeof fetch;
   render(createElement(Application, { onSignOut: async () => {} }));
-  await screen.findByText(/Analysis analysis_1/);
+  await screen.findByText("analysis_1");
   for (const [index, [first, second]] of [
     ["75", "25"],
     ["50", "50"],
@@ -520,7 +548,7 @@ test("repeated workspace edits PUT one selected portfolio and refresh its analys
       { target: { value: second } },
     );
     fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
-    await screen.findByText(new RegExp(`Analysis analysis_${index + 2}`));
+    await screen.findByText(`analysis_${index + 2}`);
   }
   assert.equal(updates, 2);
   assert.equal(creates, 0);

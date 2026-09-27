@@ -7,7 +7,13 @@ import {
   InformationCircle as Info,
 } from "../components/icons";
 import type { Asset } from "../../../quant/data";
-import { pct, pp } from "../../../quant/analytics";
+import {
+  pct,
+  pp,
+  showAnnualizedReturn,
+  transferAllocation,
+} from "../../../quant/analytics";
+import { observationCount, SampleContext } from "../components/AnalysisContext";
 import {
   comparePortfolio,
   createRequestGuard,
@@ -63,6 +69,18 @@ export default function WhatIf({
   const [error, setError] = useState("");
   const [confirm, setConfirm] = useState(false);
   const [applying, setApplying] = useState(false);
+  const [transferFrom, setTransferFrom] = useState(() =>
+    weights.indexOf(Math.max(...weights)),
+  );
+  const [transferTo, setTransferTo] = useState(() =>
+    weights.length > 1
+      ? weights.indexOf(Math.max(...weights)) === 0
+        ? 1
+        : 0
+      : 0,
+  );
+  const [transferAmount, setTransferAmount] = useState("5");
+  const [selectedPreset, setSelectedPreset] = useState("");
   const requestId = useRef(createRequestGuard());
   useEffect(() => () => requestId.current.invalidate(), []);
   const draft = draftText.map((text) => {
@@ -85,11 +103,26 @@ export default function WhatIf({
     !!comparison &&
     draft.some((value, index) => value !== comparison.weights[index]);
   const available = comparison && !stale ? comparison.response : null;
+  const transferUnits = parsePercentage(transferAmount, true);
+  const transferValue =
+    transferUnits === null ? Number.NaN : transferUnits / PERCENT_SCALE;
+  const canTransfer =
+    valid &&
+    transferFrom !== transferTo &&
+    Number.isFinite(transferValue) &&
+    transferValue > 0 &&
+    transferValue <= draft[transferFrom] &&
+    draft[transferTo] + transferValue <= 100;
+  const draftChanges = scenarioAssets.flatMap((asset, index) =>
+    draft[index] === (weights[index] ?? 0)
+      ? []
+      : [{ asset, current: weights[index] ?? 0, proposed: draft[index] }],
+  );
   const metric = (value: number | null | undefined) =>
     value === null || value === undefined ? "Unavailable" : pct(value);
 
   function preset(kind: "reduce" | "bonds" | "balanced") {
-    const next = [...weights];
+    const next = scenarioAssets.map((_, index) => weights[index] ?? 0);
     if (kind === "reduce") {
       const largestRisk = Object.entries(analysis.risk_contribution)
         .filter(([, value]) => value !== null)
@@ -117,13 +150,33 @@ export default function WhatIf({
       next[index] -= amount;
       next[bond] += amount;
     } else {
-      const share = Math.floor((100 / next.length) * 1000000) / 1000000;
+      const scale = 1_000_000;
+      const shareUnits = Math.floor((100 * scale) / next.length);
       next.forEach((_, index) => {
         next[index] =
-          index === next.length - 1 ? 100 - share * (next.length - 1) : share;
+          index === next.length - 1
+            ? (100 * scale - shareUnits * (next.length - 1)) / scale
+            : shareUnits / scale;
       });
     }
     setDraftText(next.map(String));
+    setSelectedPreset(
+      kind === "reduce"
+        ? "Less single-stock risk"
+        : kind === "bonds"
+          ? "More Treasury exposure"
+          : "A more balanced mix",
+    );
+  }
+
+  function moveWeight() {
+    if (!canTransfer) return;
+    setDraftText(
+      transferAllocation(draft, transferFrom, transferTo, transferValue).map(
+        String,
+      ),
+    );
+    setSelectedPreset("");
   }
 
   async function calculate() {
@@ -174,7 +227,7 @@ export default function WhatIf({
     <>
       <PageHeading
         title="Scenario comparison"
-        description="Try a different allocation. Compare the backend’s historical estimates side by side."
+        description="Try a different allocation. Compare modeled results across the same available dates."
       >
         <span className="scenario-badge">
           <span />
@@ -212,6 +265,18 @@ export default function WhatIf({
           <ArrowRight size={14} />
         </button>
       </div>
+      {draftChanges.length > 0 && (
+        <div className="scenario-changes" aria-live="polite">
+          <strong>{selectedPreset || "Proposed shifts"}</strong>
+          <ul>
+            {draftChanges.map(({ asset, current, proposed }) => (
+              <li key={asset.symbol}>
+                {asset.symbol} {current}% → {proposed}%
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       <div className="scenario-workspace">
         <section className="scenario-editor">
           <SectionTitle eyebrow="01 / ADJUST" title="Build your scenario">
@@ -223,12 +288,74 @@ export default function WhatIf({
                 setScenarioAssets(holdings);
                 setDraftText(weights.map(String));
                 setComparison(null);
+                setSelectedPreset("");
               }}
             >
               <ArrowPath size={16} />
               Reset
             </button>
           </SectionTitle>
+          <div className="allocation-transfer">
+            <strong>Move an allocation</strong>
+            <div>
+              <label>
+                From
+                <select
+                  value={transferFrom}
+                  disabled={busy}
+                  onChange={(event) =>
+                    setTransferFrom(Number(event.target.value))
+                  }
+                >
+                  {scenarioAssets.map((asset, index) => (
+                    <option key={asset.symbol} value={index}>
+                      {asset.symbol} · {draft[index]}%
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                To
+                <select
+                  value={transferTo}
+                  disabled={busy}
+                  onChange={(event) =>
+                    setTransferTo(Number(event.target.value))
+                  }
+                >
+                  {scenarioAssets.map((asset, index) => (
+                    <option key={asset.symbol} value={index}>
+                      {asset.symbol} · {draft[index]}%
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="transfer-amount">
+                Percentage points
+                <input
+                  type="number"
+                  min="0.1"
+                  max={draft[transferFrom]}
+                  step="0.1"
+                  inputMode="decimal"
+                  value={transferAmount}
+                  disabled={busy}
+                  onChange={(event) => setTransferAmount(event.target.value)}
+                />
+              </label>
+            </div>
+            <button
+              className="button subtle"
+              disabled={!canTransfer || busy}
+              onClick={moveWeight}
+            >
+              Move {canTransfer ? transferValue : ""} points
+              <ArrowRight size={16} />
+            </button>
+            <p>
+              Moves keep the total at 100%. You can also edit each row below.
+            </p>
+          </div>
           <div className="editor-table-head">
             <span>Holding</span>
             <span>Current</span>
@@ -252,13 +379,14 @@ export default function WhatIf({
                     }
                     value={draftText[index]}
                     disabled={busy}
-                    onChange={(event) =>
+                    onChange={(event) => {
                       setDraftText(
                         draftText.map((value, i) =>
                           i === index ? event.target.value : value,
                         ),
-                      )
-                    }
+                      );
+                      setSelectedPreset("");
+                    }}
                   />
                   <span>%</span>
                 </div>
@@ -352,7 +480,7 @@ export default function WhatIf({
           )}
           <p className="editor-note">
             {!changed
-              ? "Change an allocation to request a backend comparison."
+              ? "Change an allocation to compare modeled results."
               : "The active portfolio stays unchanged until you apply a successful comparison."}
           </p>
         </section>
@@ -365,14 +493,14 @@ export default function WhatIf({
           >
             {comparison && (
               <span className={`results-status ${stale ? "stale" : ""}`}>
-                {stale ? "Comparison is stale" : "Backend comparison"}
+                {stale ? "Comparison is stale" : "Modeled comparison"}
               </span>
             )}
           </SectionTitle>
           {available && current && proposed ? (
             <>
               <div className="comparison-summary">
-                <span className="eyebrow">ANNUALIZED VOLATILITY · BACKEND</span>
+                <span className="eyebrow">MODELED ANNUALIZED VOLATILITY</span>
                 <div className="volatility-change">
                   <span>{pct(current.portfolio_volatility)}</span>
                   <ArrowRight size={26} />
@@ -381,9 +509,10 @@ export default function WhatIf({
                     {pp(available.delta.portfolio_volatility)}
                   </span>
                 </div>
+                <SampleContext analysis={analysis} />
                 <p>
-                  Difference convention: {available.difference_convention}. Both
-                  portfolios use the same available sample.
+                  Change means proposed minus current. Both portfolios use the
+                  same dates.
                 </p>
               </div>
               <table className="scenario-comparison">
@@ -402,12 +531,14 @@ export default function WhatIf({
                     <td>{metric(proposed.portfolio_return)}</td>
                     <td>{metric(available.delta.portfolio_return)}</td>
                   </tr>
-                  <tr>
-                    <th>Annualized return</th>
-                    <td>{metric(current.annualized_return)}</td>
-                    <td>{metric(proposed.annualized_return)}</td>
-                    <td>{metric(available.delta.annualized_return)}</td>
-                  </tr>
+                  {showAnnualizedReturn(observationCount(analysis)) && (
+                    <tr>
+                      <th>Annualized return</th>
+                      <td>{metric(current.annualized_return)}</td>
+                      <td>{metric(proposed.annualized_return)}</td>
+                      <td>{metric(available.delta.annualized_return)}</td>
+                    </tr>
+                  )}
                   <tr>
                     <th>Largest drawdown</th>
                     <td>{metric(current.max_drawdown)}</td>
@@ -492,7 +623,7 @@ export default function WhatIf({
                 <br />A different risk profile.
               </h3>
               <p>
-                Adjust the weights and request a backend comparison using the
+                Adjust the weights and request a modeled comparison using the
                 same available dates.
               </p>
               <div className="comparison-preview">
@@ -510,10 +641,12 @@ export default function WhatIf({
           <div className="scenario-disclaimer">
             <Info size={15} />
             <p>
-              Results use {analysis.lookback_days} available fictional daily
-              return observations. The demo fixture contains short history; no
-              longer period is inferred or extrapolated. No forecast, trading
-              costs, or taxes are included.
+              Results use {observationCount(analysis)} available daily return
+              observations
+              {analysis.data_mode === "demo"
+                ? " from a fictional demo fixture"
+                : " from the configured data source"}
+              . No forecast, trading costs, or taxes are included.
             </p>
           </div>
         </section>
@@ -524,9 +657,9 @@ export default function WhatIf({
           onClose={applying ? () => undefined : () => setConfirm(false)}
         >
           <p className="note-body">
-            PandaSet will create and analyze the new sample allocation, then
-            replace the active portfolio after the backend confirms it. This
-            does not place trades or connect to a brokerage.
+            PandaSet will create and analyze the new allocation, then replace
+            the active portfolio after the backend confirms it. This does not
+            place trades or connect to a brokerage.
           </p>
           <div className="modal-actions">
             <button
@@ -541,7 +674,7 @@ export default function WhatIf({
               disabled={applying}
               onClick={() => void applyScenario()}
             >
-              {applying ? "Saving…" : "Use sample allocation"}
+              {applying ? "Saving…" : "Use allocation"}
               <Check size={16} />
             </button>
           </div>

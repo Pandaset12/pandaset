@@ -194,7 +194,7 @@ export function Application({ onSignOut }: { onSignOut: () => Promise<void> }) {
     setEdit(false);
     setToast(
       source === "scenario"
-        ? "Scenario saved as the active sample portfolio."
+        ? "Scenario saved as the active portfolio."
         : "Portfolio updated.",
     );
     return true;
@@ -376,18 +376,15 @@ export function Application({ onSignOut }: { onSignOut: () => Promise<void> }) {
         {analysisLoading && !active ? (
           <section className="api-state" role="status">
             <strong>Loading portfolio analysis…</strong>
-            <p>
-              Connecting to the backend and calculating the sample portfolio.
-            </p>
+            <p>Connecting to the backend and calculating this portfolio.</p>
           </section>
         ) : analysisError && !active ? (
-          <section className="api-state" role="alert">
-            <strong>Portfolio analysis is unavailable.</strong>
-            <p>{analysisError}</p>
+          <section className="api-state api-state-featured" role="alert">
+            <span className="api-state-kicker">PORTFOLIO ANALYSIS</span>
+            <h1>We couldn’t load the portfolio analysis.</h1>
             <p>
-              The saved portfolio is still available. Try again, choose another
-              portfolio above, or create a replacement with supported sample
-              prices.
+              Your saved portfolio is still available. Try again, choose another
+              portfolio above, or create a replacement with supported prices.
             </p>
             <button
               className="button dark"
@@ -404,6 +401,13 @@ export function Application({ onSignOut }: { onSignOut: () => Promise<void> }) {
             >
               Create another portfolio
             </button>
+            <button className="text-button" onClick={() => setMethod(true)}>
+              Data & methodology
+            </button>
+            <details>
+              <summary>Technical details</summary>
+              <p>{analysisError}</p>
+            </details>
           </section>
         ) : active ? (
           <ErrorBoundary>
@@ -463,8 +467,9 @@ export function Application({ onSignOut }: { onSignOut: () => Promise<void> }) {
               </p>
             )}
             {analysisError && (
-              <p className="analysis-saving error" role="alert">
-                The active analysis is unchanged. {analysisError}{" "}
+              <div className="analysis-saving error" role="alert">
+                The analysis couldn’t be updated. Your active portfolio is
+                unchanged.{" "}
                 <button
                   className="text-button"
                   onClick={() =>
@@ -473,7 +478,11 @@ export function Application({ onSignOut }: { onSignOut: () => Promise<void> }) {
                 >
                   Retry
                 </button>
-              </p>
+                <details>
+                  <summary>Technical details</summary>
+                  {analysisError}
+                </details>
+              </div>
             )}
           </ErrorBoundary>
         ) : null}
@@ -484,7 +493,7 @@ export function Application({ onSignOut }: { onSignOut: () => Promise<void> }) {
           you own.
         </span>
         <button className="text-button" onClick={() => setMethod(true)}>
-          Sample data & methodology
+          Data & methodology
           <ArrowUpRight size={13} />
         </button>
       </footer>
@@ -499,7 +508,12 @@ export function Application({ onSignOut }: { onSignOut: () => Promise<void> }) {
           onSave={(w, symbols) => apply(w, "edit", symbols)}
         />
       )}
-      {method && <MethodologyModal onClose={() => setMethod(false)} />}
+      {method && (
+        <MethodologyModal
+          analysis={active?.analysis ?? null}
+          onClose={() => setMethod(false)}
+        />
+      )}
       {analyst !== null && active && (
         <Analyst
           portfolioId={active.portfolio.portfolio_id}

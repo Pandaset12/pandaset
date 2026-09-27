@@ -9,7 +9,12 @@ import {
   InformationCircle as Info,
 } from "../components/icons";
 import { researchNotes, type Asset } from "../../../quant/data";
-import { pct, signedPct } from "../../../quant/analytics";
+import { pct, showAnnualizedReturn, signedPct } from "../../../quant/analytics";
+import {
+  AnalysisDetails,
+  observationCount,
+  SampleContext,
+} from "../components/AnalysisContext";
 import {
   AssetMark,
   PageHeading,
@@ -113,25 +118,6 @@ export default function Overview({
           Brief this portfolio
         </button>
       </PageHeading>
-      <section className="backend-analysis" aria-label="Saved backend analysis">
-        <div>
-          <strong>
-            {analysis.data_mode === "demo"
-              ? "Backend demo analysis"
-              : "Backend analysis"}
-          </strong>
-          <p>
-            Analysis {analysis.analysis_id} · portfolio {analysis.portfolio_id}{" "}
-            · {analysis.observation_count ?? "—"} daily return observations
-          </p>
-        </div>
-        <span>
-          {analysis.data_quality.source} · {analysis.data_quality.freshness}
-        </span>
-        {analysis.data_quality.warnings.length > 0 && (
-          <small>{analysis.data_quality.warnings[0]}</small>
-        )}
-      </section>
       <div className="overview-top">
         <section
           className="performance-panel"
@@ -154,30 +140,33 @@ export default function Overview({
                   ? "Unavailable"
                   : signedPct(analysis.portfolio_return)}
               </div>
-              <div
-                className={`return-caption ${(analysis.portfolio_return ?? 0) >= 0 ? "positive" : "negative"}`}
-              >
-                {(analysis.portfolio_return ?? 0) >= 0 ? (
-                  <ArrowUpRight size={17} />
-                ) : (
-                  <ArrowDownRight size={17} />
-                )}
-                {analysis.annualized_return === null
-                  ? "Annualized return unavailable"
-                  : `${signedPct(analysis.annualized_return)} annualized`}
-                <span className="muted"> over the available sample</span>
-              </div>
+              {showAnnualizedReturn(observationCount(analysis)) &&
+              analysis.annualized_return !== null ? (
+                <div
+                  className={`return-caption ${(analysis.portfolio_return ?? 0) >= 0 ? "positive" : "negative"}`}
+                >
+                  {(analysis.portfolio_return ?? 0) >= 0 ? (
+                    <ArrowUpRight size={17} />
+                  ) : (
+                    <ArrowDownRight size={17} />
+                  )}
+                  {signedPct(analysis.annualized_return)} annualized
+                  <span className="muted"> over the available sample</span>
+                </div>
+              ) : (
+                <p className="return-caption muted">
+                  Annualized return withheld for this short sample.
+                </p>
+              )}
+              <SampleContext analysis={analysis} />
             </div>
-            <span className="label-chip">
-              {analysis.lookback_days} return observations
-            </span>
           </div>
           {portfolioSeries && portfolioSeries.length > 1 ? (
             <LineChart
               dates={chartDates}
               series={portfolioSeries}
               secondary={benchmarkSeries}
-              secondaryLabel="VTI sample history"
+              secondaryLabel="VTI history"
               label="Portfolio index"
               compact
             />
@@ -188,8 +177,7 @@ export default function Overview({
           )}
           <div className="performance-bottom">
             <span>
-              Normalized portfolio value · based on the backend’s available
-              dates
+              Normalized portfolio value · based on the available sample dates
             </span>
             <button className="text-button" onClick={onMethod}>
               Data & methodology
@@ -209,7 +197,8 @@ export default function Overview({
                 {topAsset.symbol} is{" "}
                 {allocationPercent(analysis.weights[topAsset.symbol] ?? 0)} of
                 capital and accounts for {pct(topRisk[1] ?? 0, 0)} of estimated
-                portfolio volatility.
+                portfolio volatility over {observationCount(analysis)} daily
+                return observations.
               </p>
               <div className="focus-bars">
                 <div>
@@ -253,6 +242,7 @@ export default function Overview({
           </a>
         </aside>
       </div>
+      <AnalysisDetails analysis={analysis} />
       <div className="metric-strip">
         <div>
           <span>Annualized volatility</span>
@@ -349,6 +339,7 @@ export default function Overview({
                         <a
                           href={`#/research?symbol=${asset.symbol}`}
                           className="table-asset"
+                          aria-label={`Research ${asset.symbol}, ${asset.name}`}
                         >
                           <AssetMark asset={asset} />
                           <span className="holding-identity">
@@ -438,7 +429,7 @@ export default function Overview({
             </Empty>
           )}
           <p className="table-footnote">
-            Return contribution comes from the saved backend analysis. Undefined
+            Return contribution comes from the saved modeled analysis. Undefined
             values stay unavailable.
           </p>
         </section>

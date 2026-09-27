@@ -99,6 +99,9 @@
 .risk-bar {
   background: var(--bamboo);
 }
+.risk-bar.negative {
+  background: var(--negative);
+}
 .risk-bar-row > svg {
   color: var(--muted);
 }

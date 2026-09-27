@@ -149,6 +149,33 @@ export default function Research({
               Your holdings
             </button>
           </div>
+          <label className="mobile-asset-picker">
+            <span>
+              Browse {results.length}{" "}
+              {results.length === 1 ? "asset" : "assets"}
+            </span>
+            <select
+              value={
+                results.some((asset) => asset.symbol === selected.symbol)
+                  ? selected.symbol
+                  : ""
+              }
+              onChange={(event) => {
+                if (event.target.value)
+                  location.hash = `#/research?symbol=${event.target.value}`;
+              }}
+              disabled={results.length === 0}
+            >
+              {!results.some((asset) => asset.symbol === selected.symbol) && (
+                <option value="">Choose an asset</option>
+              )}
+              {results.map((asset) => (
+                <option key={asset.symbol} value={asset.symbol}>
+                  {asset.symbol} · {asset.name}
+                </option>
+              ))}
+            </select>
+          </label>
           <div className="asset-index-list">
             {results.map((asset) => (
               <a
@@ -186,7 +213,9 @@ export default function Research({
             <span className="eyebrow">A FOCUSED UNIVERSE</span>
             <p>Your holdings and the sample research library.</p>
             <span>
-              Price charts use backend history · currently demo fixture data
+              {history?.data_mode === "demo"
+                ? "Price charts use fictional demo history."
+                : "Price chart sources appear below each chart."}
             </span>
           </div>
         </aside>
@@ -301,15 +330,24 @@ export default function Research({
                   aria-label="Price history provenance"
                 >
                   <strong>
-                    {history.data_mode === "demo" ? "DEMO DATA" : "LIVE DATA"}
+                    {history.data_mode === "demo"
+                      ? "FICTIONAL PRICE HISTORY"
+                      : "PRICE HISTORY"}
                   </strong>
                   <span>
-                    {history.data_source} · {history.freshness} ·{" "}
+                    {history.observation_count} daily returns ·{" "}
                     {history.dates[0]} to {history.dates.at(-1)}
                   </span>
                   {history.warnings.map((warning) => (
                     <small key={warning}>{warning}</small>
                   ))}
+                  <details>
+                    <summary>Source details</summary>
+                    <p>
+                      Source: {history.data_source} · Freshness:{" "}
+                      {history.freshness}
+                    </p>
+                  </details>
                 </div>
               )}
               {peer && (

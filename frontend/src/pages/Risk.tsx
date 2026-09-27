@@ -15,6 +15,7 @@ import {
 } from "../components/UI";
 import type { AnalysisResponse } from "../api/portfolio";
 import { allocationPercent } from "../workspace/holdings";
+import { AnalysisDetails, SampleContext } from "../components/AnalysisContext";
 
 export default function Risk({
   analysis,
@@ -91,16 +92,6 @@ export default function Risk({
           Explain my risk
         </button>
       </PageHeading>
-      <section
-        className="backend-analysis"
-        aria-label="Risk analysis provenance"
-      >
-        <strong>Analysis {analysis.analysis_id}</strong>
-        <span>
-          {analysis.data_quality.source} · {analysis.lookback_days} return
-          observations
-        </span>
-      </section>
       <div className="risk-summary">
         <div className="risk-intro">
           <span className="label-chip">
@@ -116,8 +107,9 @@ export default function Risk({
               </h2>
               <p>
                 Risk contribution and volatility below come from the saved
-                backend analysis.
+                analysis.
               </p>
+              <SampleContext analysis={analysis} />
               <a href={`#/what-if?reduce=${top.symbol}`} className="text-link">
                 Test a smaller position
                 <ArrowUpRight size={17} />
@@ -167,7 +159,7 @@ export default function Risk({
                   </div>
                   <div>
                     <i
-                      className="risk-bar"
+                      className={`risk-bar ${risk !== null && risk < 0 ? "negative" : ""}`}
                       style={{
                         width: `${((Math.abs(risk ?? 0) * 100) / max) * 100}%`,
                       }}
@@ -180,11 +172,13 @@ export default function Risk({
             ))}
           </div>
           <p className="muted small-text">
-            Risk contribution is an estimate based on the backend’s daily return
-            sample. Undefined values remain unavailable.
+            Risk contribution is an estimate based on the available daily return
+            sample. Red bars mark negative contributions. Undefined values
+            remain unavailable.
           </p>
         </section>
       </div>
+      <AnalysisDetails analysis={analysis} />
       <div className="two-columns risk-detail">
         <section>
           <SectionTitle
