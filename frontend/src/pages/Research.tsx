@@ -198,9 +198,7 @@ export default function Research({
           <div className="library-note">
             <span className="eyebrow">A FOCUSED UNIVERSE</span>
             <p>Eight assets. A clearer view of how they fit together.</p>
-            <span>
-              Price charts use backend history · currently demo fixture data
-            </span>
+            <span>Price charts use fictional demo history.</span>
           </div>
         </aside>
         <section className="company-detail">
@@ -314,15 +312,24 @@ export default function Research({
                   aria-label="Price history provenance"
                 >
                   <strong>
-                    {history.data_mode === "demo" ? "DEMO DATA" : "LIVE DATA"}
+                    {history.data_mode === "demo"
+                      ? "FICTIONAL PRICE HISTORY"
+                      : "PRICE HISTORY"}
                   </strong>
                   <span>
-                    {history.data_source} · {history.freshness} ·{" "}
+                    {history.observation_count} daily returns ·{" "}
                     {history.dates[0]} to {history.dates.at(-1)}
                   </span>
                   {history.warnings.map((warning) => (
                     <small key={warning}>{warning}</small>
                   ))}
+                  <details>
+                    <summary>Source details</summary>
+                    <p>
+                      Source: {history.data_source} · Freshness:{" "}
+                      {history.freshness}
+                    </p>
+                  </details>
                 </div>
               )}
               {peer && (

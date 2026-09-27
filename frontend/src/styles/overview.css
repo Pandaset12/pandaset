@@ -553,3 +553,12 @@
   width: 100%;
   overflow-wrap: anywhere;
 }
+.backend-analysis details {
+  width: 100%;
+  color: var(--muted);
+  font-size: 0.8125rem;
+}
+.backend-analysis summary {
+  cursor: pointer;
+  width: fit-content;
+}
