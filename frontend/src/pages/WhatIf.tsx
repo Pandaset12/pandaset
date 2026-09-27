@@ -394,6 +394,7 @@ export default function WhatIf({
             ))}
           </div>
           <form
+            className="scenario-add-holding"
             onSubmit={(event) => {
               event.preventDefault();
               const symbol = normalizeSymbol(newSymbol);
@@ -417,13 +418,14 @@ export default function WhatIf({
             </label>
             <input
               id="scenario-add-symbol"
+              placeholder="Ticker symbol"
               value={newSymbol}
               onChange={(event) => setNewSymbol(event.target.value)}
               aria-label="Ticker to add"
             />
             <button
               type="submit"
-              className="text-button"
+              className="button subtle"
               disabled={unionLimitReached}
             >
               Add holding

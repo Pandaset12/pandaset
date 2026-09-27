@@ -27,6 +27,8 @@ const { Application } = await import("../src/App");
 const { EditPortfolio } = await import("../src/components/EditPortfolio");
 const { PortfolioOnboarding } =
   await import("../src/components/onboarding/PortfolioOnboarding");
+const { TickerSearch } =
+  await import("../src/components/onboarding/TickerSearch");
 const { default: WhatIf } = await import("../src/pages/WhatIf");
 const { workspaceAssets, portfolioPercentages } =
   await import("../src/workspace/holdings");
@@ -251,6 +253,62 @@ test("a single-holding SPY scenario can add a second ticker", () => {
   cleanup();
 });
 
+test("What-if editor groups holdings, allocations, and add controls", () => {
+  const saved = {
+    portfolio_id: "layout",
+    name: "Layout",
+    created_at: "2026-09-26T00:00:00Z",
+    holdings: [
+      { symbol: "SPY", weight: 0.255 },
+      { symbol: "TLT", weight: 0.745 },
+    ],
+  };
+  const { container } = render(
+    createElement(WhatIf, {
+      holdings: workspaceAssets(saved),
+      weights: portfolioPercentages(saved),
+      analysis: {
+        portfolio_id: saved.portfolio_id,
+        risk_contribution: { SPY: 0.5, TLT: 0.5 },
+        portfolio_volatility: 0.1,
+        lookback_days: 6,
+      } as never,
+      onApply: async () => true,
+      onExplainScenario: () => {},
+      query: new URLSearchParams(),
+    }),
+  );
+  assert.deepEqual(
+    [...container.querySelectorAll(".editor-table-head span")].map((node) =>
+      node.textContent?.trim(),
+    ),
+    ["Holding", "Current", "Proposed"],
+  );
+  const rows = [
+    ...container.querySelectorAll(".allocation-editor .editor-row"),
+  ];
+  assert.equal(rows.length, 2);
+  assert.equal(
+    rows[0].querySelector(".editor-asset strong")?.textContent,
+    "SPY",
+  );
+  assert.equal(rows[0].querySelector(".current-weight")?.textContent, "25.5%");
+  assert.equal(
+    (rows[0].querySelector(".weight-input input") as HTMLInputElement).value,
+    "25.5",
+  );
+  assert.equal(
+    container.querySelector(".scenario-add-holding label")?.textContent?.trim(),
+    "Add a ticker to this scenario",
+  );
+  assert.ok(container.querySelector(".scenario-add-holding .button"));
+  assert.equal(
+    container.querySelector(".allocation-total strong")?.textContent,
+    "100%",
+  );
+  cleanup();
+});
+
 test("What-if limits the saved and proposed symbol union to eight", () => {
   const symbols = ["SPY", "TLT", "AAPL", "JPM", "NVDA", "VTI", "GLD", "MSFT"];
   const saved = {
@@ -324,7 +382,7 @@ test("Edit adds unique holdings, keeps intermediate percentage text, validates 1
     target: { value: "AAPL" },
   });
   fireEvent.click(
-    await screen.findByRole("option", { name: /AAPL.*Add ticker directly/ }),
+    await screen.findByRole("option", { name: /AAPL.*Add exact ticker/ }),
   );
   const spy = screen.getByRole("textbox", {
     name: "SPY portfolio allocation",
@@ -382,8 +440,8 @@ test("Edit adds unique holdings, keeps intermediate percentage text, validates 1
   fireEvent.change(screen.getByRole("combobox", { name: "Add a holding" }), {
     target: { value: "AAPL" },
   });
-  const duplicate = await screen.findByRole("option", { name: /AAPL.*Added/ });
-  fireEvent.click(duplicate);
+  await screen.findByText(/No matching stock found/);
+  assert.equal(screen.queryByRole("option", { name: /AAPL/ }), null);
   assert.equal(
     screen.getAllByRole("textbox", { name: "AAPL portfolio allocation" })
       .length,
@@ -431,7 +489,7 @@ test("onboarding percentage input keeps empty, zero, replacement, and fractional
     target: { value: "SPY" },
   });
   fireEvent.click(
-    await screen.findByRole("option", { name: /SPY.*Add ticker directly/ }),
+    await screen.findByRole("option", { name: /SPY.*Add exact ticker/ }),
   );
   const spy = screen.getByRole("textbox", {
     name: "SPY weight (%)",
@@ -447,7 +505,7 @@ test("onboarding percentage input keeps empty, zero, replacement, and fractional
     target: { value: "TLT" },
   });
   fireEvent.click(
-    await screen.findByRole("option", { name: /TLT.*Add ticker directly/ }),
+    await screen.findByRole("option", { name: /TLT.*Add exact ticker/ }),
   );
   fireEvent.change(screen.getByRole("textbox", { name: "TLT weight (%)" }), {
     target: { value: "74.5" },
@@ -460,6 +518,29 @@ test("onboarding percentage input keeps empty, zero, replacement, and fractional
     ).disabled,
     false,
   );
+  cleanup();
+});
+
+test("company search selects the returned symbol without offering the company name as a ticker", async () => {
+  const selected: string[] = [];
+  render(
+    createElement(TickerSearch, {
+      inputId: "company-search",
+      selectedSymbols: [],
+      searchTickers: async () => [{ symbol: "AAPL", name: "Apple Inc." }],
+      onSelect: (ticker) => selected.push(ticker.symbol),
+    }),
+  );
+  fireEvent.change(screen.getByRole("combobox", { name: "Add a holding" }), {
+    target: { value: "APPLE" },
+  });
+  const match = await screen.findByRole("option", { name: /AAPL.*Apple Inc/ });
+  assert.equal(
+    screen.queryByRole("option", { name: /APPLE.*Add exact ticker/ }),
+    null,
+  );
+  fireEvent.click(match);
+  assert.deepEqual(selected, ["AAPL"]);
   cleanup();
 });
 

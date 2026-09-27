@@ -1,3 +1,139 @@
+.scenario-editor .editor-table-head,
+.scenario-editor .editor-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(58px, auto) 112px;
+  align-items: center;
+  column-gap: 14px;
+}
+.scenario-editor .editor-table-head {
+  padding: 0 0 10px;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.scenario-editor .editor-table-head span:nth-child(2),
+.scenario-editor .editor-table-head span:nth-child(3) {
+  text-align: right;
+}
+.scenario-editor .editor-row {
+  min-height: 61px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--border);
+}
+.scenario-editor .editor-asset {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  font-size: 0.8125rem;
+}
+.scenario-editor .editor-asset .asset-mark {
+  flex: none;
+}
+.scenario-editor .current-weight {
+  color: var(--muted);
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+.scenario-editor .weight-input {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  min-height: 40px;
+  padding: 0 10px;
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 0.8125rem;
+}
+.scenario-editor .weight-input:focus-within {
+  outline: 2px solid var(--bamboo);
+  outline-offset: 2px;
+}
+.scenario-editor .weight-input input {
+  width: 100%;
+  min-width: 0;
+  padding: 8px 4px 8px 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.scenario-editor .weight-input input:disabled {
+  opacity: 0.65;
+}
+.scenario-editor .scenario-add-holding {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  margin: 20px 0 18px;
+}
+.scenario-editor .scenario-add-holding label {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+.scenario-editor .scenario-add-holding input {
+  width: 100%;
+  min-width: 0;
+  min-height: 42px;
+  padding: 9px 11px;
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.8125rem;
+}
+.scenario-editor .scenario-add-holding .button {
+  min-height: 42px;
+  white-space: nowrap;
+}
+.scenario-editor .allocation-total {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 0;
+  border-top: 1px solid var(--border);
+  font-size: 0.875rem;
+}
+.scenario-editor .allocation-total strong {
+  color: var(--bamboo);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.scenario-editor .allocation-total.invalid strong {
+  color: var(--negative);
+}
+@media (max-width: 600px) {
+  .scenario-editor .editor-table-head,
+  .scenario-editor .editor-row {
+    grid-template-columns: minmax(0, 1fr) minmax(46px, auto) 96px;
+    column-gap: 8px;
+  }
+  .scenario-editor .editor-asset {
+    gap: 6px;
+  }
+  .scenario-editor .scenario-add-holding {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .scenario-editor .scenario-add-holding .button {
+    justify-content: center;
+  }
+}
+
 .workspace-portfolio-controls {
   display: flex;
   align-items: center;

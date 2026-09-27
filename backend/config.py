@@ -38,6 +38,9 @@ class Settings(BaseSettings):
     alpaca_api_key: SecretStr | None = None
     alpaca_api_secret: SecretStr | None = None
     alpaca_history_feed: Literal["iex", "sip"] | None = None
+    alpaca_assets_base_url: Literal[
+        "https://paper-api.alpaca.markets", "https://api.alpaca.markets"
+    ] = "https://paper-api.alpaca.markets"
     market_data_timeout_seconds: float = Field(default=15, gt=0, le=60)
     mongo_uri: SecretStr | None = None
     mongo_database: str = "portfoliolens"

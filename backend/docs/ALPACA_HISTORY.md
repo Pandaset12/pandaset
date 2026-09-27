@@ -38,6 +38,33 @@ identifies `alpaca_adjusted_daily`, the selected feed, adjustment, latest sessio
 and retrieval time. Missing entitlement, rate limits, invalid responses, and
 incomplete symbol coverage produce errors instead of silently changing sources.
 
+Portfolio entry searches Alpaca's read-only active US equity directory by symbol
+or company name. Its metadata is kept in memory for 15 minutes to avoid a vendor
+request on every keystroke; no prices are stored. The directory uses the paper
+account host by default. Set `ALPACA_ASSETS_BASE_URL=https://api.alpaca.markets`
+when using live account credentials. A listed symbol is still checked for
+historical coverage before the portfolio is saved.
+
+## Overview rollout
+
+Overview calculates modeled returns, its normalized chart, risk, and holding
+contributions from the user's saved symbols and allocation weights. With
+`MARKET_DATA_PROVIDER=alpaca`, those calculations use adjusted daily history
+through the shown as-of session. They are not brokerage positions, realized P&L,
+or intraday valuations. The header and analysis details identify the historical
+source; the separate IEX strip identifies its own latest-trade timestamps.
+Alpaca keys and feed selection belong only in the backend environment. A key
+configured for optional quotes alone does not switch historical analysis from
+the default fictional sample provider.
+
+Each visible Overview tab polls one multi-symbol quote request about every 15
+seconds, or roughly four requests per minute. For example, 50 simultaneously
+visible tabs would make roughly 200 snapshot requests per minute before history
+requests, retries, or other clients. There is no shared quote cache. Check the
+account's current request limit and expected concurrency, then restrict access
+or add an approved server-side quota strategy before a broad rollout. Do not
+retain or publicly display vendor data without confirming applicable rights.
+
 Before enabling vendor-backed release, run
 `PYTHONPATH=quant_engine/src backend/.venv/bin/python -m backend.check_alpaca_history`
 with an opted-in account. It checks AAPL, MSFT, SPY, TLT, and GLD for 252
@@ -46,6 +73,17 @@ Inspect quota behavior and record display/cache rights. Mocked tests do not
 establish account entitlement. To roll back, set `MARKET_DATA_PROVIDER=sample` and disable
 the event lab; saved analyses remain readable. Remove old Twelve Data secrets
 and caches only after verifying saved records can still be read.
+
+### Opt-in account check (2026-09-26)
+
+The user-authorized account passed the read-only check with the `iex` feed and
+`adjustment=all`. AAPL, MSFT, SPY, TLT, and GLD had 252 aligned daily return
+observations through the 2026-09-25 session. This confirms IEX historical
+access and coverage for those symbols and that window. The check encountered no
+rate-limit response; it did not measure the account's request ceiling or test
+SIP access. Applicable public display and retention rights remain unconfirmed,
+so this check alone does not authorize a vendor-backed public release. No keys
+or prices were retained in this record.
 
 See Alpaca's [historical bars reference](https://docs.alpaca.markets/us/reference/stockbars)
 for parameters and pagination, its [market-data FAQ](https://docs.alpaca.markets/us/docs/market-data-faq)

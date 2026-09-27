@@ -70,10 +70,11 @@ test("thirds reconcile to editable six-decimal percentages totaling exactly 100"
 
 test("unsupported saved tickers remain visible and can be replaced without local allowlisting", () => {
   const saved = portfolio([{ symbol: "TSLA", weight: 1 }]);
-  assert.deepEqual(
-    workspaceAssets(saved).map(({ symbol }) => symbol),
-    ["TSLA"],
-  );
+  const [holding] = workspaceAssets(saved);
+  assert.equal(holding.symbol, "TSLA");
+  assert.equal(holding.name, "TSLA");
+  assert.equal(holding.sector, "Unclassified");
+  assert.doesNotMatch(holding.description, /sample|live|Alpaca/i);
   assert.deepEqual(
     portfolioFromPercentages("replacement", ["SPY"], [100]).holdings,
     [{ symbol: "SPY", weight: 1 }],
