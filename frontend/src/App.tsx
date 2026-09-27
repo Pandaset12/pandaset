@@ -586,11 +586,12 @@ function AuthenticatedApplication({
         } catch (cause) {
           if (
             cause instanceof EventLabError &&
-            [
+            ([
               "EVENT_LAB_NOT_INVITED",
               "EVENT_LAB_UNAVAILABLE",
               "AUTH_UNAVAILABLE",
-            ].includes(cause.code)
+            ].includes(cause.code) ||
+              cause.status >= 500)
           ) {
             if (active) setMode("standard");
           } else {
