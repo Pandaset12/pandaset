@@ -18,11 +18,12 @@ def event_settings(tmp_path, **overrides):
         "supabase_url": "https://example.supabase.co", "supabase_anon_key": "",
         "supabase_publishable_key": "test-publishable",
         "mongo_uri": "mongodb://unused", "mongo_database": "event_readiness",
-        "twelve_data_api_key": "test-prices", "gemini_api_key": "test-gemini",
+        "alpaca_api_key": "test-key", "alpaca_api_secret": "test-secret",
+        "alpaca_history_feed": "iex", "gemini_api_key": "test-gemini",
         "tavily_api_key": "test-tavily", "deepseek_api_key": "test-deepseek",
         "fred_api_key": "", "approved_news_domains": "",
-        "twelve_data_display_rights_confirmed": False,
-        "twelve_data_cache_rights_confirmed": False,
+        "alpaca_display_rights_confirmed": False,
+        "alpaca_cache_rights_confirmed": True,
         "event_lab_enabled": True, "event_lab_allowed_user_ids": "owner-a",
         "event_lab_public_enabled": False, "event_lab_probability_enabled": False,
         **overrides,
@@ -31,7 +32,8 @@ def event_settings(tmp_path, **overrides):
 
 
 @pytest.mark.parametrize("field", [
-    "supabase_url", "supabase_publishable_key", "mongo_uri", "twelve_data_api_key",
+    "supabase_url", "supabase_publishable_key", "mongo_uri",
+    "alpaca_api_key", "alpaca_api_secret",
     "gemini_api_key", "tavily_api_key", "deepseek_api_key",
 ])
 def test_whitespace_event_credentials_do_not_enable_startup(tmp_path, field):
@@ -39,17 +41,22 @@ def test_whitespace_event_credentials_do_not_enable_startup(tmp_path, field):
     assert event_settings(tmp_path, **{field: " \t "}).event_lab_ready is False
 
 
+def test_event_startup_requires_history_feed_and_cache_rights(tmp_path):
+    assert event_settings(tmp_path, alpaca_history_feed=None).event_lab_ready is False
+    assert event_settings(tmp_path, alpaca_cache_rights_confirmed=False).event_lab_ready is False
+
+
 def test_event_public_readiness_preserves_release_gates(tmp_path):
     values = {
         "event_lab_public_enabled": True,
-        "twelve_data_display_rights_confirmed": True,
-        "twelve_data_cache_rights_confirmed": True,
+        "alpaca_display_rights_confirmed": True,
+        "alpaca_cache_rights_confirmed": True,
         "approved_news_domains": "example.com", "fred_api_key": "test-fred",
     }
     assert event_settings(tmp_path).event_lab_public_ready is False
     assert event_settings(tmp_path, **values).event_lab_public_ready is True
-    for field in ("event_lab_public_enabled", "twelve_data_display_rights_confirmed",
-                  "twelve_data_cache_rights_confirmed"):
+    for field in ("event_lab_public_enabled", "alpaca_display_rights_confirmed",
+                  "alpaca_cache_rights_confirmed"):
         assert event_settings(tmp_path, **{**values, field: False}).event_lab_public_ready is False
     for field in ("fred_api_key", "approved_news_domains"):
         assert event_settings(tmp_path, **{**values, field: " \t "}).event_lab_public_ready is False
@@ -96,7 +103,7 @@ def stub_event_services(monkeypatch, *, failure=None):
     def unexpected_vendor_call(*args, **kwargs):
         pytest.fail("Startup/readiness checks must not query AI or market-data vendors")
 
-    monkeypatch.setattr("backend.twelve_data.TwelveDataPriceProvider._fetch", unexpected_vendor_call)
+    monkeypatch.setattr("backend.alpaca_history.AlpacaHistoryProvider._fetch", unexpected_vendor_call)
     monkeypatch.setattr("backend.gemini_service.genai.Client", unexpected_vendor_call)
     return SimpleNamespace(close_mongo=close_mongo, worker=worker,
                            verifier=verifier, verifier_factory=verifier_factory)

@@ -148,27 +148,30 @@ def test_preflight_history_is_reused_by_following_analysis(client, monkeypatch):
     assert calls == [(("SPY",), 252), (("TLT",), 252)]
 
 
-def test_twelve_data_preflight_is_reused_by_analysis(client, monkeypatch):
+def test_alpaca_preflight_is_reused_by_analysis_when_cache_rights_confirmed(client, monkeypatch):
     import pandas as pd
-    from backend.twelve_data import TwelveDataPriceProvider
+    from backend.alpaca_history import AlpacaHistoryProvider
 
     api, _ = client
     sample_settings = api.app.dependency_overrides[get_settings]()
     live_settings = sample_settings.model_copy(update={
-        "market_data_provider": "twelvedata",
-        "twelve_data_api_key": SecretStr("test-key"),
+        "market_data_provider": "alpaca",
+        "alpaca_api_key": SecretStr("test-key"),
+        "alpaca_api_secret": SecretStr("test-secret"),
+        "alpaca_history_feed": "iex",
+        "alpaca_cache_rights_confirmed": True,
     })
     monkeypatch.setitem(api.app.dependency_overrides, get_settings, lambda: live_settings)
     calls = []
 
-    def fetch(self, symbols, outputsize):
-        calls.append((tuple(symbols), outputsize))
-        return {"meta": {"symbol": symbols[0]}, "values": [
-            {"datetime": day.strftime("%Y-%m-%d"), "close": str(100 + index)}
-            for index, day in enumerate(pd.bdate_range(end="2026-09-25", periods=outputsize))
-        ]}
+    def fetch(self, symbols, start, end, page_token):
+        calls.append(tuple(symbols))
+        return {"bars": {symbol: [
+            {"t": day.strftime("%Y-%m-%dT12:00:00Z"), "c": 100 + index}
+            for index, day in enumerate(pd.bdate_range(end="2026-09-25", periods=253))
+        ] for symbol in symbols}, "next_page_token": None}
 
-    monkeypatch.setattr(TwelveDataPriceProvider, "_fetch", fetch)
+    monkeypatch.setattr(AlpacaHistoryProvider, "_fetch", fetch)
     preflight = api.get("/api/v1/market-history", params={"symbols": ["SPY"], "lookback_days": 2})
     assert preflight.status_code == 200, preflight.text
     assert preflight.json()["data_mode"] == "live"
@@ -182,7 +185,46 @@ def test_twelve_data_preflight_is_reused_by_analysis(client, monkeypatch):
     assert analysis.status_code == 200, analysis.text
     assert analysis.json()["data_mode"] == "live"
     assert analysis.json()["observation_count"] == 252
-    assert calls == [(("SPY",), 253)]
+    assert calls == [("SPY",)]
+
+
+def test_what_if_uses_aligned_alpaca_history_for_added_holding(client, monkeypatch):
+    import pandas as pd
+    from backend.alpaca_history import AlpacaHistoryProvider
+
+    api, _ = client
+    settings = api.app.dependency_overrides[get_settings]().model_copy(update={
+        "market_data_provider": "alpaca",
+        "alpaca_api_key": SecretStr("test-key"),
+        "alpaca_api_secret": SecretStr("test-secret"),
+        "alpaca_history_feed": "iex",
+    })
+    monkeypatch.setitem(api.app.dependency_overrides, get_settings, lambda: settings)
+    calls = []
+
+    def fetch(self, symbols, start, end, page_token):
+        calls.append(tuple(symbols))
+        dates = pd.bdate_range(end="2026-09-25", periods=253)
+        return {"bars": {symbol: [
+            {"t": day.strftime("%Y-%m-%dT12:00:00Z"), "c": 100 + index * (1 if symbol == "SPY" else 2)}
+            for index, day in enumerate(dates)
+        ] for symbol in symbols}, "next_page_token": None}
+
+    monkeypatch.setattr(AlpacaHistoryProvider, "_fetch", fetch)
+    headers = {"Authorization": "Bearer owner"}
+    created = api.post("/api/v1/portfolios", json={"name": "What-if", "holdings": [
+        {"symbol": "SPY", "weight": 1.0},
+    ]}, headers=headers)
+    assert created.status_code == 201, created.text
+    result = api.post(f"/api/v1/portfolios/{created.json()['portfolio_id']}/what-if", json={
+        "holdings": [{"symbol": "SPY", "weight": 0.5}, {"symbol": "TLT", "weight": 0.5}],
+    }, headers=headers)
+    assert result.status_code == 200, result.text
+    payload = result.json()
+    assert calls == [("SPY", "TLT")]
+    assert payload["current_analysis"]["data_source"] == "alpaca_adjusted_daily"
+    assert payload["proposed_analysis"]["data_source"] == "alpaca_adjusted_daily"
+    assert any("IEX" in note for note in payload["proposed_analysis"]["notes"])
 
 
 def test_concurrent_update_cannot_leave_an_old_analysis_after_commit(client, monkeypatch):
