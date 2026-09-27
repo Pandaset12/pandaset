@@ -28,6 +28,11 @@ import { Analyst } from "./components/Analyst";
 import { AuthScreen } from "./components/AuthScreen";
 import { AuthBoundary } from "./components/AuthBoundary";
 import { PortfolioOnboarding } from "./components/onboarding/PortfolioOnboarding";
+import { EventApplication } from "./EventApplication";
+import {
+  EventLabError,
+  listPortfolios as listEventPortfolios,
+} from "./api/eventLab";
 import {
   AIWorkflowModal,
   type AIWorkflowAction,
@@ -555,5 +560,72 @@ function AuthenticatedApplication({
   onSignOut: () => Promise<void>;
 }) {
   setApiAccessToken(session.access_token);
-  return <Application key={session.user.id} onSignOut={onSignOut} />;
+  const [mode, setMode] = useState<"loading" | "standard" | "event" | "error">(
+    "loading",
+  );
+  const [modeError, setModeError] = useState("");
+  const [retry, setRetry] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+    setMode("loading");
+    setModeError("");
+    const selectMode = async () => {
+      try {
+        try {
+          await listEventPortfolios();
+          if (active) setMode("event");
+        } catch (cause) {
+          if (
+            cause instanceof EventLabError &&
+            [
+              "EVENT_LAB_NOT_INVITED",
+              "EVENT_LAB_UNAVAILABLE",
+              "AUTH_UNAVAILABLE",
+            ].includes(cause.code)
+          ) {
+            if (active) setMode("standard");
+          } else {
+            throw cause;
+          }
+        }
+      } catch (cause) {
+        if (!active) return;
+        setModeError(
+          cause instanceof Error
+            ? cause.message
+            : "The portfolio service is unavailable.",
+        );
+        setMode("error");
+      }
+    };
+    void selectMode();
+    return () => {
+      active = false;
+    };
+  }, [session.user.id, retry]);
+
+  if (mode === "loading")
+    return (
+      <main className="auth-loading" role="status">
+        Opening your workspace…
+      </main>
+    );
+  if (mode === "error")
+    return (
+      <main className="auth-loading" role="alert">
+        <p>{modeError}</p>
+        <button
+          className="button dark"
+          onClick={() => setRetry((value) => value + 1)}
+        >
+          Retry
+        </button>
+      </main>
+    );
+  return mode === "event" ? (
+    <EventApplication key={session.user.id} onSignOut={onSignOut} />
+  ) : (
+    <Application key={session.user.id} onSignOut={onSignOut} />
+  );
 }

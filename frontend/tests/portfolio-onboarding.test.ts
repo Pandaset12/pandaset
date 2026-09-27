@@ -131,7 +131,10 @@ test("names, ticker syntax, empty holdings and the eight-holding API limit are e
   );
   assert.ok(validatePortfolioDraft("Full", rows).payload);
   rows.push({ symbol: "EXTRA", percentage: "0.1" });
-  assert.match(validatePortfolioDraft("Too many", rows).errors.holdings ?? "", /up to 8 holdings/);
+  assert.match(
+    validatePortfolioDraft("Too many", rows).errors.holdings ?? "",
+    /up to 8 holdings/,
+  );
   assert.equal(validatePortfolioDraft("Too many", rows).payload, null);
 });
 

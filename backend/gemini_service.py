@@ -1,10 +1,14 @@
 import asyncio
 import json
 import logging
+import math
 import re
 from collections.abc import Callable
+from datetime import datetime, timedelta, timezone
+from email.utils import parsedate_to_datetime
 from functools import lru_cache
 from pathlib import Path
+from threading import Lock
 from typing import Any, Literal, Type
 
 from google import genai
@@ -50,6 +54,64 @@ class GeminiUnavailable(Exception):
     def __init__(self, message: str, *, evidence: dict[str, Any] | None = None):
         super().__init__(message)
         self.evidence = evidence or {}
+
+
+class GeminiRateLimited(GeminiUnavailable):
+    def __init__(self, retry_at: datetime):
+        self.retry_at = retry_at
+        super().__init__(
+            "Gemini rate limit reached. Try again after "
+            f"{retry_at.strftime('%Y-%m-%d %H:%M:%S UTC')}."
+        )
+
+    @property
+    def retry_after_seconds(self) -> int:
+        return max(1, math.ceil((self.retry_at - datetime.now(timezone.utc)).total_seconds()))
+
+
+_gemini_cooldown_lock = Lock()
+_gemini_cooldown_until = datetime.min.replace(tzinfo=timezone.utc)
+
+
+def gemini_cooldown_remaining() -> int:
+    with _gemini_cooldown_lock:
+        return max(0, math.ceil((_gemini_cooldown_until - datetime.now(timezone.utc)).total_seconds()))
+
+
+def _retry_after_seconds(exc: errors.APIError) -> int:
+    """Use the provider's delay when supplied; otherwise avoid a hot retry loop."""
+    response = getattr(exc, "response", None)
+    headers = getattr(response, "headers", None)
+    value = headers.get("Retry-After") if headers is not None else None
+    if value:
+        try:
+            seconds = float(value)
+        except (TypeError, ValueError):
+            try:
+                seconds = (parsedate_to_datetime(value) - datetime.now(timezone.utc)).total_seconds()
+            except (TypeError, ValueError, OverflowError):
+                seconds = 0
+        if math.isfinite(seconds) and seconds > 0:
+            return max(1, min(86400, math.ceil(seconds)))
+    details = getattr(exc, "details", None)
+    if isinstance(details, dict):
+        error = details.get("error", details)
+        if isinstance(error, dict):
+            for item in error.get("details") or []:
+                if isinstance(item, dict):
+                    match = re.fullmatch(r"(\d+(?:\.\d+)?)s", str(item.get("retryDelay", "")))
+                    if match:
+                        return max(1, min(86400, math.ceil(float(match.group(1)))))
+    return 60
+
+
+def _pause_for_rate_limit(exc: errors.APIError) -> GeminiRateLimited:
+    global _gemini_cooldown_until
+    retry_at = datetime.now(timezone.utc) + timedelta(seconds=_retry_after_seconds(exc))
+    with _gemini_cooldown_lock:
+        _gemini_cooldown_until = max(_gemini_cooldown_until, retry_at)
+        retry_at = _gemini_cooldown_until
+    return GeminiRateLimited(retry_at)
 
 
 def metric_catalog(metrics: AnalyticsSnapshot) -> dict[str, float]:
@@ -336,6 +398,9 @@ async def _generate_structured_once(
     tools: list[types.Tool] | None = None,
     client_factory=None,
 ) -> tuple[BaseModel, str, dict[str, Any]]:
+    with _gemini_cooldown_lock:
+        if _gemini_cooldown_until > datetime.now(timezone.utc):
+            raise GeminiRateLimited(_gemini_cooldown_until)
     config = types.GenerateContentConfig(
         system_instruction=prompt,
         tools=tools or None,
@@ -354,7 +419,7 @@ async def _generate_structured_once(
                         attempts=2,
                         initial_delay=0.5,
                         max_delay=1,
-                        http_status_codes=[408, 429, 500, 502, 503, 504],
+                        http_status_codes=[408, 500, 502, 503, 504],
                     ),
                 ),
             ).aio as client:
@@ -368,6 +433,12 @@ async def _generate_structured_once(
         return draft, raw_text, extract_evidence(response)
     except TimeoutError as exc:
         raise GeminiUnavailable("Gemini exceeded the request time limit.") from exc
+    except errors.ClientError as exc:
+        if getattr(exc, "code", None) == 429:
+            raise _pause_for_rate_limit(exc) from exc
+        raise GeminiUnavailable(
+            "Gemini request failed. Check the model, API key, quota, and connectivity."
+        ) from exc
     except errors.ServerError as exc:
         if getattr(exc, "code", None) == 503:
             raise GeminiUnavailable("Gemini is busy right now. Retry this request in a moment.") from exc
@@ -410,6 +481,9 @@ async def _generate_structured(
             if validate_result is not None:
                 validate_result(draft, evidence)
             return draft, raw_text, evidence
+        except GeminiRateLimited:
+            # Switching models cannot be relied on to bypass a project quota.
+            raise
         except GeminiUnavailable as exc:
             if index == len(models) - 1:
                 raise

@@ -5,8 +5,49 @@ saved snapshots, Gemini prompts, and error handling. Market ingestion, Tiger Dat
 MongoDB infrastructure and financial formulas belong to the data/quant teammates.
 See [the shared HLD](../PortfolioLens-HLD.md) and [integration design](INTEGRATION.md).
 
-The default provider connects the quant engine to fictional sample prices for an
-offline demo. Real market data is optional and uses adjusted daily end-of-day prices from Twelve Data, not intraday quotes; see [setup guide](docs/TWELVE_DATA.md). Gemini is optional and needs a team API key.
+The default v1 provider connects the quant engine to fictional sample prices for
+an offline demo. V1 can use adjusted daily end-of-day prices from Twelve Data
+when `MARKET_DATA_PROVIDER=twelvedata`; see [setup guide](docs/TWELVE_DATA.md).
+The gated v2 event lab requires adjusted Twelve Data history.
+Gemini is optional for v1 and designs v2 scenario assumptions. V2 event research
+uses Tavily retrieval and DeepSeek fact extraction.
+
+## Authenticated event lab (`/api/v2`)
+
+The event lab is disabled by default. Copy `backend/.env.example` to the ignored
+`backend/.env`, then set `EVENT_LAB_ENABLED=true`, the Supabase project origin and
+publishable key, `SUPABASE_SIGNING_MODE`, Mongo URI, Twelve Data key, Gemini key,
+`TAVILY_API_KEY`, and `DEEPSEEK_API_KEY`. All v2 routes verify a bearer access
+token and derive the Mongo owner from its verified subject. V1 uses Supabase Auth
+to resolve portfolio ownership and remains separate. V2 analyses request
+adjusted daily history from Twelve Data and never substitute demo prices.
+
+For an internal release, keep `EVENT_LAB_PUBLIC_ENABLED=false` and populate
+`EVENT_LAB_ALLOWED_USER_IDS` with a comma-separated list of invited Supabase
+user UUIDs. An empty list denies every account. Public enablement additionally
+requires the explicit rights and source flags in `backend/.env.example` and the
+recorded checks in `docs/event-lab-release-gates.md`. `EVENT_LAB_PROBABILITY_ENABLED`
+does not by itself release probabilities; the quant engine also needs accepted
+held-out calibration evidence. Current v2 runs omit conditional ranges and show
+the reason while returning deterministic cases.
+
+The scenario workflow is: save a portfolio, create an immutable analysis, choose
+an event area and suggested situation or describe a custom one, create a draft,
+review cited facts and proposed shocks, confirm the
+shocks, then poll the run. Mongo stores queued jobs, leases, attempts, pinned
+snapshots, and run chat so work can resume after a process restart. The `rates`
+factor means **TLT adjusted return**, not a yield change. FRED yield observations
+are contextual evidence. Tavily searches only curated official hosts and news
+hosts listed in `APPROVED_NEWS_DOMAINS`; search snippets are not evidence. A
+page is cited only after Tavily Extract returns its content. DeepSeek converts
+that content into bounded facts with checked evidence IDs. Failed extraction
+stops draft preparation. Current-event searches filter out pages without a
+recent detected date; an explicitly historical question can retrieve older pages.
+Search and extraction use basic depth, at most five search results and three
+extracted pages per draft. Gemini proposes shocks for user review, with DeepSeek
+as a bounded fallback when Gemini fails or is rate limited. The quant engine
+calculates the final numbers. V2 error responses use
+`{"error":{"code":"...","message":"...","request_id":"..."}}`.
 
 ## Run locally
 
@@ -33,10 +74,11 @@ Open [interactive API docs](http://127.0.0.1:8000/docs) or
 [health](http://127.0.0.1:8000/health). Health confirms the API process/configuration,
 not connectivity to Gemini, databases, or real quant services.
 
-No environment file or API key is needed in default demo mode. Portfolios and
-immutable analysis snapshots are stored in ignored `backend/data/portfoliolens.sqlite3`.
-This local store is permitted by the HLD for the first demo; MongoDB integration
-is still pending. There is no login or multi-user authorization in this starter.
+The v1 market-data provider defaults to fictional sample prices. V1 portfolio
+routes require `SUPABASE_URL` and either `SUPABASE_PUBLISHABLE_KEY` or the legacy
+`SUPABASE_ANON_KEY` to verify the bearer session and scope SQLite portfolios and
+analysis snapshots to the user. The gated v2
+routes use verified Supabase identity and owner-scoped MongoDB records.
 
 ## First frontend flow
 
@@ -119,7 +161,7 @@ is not used by this service. Never commit actual keys.
 | ANALYST_MODE | `demo` or `gemini` |
 | GEMINI_API_KEY | Server-side key; required in Gemini mode |
 | GEMINI_MODEL | `gemini-3.8-flash`; confirm team account access |
-| GEMINI_FALLBACK_MODEL | `gemini-3.5-flash-lite`; tried after a failed Gemini response. Set empty to disable. |
+| GEMINI_FALLBACK_MODEL | `gemini-3.5-flash-lite`; tried after non-quota Gemini failures. Set empty to disable. |
 | GEMINI_TIMEOUT_SECONDS | 45 per model; maximum 120 |
 | CORS_ORIGINS | Comma-separated frontend origins; localhost ports 3000 and 5173 |
 | STORAGE_PATH | Optional override for the SQLite file |
@@ -138,9 +180,15 @@ workflow-specific prompt and JSON response schema. The primary model has a
 bounded timeout and at most two HTTP attempts. If it fails or returns an invalid
 response, the adapter tries the configured fallback model with the same prompt,
 context, validation, and timeout. The fallback is skipped in demo mode, without
-an API key, or when its model name matches the primary. An exhausted fallback
-returns the existing safe partial response; sequential attempts can take up to
-twice `GEMINI_TIMEOUT_SECONDS`. Each action receives only its scoped context:
+an API key, when its model name matches the primary, or after a 429 rate-limit
+response. On 429, the adapter honors the provider's `Retry-After` or retry delay
+when present (otherwise 60 seconds), pauses new Gemini requests locally, and
+returns a specific rate-limit message. The event worker leaves queued drafts
+untouched during that pause and does not immediately rerun a draft that hit 429;
+deterministic calculation runs continue. An exhausted fallback
+returns the existing safe partial response for v1 or fails the v2 draft;
+sequential attempts can take up to twice `GEMINI_TIMEOUT_SECONDS`. Each action
+receives only its scoped context:
 Ask Panda gets its selected snapshot and explicitly requested web inputs;
 Overview and Risk get one validated snapshot; What-if gets the server-calculated
 baseline, proposal, differences, and assumptions; Research gets one curated
@@ -241,7 +289,7 @@ claiming durable shared persistence. See the rollout gates in
 [INTEGRATION.md](INTEGRATION.md).
 # Investor ownership
 
-Set `SUPABASE_URL` and `SUPABASE_ANON_KEY` in `backend/.env` to the same project used by frontend authentication. The backend validates Bearer tokens through Supabase Auth. New portfolios are owned by the authenticated user; legacy SQLite rows are retained with no owner and are not returned to investors. `/api/v1/portfolios` lists only the caller's portfolios. No Supabase service role secret is needed.
+Set `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` in `backend/.env` to the same project used by frontend authentication. V1 also accepts a legacy `SUPABASE_ANON_KEY`; when it is set, that key takes precedence for v1 Supabase Auth requests. The backend validates Bearer tokens through Supabase Auth. New portfolios are owned by the authenticated user; legacy SQLite rows are retained with no owner and are not returned to investors. `/api/v1/portfolios` lists only the caller's portfolios. No Supabase service role secret is needed.
 
 Updating a portfolio preserves its `portfolio_id`, `owner_id`, and original `created_at`. When its allocation changes, saved analyses for that portfolio are deleted in the same SQLite transaction. Old analysis IDs then return 404; the client creates a fresh analysis for the new allocation. An analysis computed before an update cannot be saved afterward.
 

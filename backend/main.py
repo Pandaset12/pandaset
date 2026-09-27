@@ -1,8 +1,10 @@
 from contextlib import asynccontextmanager
+from pathlib import Path
 import sqlite3
 from uuid import uuid4
 
 from fastapi import Depends, FastAPI, HTTPException, Request
+from pymongo import MongoClient
 from fastapi.exception_handlers import http_exception_handler
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -11,6 +13,12 @@ from starlette.concurrency import run_in_threadpool
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from .config import Settings, get_settings
+from .auth import SupabaseTokenVerifier
+from .event_api import router as v2_router
+from .event_jobs import EventWorker
+from .instruments import SUPPORTED_INSTRUMENTS
+from .mongo_store import MongoPortfolioStore
+from .twelve_data import TwelveDataPriceProvider
 from .gemini_service import GeminiNotConfigured, GeminiUnavailable, generate_answer, metric_summary
 from .api_v1 import get_store, require_portfolio, router as v1_router
 from .auth import current_user_id
@@ -42,7 +50,76 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         await run_in_threadpool(store.seed_demo, demo_metrics())
         app.state.store = store
         app.state.price_cache = RecentPriceCache()
-        yield
+        worker = None
+        verifier = None
+        mongo_client = None
+        app.state.auth_verifier = None
+        app.state.event_store = None
+        app.state.event_price_provider = None
+        app.state.event_worker = None
+        try:
+            if settings.event_lab_ready:
+                try:
+                    verifier = SupabaseTokenVerifier(
+                        settings.supabase_url, settings.supabase_publishable_key,
+                        signing_mode=settings.supabase_signing_mode,
+                    )
+                    mongo_client = await run_in_threadpool(
+                        MongoClient, settings.mongo_uri.get_secret_value(),
+                        serverSelectionTimeoutMS=5000, connectTimeoutMS=5000,
+                    )
+                    event_store = await run_in_threadpool(
+                        MongoPortfolioStore, "", settings.mongo_database,
+                        database=mongo_client[settings.mongo_database],
+                        supported_symbol=lambda symbol: symbol in SUPPORTED_INSTRUMENTS,
+                        max_active_jobs_per_owner=settings.event_max_active_jobs_per_user,
+                        max_messages_per_run=settings.event_max_messages_per_run,
+                    )
+                    event_price_provider = TwelveDataPriceProvider(
+                        settings.twelve_data_api_key.get_secret_value(),
+                        cache_allowed=settings.twelve_data_cache_rights_confirmed,
+                        cache_path=(Path(__file__).parent / "data" / "twelve_data_adjusted.sqlite3"
+                                    if settings.twelve_data_cache_rights_confirmed else None),
+                    )
+                    worker = EventWorker(event_store, settings)
+                    worker.start()
+                except Exception as exc:
+                    log_failure("EVENT_LAB_STARTUP_UNAVAILABLE", exc)
+                    if worker is not None:
+                        try:
+                            await worker.stop()
+                        except Exception as cleanup_exc:
+                            log_failure("EVENT_LAB_WORKER_CLEANUP_FAILED", cleanup_exc)
+                        worker = None
+                    if mongo_client is not None:
+                        try:
+                            mongo_client.close()
+                        except Exception as cleanup_exc:
+                            log_failure("EVENT_LAB_MONGO_CLEANUP_FAILED", cleanup_exc)
+                        mongo_client = None
+                    if verifier is not None:
+                        try:
+                            verifier.http_client.close()
+                        except Exception as cleanup_exc:
+                            log_failure("EVENT_LAB_AUTH_CLEANUP_FAILED", cleanup_exc)
+                        verifier = None
+                else:
+                    app.state.auth_verifier = verifier
+                    app.state.event_store = event_store
+                    app.state.event_price_provider = event_price_provider
+                    app.state.event_worker = worker
+            yield
+        finally:
+            try:
+                if worker is not None:
+                    await worker.stop()
+            finally:
+                try:
+                    if mongo_client is not None:
+                        mongo_client.close()
+                finally:
+                    if verifier is not None:
+                        verifier.http_client.close()
 
     application = FastAPI(
         title="PortfolioLens API",
@@ -52,6 +129,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     application.dependency_overrides[get_settings] = lambda: settings
     application.include_router(v1_router)
+    application.include_router(v2_router)
 
     @application.middleware("http")
     async def correlate_request(request: Request, call_next):
@@ -66,7 +144,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 error = {"code": "INTERNAL_ERROR", "message": "An internal error occurred.",
                          "request_id": request_id}
                 response = JSONResponse(
-                    {"error" if request.url.path.startswith("/api/v1/") else "detail": error},
+                    {"error" if request.url.path.startswith(("/api/v1/", "/api/v2/")) else "detail": error},
                     status_code=500,
                 )
             response.headers["X-Request-ID"] = request_id
@@ -78,14 +156,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         CORSMiddleware,
         allow_origins=[item.strip() for item in settings.cors_origins.split(",") if item.strip()],
         allow_credentials=False,
-        allow_methods=["GET", "POST", "PUT"],
-        allow_headers=["Content-Type", "Authorization"],
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
+        allow_headers=["Content-Type", "Authorization", "Idempotency-Key"],
         expose_headers=["X-Request-ID"],
     )
 
     @application.exception_handler(StarletteHTTPException)
     async def http_error(request: Request, exc: StarletteHTTPException):
-        if request.url.path.startswith("/api/v1/"):
+        if request.url.path.startswith(("/api/v1/", "/api/v2/")):
             error = exc.detail if isinstance(exc.detail, dict) else {
                 "code": f"HTTP_{exc.status_code}", "message": str(exc.detail)
             }
@@ -98,7 +176,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         # Never echo raw input: it may contain secrets or non-JSON values such as NaN.
         details = [{"field": ".".join(map(str, error["loc"])), "message": error["msg"]}
                    for error in exc.errors()]
-        if request.url.path.startswith("/api/v1/"):
+        if request.url.path.startswith(("/api/v1/", "/api/v2/")):
             return JSONResponse(
                 {"error": {"code": "INVALID_INPUT", "message": "Request validation failed.",
                            "details": details, "request_id": request.state.request_id}},
@@ -112,27 +190,34 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         error = {"code": "STORAGE_UNAVAILABLE", "message": "Local portfolio storage is unavailable.",
                  "request_id": request.state.request_id}
         return JSONResponse(
-            {"error" if request.url.path.startswith("/api/v1/") else "detail": error}, status_code=503
+            {"error" if request.url.path.startswith(("/api/v1/", "/api/v2/")) else "detail": error}, status_code=503
         )
 
     @application.get("/health")
-    def health(settings: Settings = Depends(get_settings)):
+    def health(request: Request, settings: Settings = Depends(get_settings)):
         live_data = settings.market_data_provider == "twelvedata"
         market_data_ready = not live_data or settings.has_twelve_data_key
+        event_store_ready = getattr(request.app.state, "event_store", None) is not None
         return {
-            "status": "ok" if market_data_ready else "degraded",
+            "status": "ok" if market_data_ready and (not settings.event_lab_enabled or event_store_ready) else "degraded",
             "analyst_mode": settings.analyst_mode,
             "gemini_configured": settings.has_gemini_key,
-            "quant_integration": (
-                "quant_engine_twelvedata"
-                if settings.market_data_provider == "twelvedata"
-                else "quant_engine_sample_prices"
-            ),
+            "legacy_quant_integration": "quant_engine_twelvedata" if live_data else "quant_engine_sample_prices",
+            "legacy_data_mode": "live" if live_data else "demo",
+            "legacy_storage_backend": "sqlite",
+            "quant_integration": "quant_engine_twelvedata" if live_data else "quant_engine_sample_prices",
             "market_data_provider": settings.market_data_provider,
             "market_data_ready": market_data_ready,
             "data_mode": "live" if live_data else "demo",
             "storage_backend": "sqlite",
+            "event_data_mode": "live" if event_store_ready else "unavailable" if settings.event_lab_enabled else "disabled",
+            "event_storage_backend": "mongo" if event_store_ready else "unavailable" if settings.event_lab_enabled else "disabled",
             "authentication_enabled": settings.authentication_enabled,
+            "event_authentication_enabled": getattr(request.app.state, "auth_verifier", None) is not None,
+            "event_lab_enabled": settings.event_lab_enabled,
+            "event_lab_ready": settings.event_lab_ready and event_store_ready,
+            "event_lab_public_ready": settings.event_lab_public_ready and event_store_ready,
+            "event_lab_probability_enabled": settings.event_lab_probability_enabled,
         }
 
     def read_metrics(portfolio: Portfolio, provider: QuantProvider) -> AnalyticsSnapshot:
