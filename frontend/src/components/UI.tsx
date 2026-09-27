@@ -47,9 +47,15 @@ export function PandaMark({ className }: { className?: string }) {
   );
 }
 
-export function Brand() {
+export function Brand({
+  href = "#/",
+  className = "brand",
+}: {
+  href?: string;
+  className?: string;
+}) {
   return (
-    <a href="#/" className="brand" aria-label="Pandaset home">
+    <a href={href} className={className} aria-label="Pandaset home">
       <PandaMark className="panda-mark" />
       <span>
         Panda<span className="brand-light">set</span>

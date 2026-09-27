@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { PandaMark } from "../components/UI";
+import { Brand, PandaMark } from "../components/UI";
 import { useLandingMotion } from "../hooks/useLandingMotion";
 import { LandingPanda } from "../components/LandingPanda";
 import { analyze, pct } from "../../../quant/analytics";
@@ -58,10 +58,7 @@ export default function Landing() {
         Skip to content
       </a>
       <header className="lp-header">
-        <a className="lp-brand" href="./" aria-label="Pandaset home">
-          <PandaMark />
-          <span>Pandaset</span>
-        </a>
+        <Brand href="./" className="lp-brand" />
         <button
           className="lp-menu-button"
           aria-expanded={menuOpen}
@@ -438,10 +435,7 @@ export default function Landing() {
             <p>Sign in to build and explore your portfolio.</p>
           </div>
           <footer className="lp-footer lp-wrap">
-            <a className="lp-brand" href="./">
-              <PandaMark />
-              <span>Pandaset</span>
-            </a>
+            <Brand href="./" className="lp-brand" />
             <p>
               Built for understanding.
               <br />

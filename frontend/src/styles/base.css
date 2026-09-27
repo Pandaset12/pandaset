@@ -327,6 +327,16 @@ svg {
   display: block;
   flex: none;
 }
+.brand > .panda-mark .panda-dark {
+  fill: #171717;
+}
+.brand > .panda-mark .panda-face,
+.brand > .panda-mark .panda-eye {
+  fill: #fff;
+}
+.brand > .panda-mark .panda-mouth {
+  stroke: #171717;
+}
 .panda-face {
   fill: var(--surface);
 }

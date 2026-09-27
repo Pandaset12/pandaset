@@ -104,22 +104,25 @@ a {
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  font-size: 26px;
+  font-size: 1.3125rem;
   font-weight: 700;
-  letter-spacing: -1.4px;
+  letter-spacing: -0.8px;
   white-space: nowrap;
 }
 .lp-brand svg {
-  width: 38px;
-  height: 38px;
+  width: 29px;
+  height: 32px;
+  display: block;
+  flex: none;
+}
+.lp-brand .brand-light {
+  font-weight: 400;
 }
 .panda-dark {
   fill: #171717;
 }
 .panda-face {
   fill: #fff;
-  stroke: #171717;
-  stroke-width: 1.2;
 }
 .panda-eye {
   fill: #fff;
@@ -127,7 +130,7 @@ a {
 .panda-mouth {
   fill: none;
   stroke: #171717;
-  stroke-width: 1;
+  stroke-width: 1.1;
   stroke-linecap: round;
 }
 .lp-nav {
@@ -762,11 +765,11 @@ a {
     z-index: 10;
   }
   .lp-brand {
-    font-size: 23px;
+    font-size: 1.1875rem;
   }
   .lp-brand svg {
-    width: 32px;
-    height: 32px;
+    width: 27px;
+    height: 29px;
   }
   .lp-menu-button {
     display: block;
