@@ -357,6 +357,7 @@ export function EventApplication({
         ) : onboarding || portfolios.length === 0 ? (
           <PortfolioOnboarding
             maxHoldings={25}
+            allowDirectEntry={false}
             key={onboarding ? "new" : "first"}
             searchTickers={(q, options) => searchInstruments(q, options.signal)}
             createPortfolio={(input, options) =>

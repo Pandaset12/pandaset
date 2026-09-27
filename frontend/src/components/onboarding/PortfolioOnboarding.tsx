@@ -27,6 +27,7 @@ export type PortfolioOnboardingProps = {
   loadState?: "loading" | "empty" | "error";
   hasExistingPortfolios?: boolean;
   maxHoldings?: number;
+  allowDirectEntry?: boolean;
   onRetryLoad?: () => void;
   searchTickers: SearchTickers;
   createPortfolio: (
@@ -47,6 +48,7 @@ export function PortfolioOnboarding({
   loadState = "empty",
   hasExistingPortfolios = false,
   maxHoldings = MAX_HOLDINGS,
+  allowDirectEntry = true,
   onRetryLoad,
   searchTickers,
   createPortfolio,
@@ -428,6 +430,7 @@ export function PortfolioOnboarding({
               inputId={tickerInputId}
               selectedSymbols={holdings.map((row) => row.symbol)}
               searchTickers={searchTickers}
+              allowDirectEntry={allowDirectEntry}
               onSelect={addHolding}
               disabled={holdings.length >= maxHoldings}
             />

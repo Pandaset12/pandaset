@@ -14,7 +14,7 @@ import {
   contributionSymbols,
   draftAllocationFromSnapshot,
   revisionReviewState,
-} from "../src/pages/WhatIf";
+} from "../src/pages/EventWhatIf";
 
 test("v2 analysis keeps the saved allocation and real-data provenance", () => {
   const saved: SavedAnalysis = {

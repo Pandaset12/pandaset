@@ -17,11 +17,11 @@ from backend.config import Settings
 from backend.event_agents import grounded_source_records
 from backend.event_api import _aligned_histories
 from backend.event_jobs import process_draft, process_run
-from backend.event_schemas import validate_shocks
+from backend.event_schemas import EventPortfolioInput, validate_shocks
 from backend.event_sources import record_source_retrieval
 from backend.main import create_app
 from backend.mongo_store import MongoPortfolioStore
-from backend.schemas import AnalyticsSnapshot, PortfolioInput
+from backend.schemas import AnalyticsSnapshot
 
 
 def _settings(**changes):
@@ -147,14 +147,14 @@ def test_v2_confirm_retry_and_owner_isolation():
             return AuthenticatedUser(user_id=token, claims={"sub": token})
 
     app.state.auth_verifier = Verifier()
-    portfolio = store.create_portfolio("owner-a", PortfolioInput(
+    portfolio = store.create_portfolio("owner-a", EventPortfolioInput(
         name="Owned", holdings=[{"symbol": "AAPL", "weight": 1.0}]))
     metrics = AnalyticsSnapshot(portfolio_id=portfolio.portfolio_id, data_mode="live",
-                                data_as_of=datetime.now(timezone.utc), lookback_trading_days=126,
-                                observation_count=126, data_source="twelve_data_adjusted_daily",
+                                data_as_of=datetime.now(timezone.utc), lookback_trading_days=252,
+                                observation_count=252, data_source="twelve_data_adjusted_daily",
                                 portfolio_volatility=0, weights={"AAPL": 1.0}, risk_contribution={})
-    dates = [day.isoformat() for day in pd.date_range("2025-01-01", periods=127, freq="B", tz="UTC")]
-    values = [100.0 + index for index in range(127)]
+    dates = [day.isoformat() for day in pd.date_range("2025-01-01", periods=253, freq="B", tz="UTC")]
+    values = [100.0 + index for index in range(253)]
     analysis_id, _ = store.save_analysis("owner-a", metrics,
         price_snapshot={"dates": dates,
                         "holding_prices": {"AAPL": values},
@@ -338,7 +338,7 @@ def test_concurrent_chat_reservation_blocks_second_gemini_call(monkeypatch):
     store = MongoPortfolioStore(database=mongomock.MongoClient()["chat_slots"],
                                 supported_symbol=lambda symbol: symbol == "AAPL",
                                 max_messages_per_run=1)
-    portfolio = store.create_portfolio("owner-a", PortfolioInput(
+    portfolio = store.create_portfolio("owner-a", EventPortfolioInput(
         name="Owned", holdings=[{"symbol": "AAPL", "weight": 1.0}]))
     metrics = AnalyticsSnapshot(portfolio_id=portfolio.portfolio_id, data_mode="demo",
                                 lookback_trading_days=10, portfolio_volatility=0,

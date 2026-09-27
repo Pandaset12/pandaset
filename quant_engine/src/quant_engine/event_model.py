@@ -14,6 +14,7 @@ from numbers import Integral, Real
 
 import numpy as np
 import pandas as pd
+from pandas.api.types import is_bool_dtype
 
 from .returns import asset_returns
 from .validation import validate_prices, validate_weights
@@ -48,6 +49,8 @@ def _validate_factor_returns(factor_returns: pd.DataFrame) -> pd.DataFrame:
     if (not factor_returns.columns.is_unique or
             any(not isinstance(name, str) or not name for name in factor_returns.columns)):
         raise ValueError("factor labels must be unique nonempty strings")
+    if any(is_bool_dtype(dtype) for dtype in factor_returns.dtypes):
+        raise ValueError("factor changes must be real numbers")
     try:
         values = factor_returns.to_numpy(dtype=float, na_value=np.nan)
     except (TypeError, ValueError) as exc:

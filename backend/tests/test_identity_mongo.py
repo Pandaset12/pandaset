@@ -12,6 +12,7 @@ from cryptography.hazmat.primitives.asymmetric import ed25519
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 
 from backend.auth import AuthUnavailable, InvalidAccessToken, SupabaseTokenVerifier
+from backend.event_schemas import EventPortfolioInput
 from backend.mongo_store import (
     IdempotencyConflict,
     InvalidTransition,
@@ -20,7 +21,7 @@ from backend.mongo_store import (
     RecordNotFound,
     ReservationInProgress,
 )
-from backend.schemas import AnalyticsSnapshot, PortfolioInput
+from backend.schemas import AnalyticsSnapshot
 
 
 ISSUER = "https://example.supabase.co/auth/v1"
@@ -108,7 +109,7 @@ def store():
 
 
 def saved_analysis(store):
-    portfolio = store.create_portfolio(OWNER, PortfolioInput(name="My portfolio", holdings=[{"symbol": "SPY", "weight": 1.0}]))
+    portfolio = store.create_portfolio(OWNER, EventPortfolioInput(name="My portfolio", holdings=[{"symbol": "SPY", "weight": 1.0}]))
     metrics = AnalyticsSnapshot(
         portfolio_id=portfolio.portfolio_id, data_mode="demo", lookback_trading_days=10,
         portfolio_volatility=0, weights={"SPY": 1.0}, risk_contribution={},
@@ -125,7 +126,7 @@ def test_owner_scope_and_immutable_snapshots(store):
     prices["adjusted_close"]["SPY"][0] = 999
     record = store.get_analysis_record(OWNER, portfolio.portfolio_id, analysis_id)
     assert record["price_snapshot"]["adjusted_close"]["SPY"] == [100.0]
-    store.update_portfolio(OWNER, portfolio.portfolio_id, PortfolioInput(name="Renamed", holdings=[{"symbol": "SPY", "weight": 1.0}]))
+    store.update_portfolio(OWNER, portfolio.portfolio_id, EventPortfolioInput(name="Renamed", holdings=[{"symbol": "SPY", "weight": 1.0}]))
     assert record["allocation_snapshot"]["name"] == "My portfolio"
     assert store.get_analysis_record(OWNER, portfolio.portfolio_id, analysis_id)["allocation_snapshot"]["name"] == "My portfolio"
     assert not store.delete_portfolio(OTHER, portfolio.portfolio_id)
@@ -164,9 +165,9 @@ def test_idempotent_draft_run_and_messages_with_leases(store):
 
 def test_portfolio_limit_and_supported_symbols(store):
     with pytest.raises(ValueError, match="Unsupported symbols"):
-        store.create_portfolio(OWNER, PortfolioInput(name="Bad", holdings=[{"symbol": "BAD", "weight": 1.0}]))
+        store.create_portfolio(OWNER, EventPortfolioInput(name="Bad", holdings=[{"symbol": "BAD", "weight": 1.0}]))
     with pytest.raises(ValueError, match="at most 25"):
-        store.create_portfolio(OWNER, PortfolioInput(
+        store.create_portfolio(OWNER, EventPortfolioInput(
             name="Too many", holdings=[{"symbol": f"S{i}", "weight": 1 / 26} for i in range(26)]
         ))
 
@@ -305,7 +306,7 @@ def test_delete_during_admission_releases_only_its_own_slot():
     database = mongomock.MongoClient()["admission_delete_test"]
     store = MongoPortfolioStore(database=database, max_active_jobs_per_owner=2)
     survivor, survivor_analysis, _ = saved_analysis(store)
-    other = store.create_portfolio(OWNER, PortfolioInput(name="Other", holdings=[{"symbol": "SPY", "weight": 1.0}]))
+    other = store.create_portfolio(OWNER, EventPortfolioInput(name="Other", holdings=[{"symbol": "SPY", "weight": 1.0}]))
     other_metrics = AnalyticsSnapshot(
         portfolio_id=other.portfolio_id, data_mode="demo", lookback_trading_days=10,
         portfolio_volatility=0, weights={"SPY": 1.0}, risk_contribution={},

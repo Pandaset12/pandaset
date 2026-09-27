@@ -603,7 +603,7 @@ function AuthenticatedApplication({
     return () => {
       active = false;
     };
-  }, [session.user.id, session.access_token, retry]);
+  }, [session.user.id, retry]);
 
   if (mode === "loading")
     return (
