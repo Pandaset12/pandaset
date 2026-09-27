@@ -79,10 +79,6 @@ export function AuthScreen({
             Explore performance, risk, research, and scenarios in one focused
             workspace.
           </p>
-          <div className="auth-sample-note">
-            Pandaset currently uses illustrative portfolio data and modeled
-            results.
-          </div>
           <div className="auth-scene" aria-hidden="true">
             <div className="auth-scene-orbit" />
             <div className="auth-scene-panda">
@@ -193,9 +189,6 @@ export function AuthScreen({
           )}
         </section>
       </main>
-      <footer className="auth-footer">
-        Sample data and modeled results · For research and illustration
-      </footer>
     </div>
   );
 }
