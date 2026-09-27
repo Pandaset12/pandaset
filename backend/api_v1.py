@@ -1,7 +1,6 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from functools import lru_cache
 import json
-import math
 from pathlib import Path
 import re
 
@@ -33,7 +32,7 @@ from .schemas import (
     MAX_QUOTE_SYMBOLS,
     AIWorkflowResponse,
     AllocationInput,
-    AnalysisResponse,
+    CurrentMetricsResponse,
     AnalyticsSnapshot,
     AnalysisWorkflowRequest,
     MarketHistoryResponse,
@@ -44,7 +43,7 @@ from .schemas import (
     ScenarioExplanationRequest,
     WhatIfRequest,
 )
-from .storage import PortfolioStore, SnapshotNotFound, StalePortfolio
+from .storage import PortfolioStore
 
 
 router = APIRouter(prefix="/api/v1", tags=["PortfolioLens v1"])
@@ -150,114 +149,25 @@ def require_supported_symbol_union(saved_weights: dict[str, float], proposed_wei
         )
 
 
-def scenario_matches_snapshot(
-    metrics: AnalyticsSnapshot,
-    comparison: dict,
-    proposed_weights: dict[str, float],
-) -> bool:
-    """Reject scenario narratives whose recomputed baseline differs from the selected snapshot."""
-    def same_number(expected, actual) -> bool:
-        if expected is None or actual is None:
-            return expected is actual
-        return math.isclose(float(expected), float(actual), rel_tol=0, abs_tol=1e-9)
-
-    def same_numeric_map(expected, actual) -> bool:
-        if expected is None or actual is None:
-            return expected is actual
-        return all(
-            symbol in actual and same_number(value, actual[symbol])
-            for symbol, value in expected.items()
-        )
-
-    def same_correlation_matrix(expected, actual) -> bool:
-        if expected is None or actual is None:
-            return expected is actual
-        return all(
-            symbol in actual
-            and all(
-                other in actual[symbol] and same_number(value, actual[symbol][other])
-                for other, value in row.items()
-            )
-            for symbol, row in expected.items()
-        )
-
-    def same_series(expected, actual) -> bool:
-        if expected is None or actual is None:
-            return expected is actual
-        if (
-            expected.dates != actual.dates
-            or not same_numeric_map(
-                {str(index): value for index, value in enumerate(expected.portfolio_index)},
-                {str(index): value for index, value in enumerate(actual.portfolio_index)},
-            )
-        ):
-            return False
-        return all(
-            symbol in actual.asset_index
-            and len(values) == len(actual.asset_index[symbol])
-            and all(same_number(value, actual.asset_index[symbol][index]) for index, value in enumerate(values))
-            for symbol, values in expected.asset_index.items()
-        ) and same_numeric_map(expected.return_contribution, actual.return_contribution)
-
-    try:
-        baseline = AnalyticsSnapshot.model_validate(comparison["current_analysis"])
-        proposed = AnalyticsSnapshot.model_validate(comparison["proposed_analysis"])
-        positive_weights = {
-            symbol: weight for symbol, weight in baseline.weights.items() if weight > 0
-        }
-        if baseline.portfolio_id != metrics.portfolio_id or positive_weights != metrics.weights:
-            return False
-        if (
-            baseline.data_mode != metrics.data_mode
-            or baseline.data_as_of != metrics.data_as_of
-            or baseline.lookback_trading_days != metrics.lookback_trading_days
-            or baseline.observation_count != metrics.observation_count
-            or baseline.return_frequency != metrics.return_frequency
-            or baseline.volatility_unit != metrics.volatility_unit
-            or baseline.data_source != metrics.data_source
-            or baseline.freshness != metrics.freshness
-            or baseline.notes != metrics.notes
-            or baseline.assumptions != metrics.assumptions
-            or {symbol: weight for symbol, weight in proposed.weights.items() if weight > 0}
-            != {symbol: weight for symbol, weight in proposed_weights.items() if weight > 0}
-        ):
-            return False
-        for field in ("portfolio_return", "annualized_return", "max_drawdown", "portfolio_volatility"):
-            expected = getattr(metrics, field)
-            actual = getattr(baseline, field)
-            if not same_number(expected, actual):
-                return False
-        if (
-            not same_numeric_map(metrics.risk_contribution, baseline.risk_contribution)
-            or not same_numeric_map(metrics.asset_volatility, baseline.asset_volatility)
-            or not same_numeric_map(metrics.return_contribution, baseline.return_contribution)
-            or not same_correlation_matrix(metrics.correlation_matrix, baseline.correlation_matrix)
-            or not same_series(metrics.series, baseline.series)
-        ):
-            return False
-        return True
-    except (KeyError, TypeError, ValidationError, ValueError):
-        return False
-
-
-def analysis_response(metrics: AnalyticsSnapshot, analysis_id: str, created_at: datetime) -> AnalysisResponse:
+def metrics_payload(metrics: AnalyticsSnapshot) -> dict:
     largest = max(metrics.weights, key=metrics.weights.get)
-    return AnalysisResponse(
-        analysis_id=analysis_id, portfolio_id=metrics.portfolio_id, created_at=created_at,
-        as_of=metrics.data_as_of, lookback_days=metrics.lookback_trading_days,
-        portfolio_return=metrics.portfolio_return,
-        annualized_return=metrics.annualized_return,
-        max_drawdown=metrics.max_drawdown,
-        portfolio_volatility=metrics.portfolio_volatility,
-        asset_volatility=metrics.asset_volatility, correlation_matrix=metrics.correlation_matrix,
-        risk_contribution=metrics.risk_contribution,
-        concentration={"largest_position": largest, "largest_weight": metrics.weights[largest]},
-        data_quality={"source": metrics.data_source, "freshness": metrics.freshness, "warnings": metrics.notes},
-        weights=metrics.weights, data_mode=metrics.data_mode,
-        observation_count=metrics.observation_count, return_frequency=metrics.return_frequency,
-        volatility_unit=metrics.volatility_unit, assumptions=metrics.assumptions,
-        return_contribution=metrics.return_contribution, series=metrics.series,
-    )
+    return {
+        "portfolio_id": metrics.portfolio_id,
+        "as_of": metrics.data_as_of, "lookback_days": metrics.lookback_trading_days,
+        "portfolio_return": metrics.portfolio_return,
+        "annualized_return": metrics.annualized_return,
+        "max_drawdown": metrics.max_drawdown,
+        "portfolio_volatility": metrics.portfolio_volatility,
+        "asset_volatility": metrics.asset_volatility,
+        "correlation_matrix": metrics.correlation_matrix,
+        "risk_contribution": metrics.risk_contribution,
+        "concentration": {"largest_position": largest, "largest_weight": metrics.weights[largest]},
+        "data_quality": {"source": metrics.data_source, "freshness": metrics.freshness, "warnings": metrics.notes},
+        "weights": metrics.weights, "data_mode": metrics.data_mode,
+        "observation_count": metrics.observation_count, "return_frequency": metrics.return_frequency,
+        "volatility_unit": metrics.volatility_unit, "assumptions": metrics.assumptions,
+        "return_contribution": metrics.return_contribution, "series": metrics.series,
+    }
 
 
 @router.post("/portfolios", response_model=Portfolio, status_code=201)
@@ -299,18 +209,12 @@ def delete_portfolio(
         raise api_error(404, "PORTFOLIO_NOT_FOUND", "Portfolio not found.")
 
 
-@router.post("/portfolios/{portfolio_id}/analysis", response_model=AnalysisResponse)
-def analyze(
-    portfolio_id: str, store: PortfolioStore = Depends(get_store),
-    provider: QuantProvider = Depends(get_provider),
-    owner_id: str = Depends(current_user_id),
-):
-    portfolio = require_portfolio(store, portfolio_id, owner_id)
+def calculate_metrics(portfolio: Portfolio, provider: QuantProvider) -> AnalyticsSnapshot:
     try:
         result = provider.analyze(portfolio.model_copy(deep=True))
         payload = result.model_dump() if isinstance(result, AnalyticsSnapshot) else result
         metrics = AnalyticsSnapshot.model_validate(payload)
-        if metrics.portfolio_id != portfolio_id or metrics.weights != portfolio.weights:
+        if metrics.portfolio_id != portfolio.portfolio_id or metrics.weights != portfolio.weights:
             raise ValueError("Provider returned metrics for a different portfolio/allocation.")
     except IntegrationPending as exc:
         raise api_error(501, "QUANT_INTEGRATION_PENDING", str(exc)) from exc
@@ -330,21 +234,24 @@ def analyze(
     except Exception as exc:
         log_failure("PROVIDER_UNAVAILABLE", exc)
         raise api_error(502, "PROVIDER_UNAVAILABLE", "Analysis is unavailable. Check the selected market-data provider.") from exc
-    try:
-        analysis_id, created_at = store.save_analysis(metrics, owner_id)
-    except StalePortfolio as exc:
-        raise api_error(409, "PORTFOLIO_CHANGED", "Portfolio changed during analysis. Retry analysis.") from exc
-    return analysis_response(metrics, analysis_id, created_at)
+    return metrics
 
 
-@router.get("/portfolios/{portfolio_id}/analyses/{analysis_id}", response_model=AnalysisResponse)
-def get_analysis(portfolio_id: str, analysis_id: str, store: PortfolioStore = Depends(get_store), owner_id: str = Depends(current_user_id)):
-    require_portfolio(store, portfolio_id, owner_id)
-    try:
-        metrics, created_at = store.get_analysis(portfolio_id, analysis_id)
-    except SnapshotNotFound as exc:
-        raise api_error(404, "ANALYSIS_NOT_FOUND", "Analysis not found for this portfolio.") from exc
-    return analysis_response(metrics, analysis_id, created_at)
+@router.get("/portfolios/{portfolio_id}/metrics", response_model=CurrentMetricsResponse)
+def current_metrics(
+    portfolio_id: str, store: PortfolioStore = Depends(get_store),
+    provider: QuantProvider = Depends(get_provider),
+    owner_id: str = Depends(current_user_id),
+):
+    portfolio = require_portfolio(store, portfolio_id, owner_id)
+    metrics = calculate_metrics(portfolio, provider)
+    latest = require_portfolio(store, portfolio_id, owner_id)
+    if latest.revision != portfolio.revision:
+        raise api_error(409, "PORTFOLIO_CHANGED", "Portfolio changed during calculation. Retry.")
+    return CurrentMetricsResponse(
+        **metrics_payload(metrics), portfolio_revision=portfolio.revision,
+        calculated_at=datetime.now(timezone.utc),
+    )
 
 
 @router.get("/market-history", response_model=MarketHistoryResponse)
@@ -368,69 +275,56 @@ def market_history(
         raise api_error(502, "MARKET_HISTORY_UNAVAILABLE", "Market data is unavailable. Check Alpaca credentials, selected history feed, entitlement, and provider status.") from exc
 
 
-async def analysis_workflow_response(
-    workflow: str,
-    portfolio_id: str,
-    request: AnalysisWorkflowRequest,
-    store: PortfolioStore,
-    settings: Settings,
+async def current_workflow_response(
+    workflow: str, portfolio_id: str, request: AnalysisWorkflowRequest,
+    store: PortfolioStore, provider: QuantProvider, settings: Settings, owner_id: str,
 ) -> AIWorkflowResponse:
-    title = "Portfolio briefing" if workflow == "analysis_briefing" else "Risk explanation"
-    try:
-        metrics, _ = await run_in_threadpool(
-            store.get_analysis, portfolio_id, request.analysis_id
-        )
-    except SnapshotNotFound as exc:
-        raise api_error(404, "ANALYSIS_NOT_FOUND", "Analysis not found for this portfolio.") from exc
-    warnings = list(metrics.notes)
-    if metrics.freshness == "stale":
-        warnings.append("This saved snapshot contains stale market data.")
+    portfolio = await run_in_threadpool(require_portfolio, store, portfolio_id, owner_id)
+    if portfolio.revision != request.portfolio_revision:
+        raise api_error(409, "PORTFOLIO_CHANGED", "Portfolio changed. Refresh its metrics before asking for an explanation.")
+    metrics = await run_in_threadpool(calculate_metrics, portfolio, provider)
+    context = CurrentMetricsResponse(
+        **metrics_payload(metrics), portfolio_revision=portfolio.revision,
+        calculated_at=datetime.now(timezone.utc),
+    ).model_dump(mode="json")
     fallback, citations = (
-        portfolio_briefing_summary(metrics)
-        if workflow == "analysis_briefing"
+        portfolio_briefing_summary(metrics) if workflow == "analysis_briefing"
         else metric_summary(metrics)
     )
+    title = "Portfolio briefing" if workflow == "analysis_briefing" else "Risk explanation"
+    warnings = list(metrics.notes)
     if settings.analyst_mode == "demo":
         warnings.append("Offline demo response; Gemini was not called.")
-        return AIWorkflowResponse(
-            workflow=workflow,
-            analyst_mode="demo",
-            status="demo",
-            analysis_id=request.analysis_id,
-            answer=f"{title} is disabled in demo mode. Saved metrics: {fallback}",
-            citations=citations,
-            warnings=warnings,
+        output = AIWorkflowResponse(
+            workflow=workflow, analyst_mode="demo", status="demo",
+            answer=f"{title} is disabled in demo mode. Current metrics: {fallback}",
+            citations=citations, warnings=warnings,
+            portfolio_revision=portfolio.revision, metrics=context,
         )
-    try:
-        output = await generate_analysis_workflow(
-            workflow, request.question, metrics, request.analysis_id, settings
-        )
-    except (GeminiNotConfigured, GeminiUnavailable) as exc:
-        error_code = (
-            "GEMINI_NOT_CONFIGURED"
-            if isinstance(exc, GeminiNotConfigured)
-            else "GEMINI_UNAVAILABLE"
-        )
-        log_failure(error_code, exc)
-        warnings.append(str(exc))
-        return AIWorkflowResponse(
-            workflow=workflow,
-            analyst_mode="gemini",
-            status="unavailable",
-            analysis_id=request.analysis_id,
-            answer=f"{title} is unavailable right now. Saved metrics: {fallback}",
-            citations=citations,
-            warnings=warnings,
-            error_code=error_code,
-        )
-    return AIWorkflowResponse(
-        workflow=workflow,
-        analyst_mode="gemini",
-        status="complete",
-        analysis_id=request.analysis_id,
-        warnings=warnings,
-        **output,
-    )
+    else:
+        try:
+            generated = await generate_analysis_workflow(
+                workflow, request.question, metrics, settings,
+            )
+        except (GeminiNotConfigured, GeminiUnavailable) as exc:
+            code = "GEMINI_NOT_CONFIGURED" if isinstance(exc, GeminiNotConfigured) else "GEMINI_UNAVAILABLE"
+            log_failure(code, exc)
+            output = AIWorkflowResponse(
+                workflow=workflow, analyst_mode="gemini", status="unavailable",
+                answer=f"{title} is unavailable right now. Current metrics: {fallback}",
+                citations=citations, warnings=[*warnings, str(exc)], error_code=code,
+                portfolio_revision=portfolio.revision, metrics=context,
+            )
+        else:
+            output = AIWorkflowResponse(
+                workflow=workflow, analyst_mode="gemini", status="complete",
+                warnings=warnings, portfolio_revision=portfolio.revision,
+                metrics=context, **generated,
+            )
+    latest = await run_in_threadpool(require_portfolio, store, portfolio_id, owner_id)
+    if latest.revision != portfolio.revision:
+        raise api_error(409, "PORTFOLIO_CHANGED", "Portfolio changed while the explanation was prepared. Retry.")
+    return output
 
 
 @router.post(
@@ -442,11 +336,12 @@ async def analysis_briefing(
     request: AnalysisWorkflowRequest,
     store: PortfolioStore = Depends(get_store),
     settings: Settings = Depends(get_settings),
+    provider: QuantProvider = Depends(get_provider),
     owner_id: str = Depends(current_user_id),
 ):
     await run_in_threadpool(require_portfolio, store, portfolio_id, owner_id)
-    return await analysis_workflow_response(
-        "analysis_briefing", portfolio_id, request, store, settings
+    return await current_workflow_response(
+        "analysis_briefing", portfolio_id, request, store, provider, settings, owner_id,
     )
 
 
@@ -459,11 +354,12 @@ async def risk_explanation(
     request: AnalysisWorkflowRequest,
     store: PortfolioStore = Depends(get_store),
     settings: Settings = Depends(get_settings),
+    provider: QuantProvider = Depends(get_provider),
     owner_id: str = Depends(current_user_id),
 ):
     await run_in_threadpool(require_portfolio, store, portfolio_id, owner_id)
-    return await analysis_workflow_response(
-        "risk_explanation", portfolio_id, request, store, settings
+    return await current_workflow_response(
+        "risk_explanation", portfolio_id, request, store, provider, settings, owner_id,
     )
 
 
@@ -481,96 +377,47 @@ async def scenario_explanation(
 ):
     portfolio = await run_in_threadpool(require_portfolio, store, portfolio_id, owner_id)
     require_supported_symbol_union(portfolio.weights, request.proposed_weights)
-    try:
-        metrics, _ = await run_in_threadpool(
-            store.get_analysis, portfolio_id, request.analysis_id
-        )
-    except SnapshotNotFound as exc:
-        raise api_error(404, "ANALYSIS_NOT_FOUND", "Analysis not found for this portfolio.") from exc
-    if metrics.weights != portfolio.weights:
-        raise api_error(
-            409,
-            "ANALYSIS_ALLOCATION_MISMATCH",
-            "The selected analysis no longer matches the saved portfolio allocation.",
-        )
-    try:
-        comparison = await run_in_threadpool(
-            provider.simulate,
-            WhatIfRequest(
-                portfolio_id=portfolio_id,
-                proposed_weights=request.proposed_weights,
-            ),
-            portfolio,
-        )
-    except IntegrationPending as exc:
-        raise api_error(501, "QUANT_INTEGRATION_PENDING", str(exc)) from exc
-    except SymbolLimitExceeded as exc:
-        raise api_error(422, "SYMBOL_LIMIT_EXCEEDED", str(exc)) from exc
-    except RateLimitError as exc:
-        raise api_error(429, "PROVIDER_RATE_LIMIT", str(exc)) from exc
-    except MarketHistoryNotFound as exc:
-        log_failure("MARKET_HISTORY_NOT_FOUND", exc)
-        raise api_error(404, "MARKET_HISTORY_NOT_FOUND", "Market history is unavailable for one or more allocation symbols.") from exc
-    except ProviderUnavailable as exc:
-        log_failure("PROVIDER_UNAVAILABLE", exc)
-        raise api_error(502, "PROVIDER_UNAVAILABLE", "Market data is unavailable for the requested scenario.") from exc
-    except (ValidationError, ValueError) as exc:
-        log_failure("INVALID_SCENARIO_COMPARISON", exc)
-        raise api_error(502, "INVALID_SCENARIO_COMPARISON", "The quant provider returned an invalid comparison.") from exc
-    except Exception as exc:
-        log_failure("PROVIDER_UNAVAILABLE", exc)
-        raise api_error(502, "PROVIDER_UNAVAILABLE", "What-if provider is currently unavailable.") from exc
-    if not scenario_matches_snapshot(metrics, comparison, request.proposed_weights):
-        raise api_error(
-            409,
-            "ANALYSIS_STALE",
-            "The comparison baseline differs from the selected analysis. Recalculate the active analysis before explaining this scenario.",
-        )
-    warnings = list(metrics.notes)
-    if metrics.freshness == "stale":
-        warnings.append("This saved snapshot contains stale market data.")
+    if request.portfolio_revision is None:
+        raise api_error(422, "MISSING_CONTEXT", "Select a portfolio revision for this explanation.")
+    if request.portfolio_revision != portfolio.revision:
+        raise api_error(409, "PORTFOLIO_CHANGED", "Portfolio changed. Recalculate this comparison.")
+    comparison = await run_in_threadpool(
+        what_if, portfolio_id,
+        AllocationInput(holdings=[{"symbol": symbol, "weight": weight}
+                                  for symbol, weight in request.proposed_weights.items()]),
+        store, provider, owner_id,
+    )
+    baseline = AnalyticsSnapshot.model_validate(comparison["current_analysis"])
+    warnings = list(baseline.notes)
     if settings.analyst_mode == "demo":
         warnings.append("Offline demo response; Gemini was not called.")
-        return AIWorkflowResponse(
-            workflow="scenario_explanation",
-            analyst_mode="demo",
-            status="demo",
-            analysis_id=request.analysis_id,
-            answer="AI explanations are disabled in demo mode. The server-calculated comparison remains available in the What-if workspace.",
-            warnings=warnings,
+        output = AIWorkflowResponse(
+            workflow="scenario_explanation", analyst_mode="demo", status="demo",
+            answer="AI explanations are disabled in demo mode. The matched modeled comparison is available below.",
+            portfolio_revision=portfolio.revision, comparison=comparison, warnings=warnings,
         )
-    try:
-        output = await generate_scenario_workflow(
-            request.question,
-            comparison,
-            settings,
-            analysis_id=request.analysis_id,
-        )
-    except (GeminiNotConfigured, GeminiUnavailable) as exc:
-        error_code = (
-            "GEMINI_NOT_CONFIGURED"
-            if isinstance(exc, GeminiNotConfigured)
-            else "GEMINI_UNAVAILABLE"
-        )
-        log_failure(error_code, exc)
-        warnings.append(str(exc))
-        return AIWorkflowResponse(
-            workflow="scenario_explanation",
-            analyst_mode="gemini",
-            status="unavailable",
-            analysis_id=request.analysis_id,
-            answer="AI explanation is unavailable. The server-calculated comparison remains available in the What-if workspace.",
-            warnings=warnings,
-            error_code=error_code,
-        )
-    return AIWorkflowResponse(
-        workflow="scenario_explanation",
-        analyst_mode="gemini",
-        status="complete",
-        analysis_id=request.analysis_id,
-        warnings=warnings,
-        **output,
-    )
+    else:
+        try:
+            generated = await generate_scenario_workflow(request.question, comparison, settings)
+        except (GeminiNotConfigured, GeminiUnavailable) as exc:
+            code = "GEMINI_NOT_CONFIGURED" if isinstance(exc, GeminiNotConfigured) else "GEMINI_UNAVAILABLE"
+            log_failure(code, exc)
+            output = AIWorkflowResponse(
+                workflow="scenario_explanation", analyst_mode="gemini", status="unavailable",
+                answer="AI explanation is unavailable. The matched modeled comparison is available below.",
+                portfolio_revision=portfolio.revision, comparison=comparison,
+                warnings=[*warnings, str(exc)], error_code=code,
+            )
+        else:
+            output = AIWorkflowResponse(
+                workflow="scenario_explanation", analyst_mode="gemini", status="complete",
+                portfolio_revision=portfolio.revision, comparison=comparison,
+                warnings=warnings, **generated,
+            )
+    latest = await run_in_threadpool(require_portfolio, store, portfolio_id, owner_id)
+    if latest.revision != portfolio.revision:
+        raise api_error(409, "PORTFOLIO_CHANGED", "Portfolio changed while the explanation was prepared. Retry.")
+    return output
 
 
 @router.post(
@@ -638,7 +485,7 @@ def what_if(
     portfolio = require_portfolio(store, portfolio_id, owner_id)
     require_supported_symbol_union(portfolio.weights, request.weights)
     try:
-        return provider.simulate(
+        comparison = provider.simulate(
             WhatIfRequest(portfolio_id=portfolio_id, proposed_weights=request.weights), portfolio
         )
     except IntegrationPending as exc:
@@ -656,3 +503,12 @@ def what_if(
     except Exception as exc:
         log_failure("PROVIDER_UNAVAILABLE", exc)
         raise api_error(502, "PROVIDER_UNAVAILABLE", "What-if analysis is unavailable. Check the selected market-data provider, API key, quota, and supported symbols.") from exc
+    latest = require_portfolio(store, portfolio_id, owner_id)
+    if latest.revision != portfolio.revision:
+        raise api_error(409, "PORTFOLIO_CHANGED", "Portfolio changed during comparison. Retry.")
+    return {
+        **comparison,
+        "portfolio_revision": portfolio.revision,
+        "calculated_at": datetime.now(timezone.utc),
+        "modeled_result": True,
+    }

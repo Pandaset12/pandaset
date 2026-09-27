@@ -15,13 +15,16 @@ from pydantic import SecretStr
 from backend.auth import AuthenticatedUser
 from backend.config import Settings
 from backend.event_agents import grounded_source_records
-from backend.event_api import _aligned_histories
+from backend.event_api import _aligned_histories, _validate_event_allocation
 from backend.event_jobs import process_draft, process_run
-from backend.event_schemas import EventPortfolioInput, validate_shocks
+from backend.event_schemas import DraftRequest, EventPortfolioInput, validate_shocks
+from backend.event_templates import get_event_template
 from backend.event_sources import record_source_retrieval
 from backend.main import create_app
 from backend.mongo_store import MongoPortfolioStore
 from backend.schemas import AnalyticsSnapshot
+from backend.schemas import PortfolioInput
+from backend.storage import PortfolioStore
 
 
 def _settings(**changes):
@@ -53,6 +56,23 @@ def test_confirmed_shocks_reject_unsupported_factor_and_issuer():
     valid["central"]["3m"]["issuers"]["NVDA"] = 0.1
     with pytest.raises(ValueError, match="outside"):
         validate_shocks(valid, {"AAPL"})
+
+
+def test_event_research_validates_issuer_target_and_symbol_union():
+    from fastapi import HTTPException
+
+    template = get_event_template("issuer_earnings")
+    body = DraftRequest(portfolio_id="portfolio-a", portfolio_revision=1,
+                        template_id="issuer_earnings", target_symbol="TLT",
+                        proposed_weights={"AAPL": 0.5, "TLT": 0.5})
+    with pytest.raises(HTTPException) as invalid:
+        _validate_event_allocation(template, body, ["AAPL", "TLT"])
+    assert invalid.value.detail["code"] == "INVALID_TARGET"
+    body = body.model_copy(update={"target_symbol": "AAPL"})
+    _validate_event_allocation(template, body, ["AAPL", "TLT"])
+    with pytest.raises(HTTPException) as too_many:
+        _validate_event_allocation(template, body, ["AAPL"] * 9)
+    assert too_many.value.detail["code"] == "SYMBOL_LIMIT_EXCEEDED"
 
 
 def test_grounding_promotes_only_supported_approved_https_sources():
@@ -100,7 +120,7 @@ def test_draft_worker_persists_enriched_evidence(monkeypatch):
     async def research(**kwargs):
         return {"facts": [{"claim": "Observed rate", "evidence_ids": ["fred:FEDFUNDS"]}],
                 "evidence": [*kwargs["evidence"], {"evidence_id": "fred:FEDFUNDS", "status": "available"}],
-                "missing_evidence": [], "grounding": {"sources": [], "url_retrievals": []},
+                "missing_evidence": ["Future rate path"], "grounding": {"sources": [], "url_retrievals": []},
                 "grounding_text": "{}"}
 
     async def design(**kwargs):
@@ -122,9 +142,14 @@ def test_draft_worker_persists_enriched_evidence(monkeypatch):
     monkeypatch.setattr(event_jobs, "research_event", research)
     monkeypatch.setattr(event_jobs, "design_scenarios", design)
     job = {"id": "draft-a", "owner_id": "owner-a", "portfolio_id": "portfolio-a",
-           "request": {"analysis_id": "analysis-a", "template_id": "fed_policy", "question": "What if?"}}
+           "request": {"portfolio_revision": 1, "template_id": "fed_policy", "question": "What if?"},
+           "context": {"allocation_snapshot": {"holdings": [{"symbol": "AAPL", "weight": 1.0}]},
+                       "price_snapshot": {"dates": ["2025-12-31T00:00:00+00:00"],
+                                          "provenance": {"data_source": "twelve_data_adjusted_daily"}},
+                       "analysis_snapshot": {"weights": {"AAPL": 1.0}}}}
     proposal = asyncio.run(process_draft(Store(), _settings(), job, "worker-a"))
     assert proposal["evidence"][0]["status"] == "available"
+    assert proposal["missing_evidence"] == ["Future rate path"]
     assert proposal["price_provenance"]["data_source"] == "twelve_data_adjusted_daily"
 
 
@@ -143,76 +168,103 @@ def test_event_lab_requires_rights_to_retain_price_snapshots():
     assert _settings(event_lab_public_enabled=True).event_lab_public_ready is False
 
 
-def test_v2_confirm_retry_and_owner_isolation():
-    settings = _settings()
-    app = create_app(settings)
-    store = MongoPortfolioStore(database=mongomock.MongoClient()["event_api"],
-                                supported_symbol=lambda symbol: symbol == "AAPL")
-    app.state.event_store = store
+def test_pinned_event_run_survives_portfolio_and_price_changes(tmp_path):
+    main_store = PortfolioStore(tmp_path / "portfolios.sqlite3")
+    portfolio = main_store.create(PortfolioInput(name="Core", holdings=[
+        {"symbol": "AAPL", "weight": 0.6}, {"symbol": "TLT", "weight": 0.4},
+    ]), "owner-a")
+    store = MongoPortfolioStore(database=mongomock.MongoClient()["pinned_event"],
+                                portfolio_repository=main_store)
+    app = create_app(_settings(storage_path=tmp_path / "portfolios.sqlite3"))
 
     class Verifier:
         def verify(self, token):
             return AuthenticatedUser(user_id=token, claims={"sub": token})
 
-    app.state.auth_verifier = Verifier()
-    portfolio = store.create_portfolio("owner-a", EventPortfolioInput(
-        name="Owned", holdings=[{"symbol": "AAPL", "weight": 1.0}]))
-    metrics = AnalyticsSnapshot(portfolio_id=portfolio.portfolio_id, data_mode="live",
-                                data_as_of=datetime.now(timezone.utc), lookback_trading_days=252,
-                                observation_count=252, data_source="twelve_data_adjusted_daily",
-                                portfolio_volatility=0, weights={"AAPL": 1.0}, risk_contribution={})
-    dates = [day.isoformat() for day in pd.date_range("2025-01-01", periods=253, freq="B", tz="UTC")]
-    values = [100.0 + index for index in range(253)]
-    analysis_id, _ = store.save_analysis("owner-a", metrics,
-        price_snapshot={"dates": dates,
-                        "holding_prices": {"AAPL": values},
-                        "factor_prices": {"SPY": values, "TLT": values, "GLD": values},
-                        "provenance": {"data_source": "twelve_data_adjusted_daily"}},
-        model_version="event-v1")
-    client = TestClient(app)
-    headers = {"Authorization": "Bearer owner-a", "Idempotency-Key": "draft-key"}
-    listed_analyses = client.get(f"/api/v2/portfolios/{portfolio.portfolio_id}/analyses",
-                                 headers=headers)
-    assert listed_analyses.status_code == 200
-    assert [item["analysis_id"] for item in listed_analyses.json()["analyses"]] == [analysis_id]
-    assert client.get(f"/api/v2/portfolios/{portfolio.portfolio_id}/analyses",
-                      headers={"Authorization": "Bearer owner-b"}).status_code == 404
-    request = {"portfolio_id": portfolio.portfolio_id, "analysis_id": analysis_id,
-               "template_id": "fed_policy", "question": "What if?"}
-    created = client.post("/api/v2/scenarios/drafts", json=request, headers=headers)
-    assert created.status_code == 202
-    draft_id = created.json()["draft_id"]
-    assert client.post("/api/v2/scenarios/drafts", json=request, headers=headers).json()["draft_id"] == draft_id
-    other = client.get(f"/api/v2/scenarios/drafts/{draft_id}",
-                       headers={"Authorization": "Bearer owner-b"})
-    assert other.status_code == 404
-    claimed = store.claim_draft("owner-a", draft_id, worker_id="test-worker")
-    store.complete_draft("owner-a", draft_id, {"template": {"template_id": "fed_policy"},
-                                                "facts": [], "evidence": [], "proposed_shocks": {}},
-                         worker_id="test-worker")
-    confirmation = {"revision": 1, "confirmed_shocks": _shocks()}
-    first = client.post(f"/api/v2/scenarios/drafts/{draft_id}/confirm", json=confirmation, headers=headers)
-    assert first.status_code == 202
-    run_id = first.json()["run_id"]
-    retry = client.post(f"/api/v2/scenarios/drafts/{draft_id}/confirm", json=confirmation, headers=headers)
-    assert retry.status_code == 202 and retry.json()["run_id"] == run_id
-    confirmed = client.get(f"/api/v2/scenarios/drafts/{draft_id}", headers=headers).json()
-    assert confirmed["status"] == "confirmed"
-    assert confirmed["confirmed_shocks"] == confirmation["confirmed_shocks"]
-    listed_drafts = client.get(f"/api/v2/scenarios/drafts?portfolio_id={portfolio.portfolio_id}",
-                               headers=headers).json()["drafts"]
-    assert listed_drafts[0]["confirmed_shocks"] == confirmation["confirmed_shocks"]
-    assert client.get(f"/api/v2/scenarios/runs/{run_id}",
-                      headers={"Authorization": "Bearer owner-b"}).status_code == 404
-    assert client.get(f"/api/v2/scenarios/runs/{run_id}", headers=headers).json()["status"] == "pending"
+    class Prices:
+        calls = 0
+
+        def prices(self, symbols, lookback_days):
+            self.calls += 1
+            dates = pd.date_range("2025-01-02", periods=253, freq="B", tz="UTC")
+            frame = pd.DataFrame({symbol: 100 + np.arange(253) * (index + 1)
+                                  + np.sin(np.arange(253) / (index + 2))
+                                  for index, symbol in enumerate(symbols)}, index=dates)
+            frame.attrs["provenance"] = {"data_mode": "live", "data_source": "alpaca_adjusted_daily",
+                                         "freshness": "fresh", "warnings": []}
+            return frame
+
+    provider = Prices()
+    with TestClient(app) as client:
+        app.state.event_store = store
+        app.state.event_price_provider = provider
+        app.state.auth_verifier = Verifier()
+        body = {"portfolio_id": portfolio.portfolio_id, "portfolio_revision": 1,
+                "template_id": "fed_policy", "question": "What if rates change?",
+                "proposed_weights": {"AAPL": 0.4, "TLT": 0.3, "SPY": 0.3}}
+        own = {"Authorization": "Bearer owner-a"}
+        other = {"Authorization": "Bearer owner-b"}
+        assert client.post("/api/v2/scenarios/drafts", json=body, headers=other).status_code == 404
+        created = client.post("/api/v2/scenarios/drafts", json=body,
+                              headers={**own, "Idempotency-Key": "pinned-retry"})
+        assert created.status_code == 202, created.text
+        draft_id = created.json()["draft_id"]
+        draft = store.get_draft("owner-a", draft_id)
+        assert draft["context"]["portfolio_revision"] == 1
+        assert set(draft["context"]["proposed_weights"]) == {"AAPL", "TLT", "SPY"}
+        assert draft["context"]["allocation_snapshot"]["name"] == "Core"
+        assert len(draft["context"]["price_snapshot"]["dates"]) == 253
+        assert not list(store.db["analyses"].find({}))
+        assert client.get(f"/api/v2/scenarios/drafts/{draft_id}", headers=other).status_code == 404
+        store.claim_draft("owner-a", draft_id, worker_id="test-worker")
+        store.complete_draft("owner-a", draft_id, {"template": {"template_id": "fed_policy"},
+                       "facts": [], "evidence": [], "proposed_shocks": {}}, worker_id="test-worker")
+        main_store.update(portfolio.portfolio_id, "owner-a", PortfolioInput(name="Changed", holdings=[
+            {"symbol": "AAPL", "weight": 1.0},
+        ]))
+        retried_draft = client.post("/api/v2/scenarios/drafts", json=body,
+                                    headers={**own, "Idempotency-Key": "pinned-retry"})
+        assert retried_draft.status_code == 202
+        assert retried_draft.json()["draft_id"] == draft_id
+        assert client.post("/api/v2/scenarios/drafts", json={**body, "question": "Different"},
+                           headers={**own, "Idempotency-Key": "pinned-retry"}).status_code == 409
+        result = client.post(f"/api/v2/scenarios/drafts/{draft_id}/confirm",
+                             json={"revision": 1, "confirmed_shocks": _shocks()}, headers=own)
+        assert result.status_code == 202, result.text
+        retried = client.post(f"/api/v2/scenarios/drafts/{draft_id}/confirm",
+                              json={"revision": 1, "confirmed_shocks": _shocks()}, headers=own)
+        assert retried.status_code == 202 and retried.json()["run_id"] == result.json()["run_id"]
+        run = store.get_run("owner-a", result.json()["run_id"])
+        assert "analysis_id" not in run
+        assert run["allocation_snapshot"]["name"] == "Core"
+        assert run["portfolio_revision"] == 1
+        assert provider.calls == 1
+        store.claim_run("owner-a", run["id"], worker_id="test-worker")
+        completed = asyncio.run(process_run(store, _settings(),
+                                            store.get_run("owner-a", run["id"]), "test-worker"))
+        assert completed["result"]["current_weights"]["AAPL"] == 0.6
+        assert completed["result"]["proposed_weights"]["SPY"] == 0.3
+        assert provider.calls == 1
+        assert not list(store.db["analyses"].find({}))
+        revised = client.post(f"/api/v2/scenarios/runs/{run['id']}/messages",
+                              json={"content": "Change the shock assumptions"},
+                              headers={**own, "Idempotency-Key": "saved-run-revision"})
+        assert revised.status_code == 201, revised.text
+        revision_draft = store.get_draft("owner-a", revised.json()["revision_draft_id"])
+        assert revision_draft["request"]["source_run_id"] == run["id"]
+        assert revision_draft["context"]["portfolio_revision"] == 1
+        assert revision_draft["context"]["price_snapshot"] == run["price_snapshot"]
+        assert provider.calls == 1
 
 
-def test_new_event_analysis_pins_alpaca_history_and_provenance():
-    settings = _settings()
-    app = create_app(settings)
-    store = MongoPortfolioStore(database=mongomock.MongoClient()["alpaca_analysis"],
-                                supported_symbol=lambda symbol: symbol == "AAPL")
-    app.state.event_store = store
+def test_event_draft_rejects_missing_history_before_saving(tmp_path):
+    main_store = PortfolioStore(tmp_path / "portfolios.sqlite3")
+    portfolio = main_store.create(PortfolioInput(name="Core", holdings=[
+        {"symbol": "AAPL", "weight": 1.0},
+    ]), "owner-a")
+    store = MongoPortfolioStore(database=mongomock.MongoClient()["missing_prices"],
+                                portfolio_repository=main_store)
+    app = create_app(_settings(storage_path=tmp_path / "portfolios.sqlite3"))
 
     class Verifier:
         def verify(self, token):
@@ -220,28 +272,23 @@ def test_new_event_analysis_pins_alpaca_history_and_provenance():
 
     class Prices:
         def prices(self, symbols, lookback_days):
-            assert lookback_days == 252
-            dates = pd.date_range("2025-01-02", periods=253, freq="B", tz="UTC")
-            frame = pd.DataFrame({symbol: 100 + np.arange(253) * (index + 1)
-                                  for index, symbol in enumerate(symbols)}, index=dates)
-            frame.attrs["provenance"] = {"data_source": "alpaca_adjusted_daily", "feed": "iex",
-                                         "adjustment": "all"}
+            dates = pd.date_range("2025-01-02", periods=120, freq="B", tz="UTC")
+            frame = pd.DataFrame({symbol: 100 + np.arange(120) for symbol in symbols}, index=dates)
+            frame.attrs["provenance"] = {"data_mode": "live", "data_source": "test"}
             return frame
 
-    app.state.auth_verifier = Verifier()
-    app.state.event_price_provider = Prices()
-    portfolio = store.create_portfolio("owner-a", EventPortfolioInput(
-        name="Alpaca", holdings=[{"symbol": "AAPL", "weight": 1.0}]))
-    response = TestClient(app).post(
-        f"/api/v2/portfolios/{portfolio.portfolio_id}/analysis",
-        headers={"Authorization": "Bearer owner-a"},
-    )
-    assert response.status_code == 201, response.text
-    assert response.json()["price_provenance"]["feed"] == "iex"
-    record = store.get_analysis_record("owner-a", portfolio.portfolio_id,
-                                       response.json()["analysis_id"])
-    assert record["price_snapshot"]["provenance"]["data_source"] == "alpaca_adjusted_daily"
-    assert set(record["price_snapshot"]["factor_prices"]) == {"SPY", "TLT", "GLD"}
+    with TestClient(app) as client:
+        app.state.event_store = store
+        app.state.event_price_provider = Prices()
+        app.state.auth_verifier = Verifier()
+        response = client.post("/api/v2/scenarios/drafts", json={
+            "portfolio_id": portfolio.portfolio_id, "portfolio_revision": 1,
+            "template_id": "fed_policy", "situation_id": "faster_cuts",
+            "proposed_weights": {"AAPL": 1.0},
+        }, headers={"Authorization": "Bearer owner-a"})
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "PRICE_COVERAGE"
+    assert store.drafts.count_documents({}) == 0
 
 
 def test_internal_gate_denies_uninvited_even_with_valid_token():
@@ -388,14 +435,19 @@ def test_concurrent_chat_reservation_blocks_second_gemini_call(monkeypatch):
     metrics = AnalyticsSnapshot(portfolio_id=portfolio.portfolio_id, data_mode="demo",
                                 lookback_trading_days=10, portfolio_volatility=0,
                                 weights={"AAPL": 1.0}, risk_contribution={})
-    analysis_id, _ = store.save_analysis("owner-a", metrics, price_snapshot={"source": "pinned"})
+    context = {"portfolio_revision": 1,
+               "allocation_snapshot": portfolio.model_dump(mode="json"),
+               "price_snapshot": {"source": "pinned"},
+               "analysis_snapshot": metrics.model_dump(mode="json"),
+               "model_version": "event-v1", "proposed_weights": {"AAPL": 1.0}}
     draft = store.create_draft("owner-a", portfolio.portfolio_id,
-                               {"analysis_id": analysis_id, "template_id": "fed_policy"})
+                               {"portfolio_revision": 1, "template_id": "fed_policy"},
+                               context=context)
     store.claim_draft("owner-a", draft["id"], worker_id="test-worker")
     store.complete_draft("owner-a", draft["id"], {"template": {"template_id": "fed_policy"}},
                          worker_id="test-worker")
     store.confirm_draft("owner-a", draft["id"], _shocks(), revision=1)
-    run = store.create_run("owner-a", draft["id"], analysis_id)
+    run = store.create_run("owner-a", draft["id"])
     store.claim_run("owner-a", run["id"], worker_id="test-worker")
     store.complete_run("owner-a", run["id"], {"cases": [], "facts": [], "evidence": []},
                        worker_id="test-worker")

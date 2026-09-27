@@ -1,12 +1,5 @@
 import { getSupabase } from "../lib/supabase";
-import type { Instrument } from "../types/portfolioAsset";
-import type {
-  Portfolio,
-  PortfolioInput,
-  MetricSnapshot,
-  AnalysisResponse,
-  AIWorkflowResponse,
-} from "./portfolio";
+import type { Portfolio } from "./portfolio";
 
 export class EventLabError extends Error {
   constructor(
@@ -101,115 +94,6 @@ export async function eventRequest<T>(
   return payload as T;
 }
 
-export type SavedAnalysis = {
-  analysis_id: string;
-  portfolio_id: string;
-  created_at: string;
-  metrics: MetricSnapshot;
-  price_provenance?: unknown;
-};
-
-export function asAnalysisResponse(saved: SavedAnalysis): AnalysisResponse {
-  const m = saved.metrics;
-  const largest = Object.entries(m.weights).sort((a, b) => b[1] - a[1])[0];
-  return {
-    ...m,
-    analysis_id: saved.analysis_id,
-    created_at: saved.created_at,
-    as_of: m.data_as_of,
-    lookback_days: m.lookback_trading_days,
-    data_quality: {
-      source: m.data_source,
-      freshness: m.freshness,
-      warnings: m.notes,
-    },
-    concentration: {
-      largest_position: largest?.[0] ?? "",
-      largest_weight: largest?.[1] ?? 0,
-    },
-    observation_count: m.observation_count ?? null,
-    return_frequency: m.return_frequency,
-    volatility_unit: m.volatility_unit,
-  };
-}
-
-export function analysisMatchesPortfolio(
-  saved: SavedAnalysis,
-  portfolio: Portfolio,
-): boolean {
-  const weights = saved.metrics.weights;
-  return (
-    saved.portfolio_id === portfolio.portfolio_id &&
-    Object.keys(weights).length === portfolio.holdings.length &&
-    portfolio.holdings.every(
-      ({ symbol, weight }) =>
-        typeof weights[symbol] === "number" &&
-        Math.abs(weights[symbol] - weight) <= 1e-10,
-    )
-  );
-}
-
-export const listPortfolios = async (signal?: AbortSignal) =>
-  (
-    await eventRequest<{ portfolios: Portfolio[] }>(
-      "/portfolios",
-      "GET",
-      undefined,
-      { signal },
-    )
-  ).portfolios;
-export const createPortfolio = (input: PortfolioInput, signal?: AbortSignal) =>
-  eventRequest<Portfolio>("/portfolios", "POST", input, { signal });
-export const updatePortfolio = (id: string, input: PortfolioInput) =>
-  eventRequest<Portfolio>(
-    `/portfolios/${encodeURIComponent(id)}`,
-    "PUT",
-    input,
-  );
-export const createAnalysis = (id: string) =>
-  eventRequest<SavedAnalysis>(
-    `/portfolios/${encodeURIComponent(id)}/analysis`,
-    "POST",
-  );
-export const listAnalyses = async (id: string) =>
-  (
-    await eventRequest<{ analyses: SavedAnalysis[] }>(
-      `/portfolios/${encodeURIComponent(id)}/analyses`,
-    )
-  ).analyses;
-export const getSavedAnalysis = (portfolioId: string, analysisId: string) =>
-  eventRequest<SavedAnalysis>(
-    `/portfolios/${encodeURIComponent(portfolioId)}/analyses/${encodeURIComponent(analysisId)}`,
-  );
-export const requestSavedAnalysisBriefing = (
-  portfolioId: string,
-  analysisId: string,
-) =>
-  eventRequest<AIWorkflowResponse>(
-    `/portfolios/${encodeURIComponent(portfolioId)}/briefing`,
-    "POST",
-    { analysis_id: analysisId },
-  );
-export const requestSavedRiskExplanation = (
-  portfolioId: string,
-  analysisId: string,
-  question: string,
-) =>
-  eventRequest<AIWorkflowResponse>(
-    `/portfolios/${encodeURIComponent(portfolioId)}/risk/explanation`,
-    "POST",
-    { analysis_id: analysisId, question },
-  );
-export const searchInstruments = async (q: string, signal?: AbortSignal) =>
-  (
-    await eventRequest<{ instruments: Instrument[] }>(
-      `/instruments?q=${encodeURIComponent(q)}`,
-      "GET",
-      undefined,
-      { signal },
-    )
-  ).instruments;
-
 export type EventTemplate = {
   template_id: string;
   version: string;
@@ -262,9 +146,14 @@ export type DraftProposal = {
 export type ScenarioDraft = {
   draft_id: string;
   created_at?: string;
+  portfolio_revision?: number | null;
+  allocation_snapshot?: Portfolio | null;
+  proposed_weights?: Record<string, number> | null;
+  price_provenance?: Record<string, unknown> | null;
+  price_window?: { start: string | null; end: string | null };
   request?: {
     portfolio_id: string;
-    analysis_id: string;
+    portfolio_revision?: number;
     template_id: string;
     situation_id?: string | null;
     target_symbol?: string | null;
@@ -276,6 +165,7 @@ export type ScenarioDraft = {
     description?: string;
     question?: string;
     proposed_weights?: Record<string, number> | null;
+    source_run_id?: string;
   };
   status:
     | "pending"
@@ -295,7 +185,6 @@ export type CaseResult = {
   holding_contributions: Record<string, number>;
 };
 export type ScenarioResult = {
-  analysis_id?: string;
   current_weights?: Record<string, number>;
   proposed_weights?: Record<string, number>;
   cases: Array<{
@@ -331,7 +220,11 @@ export type ConditionalRange = {
 };
 export type ScenarioRun = {
   run_id: string;
-  analysis_id?: string;
+  portfolio_revision?: number | null;
+  allocation_snapshot?: Portfolio | null;
+  proposed_weights?: Record<string, number> | null;
+  price_provenance?: Record<string, unknown> | null;
+  price_window?: { start: string | null; end: string | null };
   created_at?: string;
   status:
     "pending" | "queued" | "running" | "completed" | "failed" | "cancelled";
@@ -340,7 +233,6 @@ export type ScenarioRun = {
   sourced_facts?: SourcedFact[];
   evidence?: Evidence[];
   confirmed_shocks?: CaseGrid<ConfirmedShock>;
-  price_provenance?: unknown;
   allocation?: unknown;
 };
 export type RunMessage = {
@@ -356,16 +248,19 @@ export type RunMessage = {
   created_at: string;
 };
 
-export const listTemplates = async (portfolioId: string) =>
+export const listTemplates = async (
+  portfolioId: string,
+  proposedSymbols: string[] = [],
+) =>
   (
     await eventRequest<{ templates: EventTemplate[] }>(
-      `/events/templates?portfolio_id=${encodeURIComponent(portfolioId)}`,
+      `/events/templates?portfolio_id=${encodeURIComponent(portfolioId)}${proposedSymbols.map((symbol) => `&proposed_symbol=${encodeURIComponent(symbol)}`).join("")}`,
     )
   ).templates;
 export const createDraft = (
   body: {
     portfolio_id: string;
-    analysis_id: string;
+    portfolio_revision?: number;
     template_id: string;
     situation_id?: string;
     target_symbol?: string;

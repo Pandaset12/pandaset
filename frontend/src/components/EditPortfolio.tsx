@@ -41,6 +41,7 @@ export function EditPortfolio({
   const values = parsePercentageDraft(rows.map(({ percentage }) => percentage));
   const valid =
     values !== null &&
+    rows.length <= MAX_HOLDINGS &&
     rows.every(({ percentage }) => parsePercentage(percentage) !== null);
   const totalUnits = rows.reduce(
     (sum, row) => sum + (parsePercentage(row.percentage, true) ?? 0),
@@ -139,7 +140,9 @@ export function EditPortfolio({
       </div>
       {!valid && (
         <p className="field-error" role="alert">
-          Enter a weight above 0% for every holding and total exactly 100%.
+          {rows.length > MAX_HOLDINGS
+            ? `Keep at most ${MAX_HOLDINGS} holdings to analyze this portfolio.`
+            : "Enter a weight above 0% for every holding and total exactly 100%."}
         </p>
       )}
       <div className="modal-actions">

@@ -1,7 +1,7 @@
-# PortfolioLens application API + Gemini
+# Pandaset application API + Gemini
 
-The backend owns the frontend API, input validation, analysis orchestration,
-saved snapshots, Gemini prompts, and error handling. Market ingestion, Tiger Data,
+The backend owns the frontend API, input validation, on-demand calculations,
+event-run input snapshots, Gemini prompts, and error handling. Market ingestion, Tiger Data,
 MongoDB infrastructure and financial formulas belong to the data/quant teammates.
 See [the shared HLD](../PortfolioLens-HLD.md) and [integration design](INTEGRATION.md).
 
@@ -19,9 +19,9 @@ The event lab is disabled by default. Copy `backend/.env.example` to the ignored
 publishable key, `SUPABASE_SIGNING_MODE`, Mongo URI, Alpaca key and secret,
 `ALPACA_HISTORY_FEED`, Gemini key,
 `TAVILY_API_KEY`, and `DEEPSEEK_API_KEY`. All v2 routes verify a bearer access
-token and derive the Mongo owner from its verified subject. V1 uses Supabase Auth
-to resolve portfolio ownership and remains separate. V2 analyses request
-adjusted daily history from Alpaca and never substitute demo prices.
+token and derive the Mongo owner from its verified subject. Both APIs use the
+same owner-scoped portfolio in SQLite. Event drafts request adjusted daily
+history from Alpaca and never substitute demo prices.
 
 For an internal release, keep `EVENT_LAB_PUBLIC_ENABLED=false` and populate
 `EVENT_LAB_ALLOWED_USER_IDS` with a comma-separated list of invited Supabase
@@ -32,11 +32,11 @@ does not by itself release probabilities; the quant engine also needs accepted
 held-out calibration evidence. Current v2 runs omit conditional ranges and show
 the reason while returning deterministic cases.
 
-The scenario workflow is: save a portfolio, create an immutable analysis, choose
-an event area and suggested situation or describe a custom one, create a draft,
+The scenario workflow is: save a portfolio, compare a proposed allocation,
+choose an event area and suggested situation or describe a custom one, create a draft,
 review cited facts and proposed shocks, confirm the
 shocks, then poll the run. Mongo stores queued jobs, leases, attempts, pinned
-snapshots, and run chat so work can resume after a process restart. The `rates`
+event inputs, and run chat so work can resume after a process restart. The `rates`
 factor means **TLT adjusted return**, not a yield change. FRED yield observations
 are contextual evidence. Tavily searches only curated official hosts and news
 hosts listed in `APPROVED_NEWS_DOMAINS`; search snippets are not evidence. A
@@ -79,13 +79,12 @@ The server and public sample-price history can start without vendor keys.
 The v1 market-data provider defaults to fictional sample prices. V1 portfolio
 routes require `SUPABASE_URL` and either `SUPABASE_PUBLISHABLE_KEY` or the legacy
 `SUPABASE_ANON_KEY` to verify the bearer session and scope SQLite portfolios and
-analysis snapshots to the user, even in demo mode. Copy `backend/.env.example`
+current metrics to the user, even in demo mode. Copy `backend/.env.example`
 to the ignored `backend/.env` and use the frontend's Supabase project. Requests
 carry the investor's access token in `Authorization: Bearer <access_token>`.
 
-V1 uses ignored `backend/data/portfoliolens.sqlite3`. The gated v2 routes use
-verified Supabase identity and the implemented owner-scoped MongoDB store.
-See the event-lab configuration above; enabling it does not migrate v1 records.
+V1 uses ignored `backend/data/portfoliolens.sqlite3` as the authoritative portfolio store. The gated v2 event routes use that same portfolio identity and owner-scoped MongoDB drafts/runs.
+See the [unified migration guide](../docs/unified-what-if-release.md) before enabling event research for existing v2 users.
 Tiger Data is not connected.
 
 ## First frontend flow
@@ -97,9 +96,9 @@ token local. Do not paste it into issues or commit it.
 1. `POST /api/v1/portfolios` creates a portfolio owned by the current investor:
    `{"name":"My portfolio","holdings":[{"symbol":"SPY","weight":1.0}]}`.
    Copy its `portfolio_id`; `GET /api/v1/portfolios` lists your saved portfolios.
-2. `POST /api/v1/portfolios/{portfolio_id}/analysis` creates a saved analysis.
-   Its `analysis_id` can be used to retrieve the snapshot or request a briefing
-   or risk explanation.
+2. `GET /api/v1/portfolios/{portfolio_id}/metrics` calculates the selected
+   portfolio's current metrics. A briefing or risk explanation takes its
+   `portfolio_revision` and recomputes the exact metric context on demand.
 The legacy seeded `demo` portfolio is unassigned and is not accessible to investor
 accounts; create an owned portfolio for manual testing. Any valid allocation
 using NVDA, MSFT, AAPL, JPM, VTI, TLT, AMD, GLD, or SPY can be analyzed and compared
@@ -119,14 +118,13 @@ is a sample session-date label, not a live quote or exchange closing timestamp.
 | GET | `/api/v1/portfolios` | List portfolios owned by the authenticated investor |
 | PUT | `/api/v1/portfolios/{id}` | Replace the authenticated owner's portfolio name and holdings; retains ID and creation time |
 | GET | `/api/v1/portfolios/{id}` | Read saved portfolio |
-| POST | `/api/v1/portfolios/{id}/analysis` | Validate provider output and save a snapshot |
-| GET | `/api/v1/portfolios/{id}/analyses/{analysis_id}` | Read that snapshot |
+| GET | `/api/v1/portfolios/{id}/metrics` | Calculate current metrics without saving an analysis |
 | GET | `/api/v1/quotes?symbols=AAPL&symbols=MSFT` | Optional Alpaca IEX latest-trade snapshots; separate from daily portfolio analysis |
 | GET | `/api/v1/assets/search?q=Apple` | Authenticated company/symbol lookup; sample symbols in demo mode, read-only Alpaca US equity directory in Alpaca mode |
 | POST | `/api/v1/portfolios/{id}/what-if` | Compare saved and proposed holdings on the selected market-data history |
-| POST | `/api/v1/portfolios/{id}/briefing` | Write a briefing from one saved analysis |
-| POST | `/api/v1/portfolios/{id}/risk/explanation` | Explain risk using one saved analysis |
-| POST | `/api/v1/portfolios/{id}/what-if/explanation` | Recalculate and explain a proposal against a saved analysis |
+| POST | `/api/v1/portfolios/{id}/briefing` | Explain metrics for the selected portfolio revision |
+| POST | `/api/v1/portfolios/{id}/risk/explanation` | Explain risk for the selected portfolio revision |
+| POST | `/api/v1/portfolios/{id}/what-if/explanation` | Recalculate and explain a proposed allocation on aligned history |
 | POST | `/api/v1/research/{symbol}/summary` | Summarize the allowlisted issuer source for a supported symbol |
 
 Holdings use `{"symbol":"NVDA","weight":0.3}`. Weights are finite long-only
@@ -139,7 +137,7 @@ investor's objects 404, a portfolio changed during analysis 409, and provider
 errors 502. The inactive precomputed test provider can also return 501.
 AI failures on the contextual workflow routes return HTTP 200
 with `status: "unavailable"`, an `error_code` when available, and warnings.
-Saved metrics or the selected Research source remain accessible. Quant-provider
+Current metrics or the selected Research source remain accessible. Quant-provider
 failures on What-if routes still use HTTP errors. The frontend must check
 `status`; HTTP 200 does not imply that an AI explanation succeeded.
 
@@ -174,10 +172,10 @@ is not used by this service. Never commit actual keys.
 | ALPACA_ASSETS_BASE_URL | Read-only stock-directory host, paper by default; use `https://api.alpaca.markets` with live account credentials |
 | ALPACA_DISPLAY_RIGHTS_CONFIRMED / ALPACA_CACHE_RIGHTS_CONFIRMED | Public event-lab display and history-retention gates; default false |
 
-The Overview and Event Lab's optional live-price strip polls the authenticated
+The Overview's optional live-price strip polls the authenticated
 `/api/v1/quotes` endpoint every 15 seconds while the page is visible. It accepts
-1–25 unique symbols (at most 20 characters each), including Event Lab's larger
-portfolios. This quote limit is independent of the eight-symbol v1 analysis limit.
+1–25 unique symbols (at most 20 characters each). This quote limit is independent
+of the eight-symbol portfolio and What-if limit.
 It uses Alpaca's free IEX feed, which covers one exchange rather than consolidated
 US market activity; it is labeled IEX and is not used by the quant engine or
 saved risk metrics. A successful free API call does not itself establish public
@@ -262,10 +260,10 @@ unsupported.
   and what-if asset unions. Formulas remain unchanged in the quant module.
   `DemoQuantProvider` remains available only for precomputed-fixture regression tests.
 - **Data/infrastructure (Vincent):** supply normalized adjusted-close price access,
-  source/freshness metadata, and the MongoDB portfolio/snapshot adapter. Agree on
-  where the API invokes data loading before calling the quant function. Live
-  snapshots require a timezone-aware market timestamp, observation count and source.
-- **Frontend (Meirzhan):** agree on v1 payloads, analysis IDs, null metrics, partial
+  source/freshness metadata, and durable MongoDB storage for event drafts and runs.
+  Confirm the main portfolio store has one writer and a persistent volume. Event
+  input snapshots require a timezone-aware market timestamp, observation count and source.
+- **Frontend (Meirzhan):** agree on current-metric and portfolio-revision payloads, null metrics, partial
   AI responses, citation display and frontend origins. Use `/docs` for the
   actual request/response schema.
 - **Team:** provide the server-side Gemini key/model/quota, decide natural-language
@@ -326,14 +324,14 @@ implemented. The deployment owner should account for those public vendor calls.
 
 SQLite needs persistent storage if used for a hosted demo. Do not assume an
 ephemeral filesystem survives rebuilds or is shared across replicas. Confirm a
-single-instance persistent volume for v1. V2 uses configured MongoDB; verify its
-deployment persistence separately. Neither path automatically migrates the
-other's portfolios. See the rollout gates in
-[INTEGRATION.md](INTEGRATION.md).
+single-instance persistent volume for the main portfolio store. Event drafts
+and runs use configured MongoDB; verify its deployment persistence separately.
+Legacy Mongo-only portfolios require the reviewed import described in
+[the unified release guide](../docs/unified-what-if-release.md).
 ## Investor ownership
 
 Set `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` in `backend/.env` to the same project used by frontend authentication. V1 also accepts a legacy `SUPABASE_ANON_KEY`; when it is set, that key takes precedence for v1 Supabase Auth requests. The backend validates Bearer tokens through Supabase Auth. New portfolios are owned by the authenticated user; legacy SQLite rows are retained with no owner and are not returned to investors. `/api/v1/portfolios` lists only the caller's portfolios. No Supabase service role secret is needed.
 
-Updating a portfolio preserves its `portfolio_id`, `owner_id`, and original `created_at`. When its allocation changes, saved analyses for that portfolio are deleted in the same SQLite transaction. Old analysis IDs then return 404; the client creates a fresh analysis for the new allocation. An analysis computed before an update cannot be saved afterward.
+Updating a portfolio preserves its `portfolio_id`, `owner_id`, and original `created_at` and increments its revision. Current metrics and AI explanations reject stale revisions. Event drafts and runs retain their pinned allocation and price context across later edits. Legacy analysis rows are read only during the migration period and must be backed up before cleanup.
 
 Market-history preflight and subsequent analysis reuse successful per-symbol daily price frames for 60 seconds. The cache obtains an analysis-length window even when preflight requests only two days, so the immediate analysis does not fetch those symbols again. Failed history requests are not cached. The cache lives in the API process; separate workers have separate caches.

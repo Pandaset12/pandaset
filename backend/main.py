@@ -68,6 +68,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     event_store = await run_in_threadpool(
                         MongoPortfolioStore, "", settings.mongo_database,
                         database=mongo_client[settings.mongo_database],
+                        portfolio_repository=store,
                         supported_symbol=lambda symbol: symbol in SUPPORTED_INSTRUMENTS,
                         max_active_jobs_per_owner=settings.event_max_active_jobs_per_user,
                         max_messages_per_run=settings.event_max_messages_per_run,

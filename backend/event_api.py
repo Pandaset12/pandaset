@@ -17,16 +17,14 @@ from .auth import AuthenticatedUser, require_user
 from .config import Settings, get_settings
 from .event_agents import answer_run_question
 from .event_jobs import FACTOR_SYMBOLS
-from .event_schemas import ChatRequest, ConfirmRequest, DraftRequest, EventPortfolioInput, validate_shocks
+from .event_schemas import ChatRequest, ConfirmRequest, DraftRequest, validate_shocks
 from .event_templates import EventTemplateNotFound, get_event_template, list_event_templates
-from .gemini_service import (GeminiRateLimited, GeminiUnavailable,
-                             gemini_cooldown_remaining, generate_analysis_workflow)
+from .gemini_service import GeminiRateLimited, gemini_cooldown_remaining
 from .instruments import SUPPORTED_INSTRUMENTS, resolve_instrument, search_instruments
 from .mongo_store import (IdempotencyConflict, InvalidTransition, MongoPortfolioStore,
                           QuotaExceeded, RecordNotFound, ReservationInProgress)
 from .providers import map_quant_report
-from .schemas import AIWorkflowResponse, AnalysisWorkflowRequest, AnalyticsSnapshot
-from .storage import SnapshotNotFound
+from .schemas import MAX_PORTFOLIO_SYMBOLS
 from .alpaca_history import AlpacaHistoryProvider, CoverageError, ProviderUnavailable, RateLimitError
 
 router = APIRouter(prefix="/api/v2", tags=["event-lab"])
@@ -61,7 +59,7 @@ def _store(request: Request, user: AuthenticatedUser = Depends(require_user),
 
 
 def _map_store_error(exc: Exception) -> HTTPException:
-    if isinstance(exc, (RecordNotFound, SnapshotNotFound)):
+    if isinstance(exc, RecordNotFound):
         return _not_found()
     if isinstance(exc, IdempotencyConflict):
         return _error(409, "IDEMPOTENCY_CONFLICT", "This key was used for a different request.")
@@ -92,7 +90,7 @@ def _check_snapshot_coverage(record: dict, symbols: set[str]) -> None:
 async def _call(method, *args, **kwargs):
     try:
         return await run_in_threadpool(method, *args, **kwargs)
-    except (RecordNotFound, SnapshotNotFound, IdempotencyConflict, InvalidTransition, QuotaExceeded, ValueError) as exc:
+    except (RecordNotFound, IdempotencyConflict, InvalidTransition, QuotaExceeded, ValueError) as exc:
         raise _map_store_error(exc) from exc
 
 
@@ -132,141 +130,27 @@ async def portfolios(context=Depends(_store)):
     return {"portfolios": await _call(store.list_portfolios, user.user_id)}
 
 
-@router.post("/portfolios", status_code=201)
-async def create_portfolio(body: EventPortfolioInput, context=Depends(_store)):
-    store, user, _ = context
-    return await _call(store.create_portfolio, user.user_id, body)
-
-
-@router.get("/portfolios/{portfolio_id}")
-async def portfolio(portfolio_id: str, context=Depends(_store)):
-    store, user, _ = context
-    item = await _call(store.get_portfolio, user.user_id, portfolio_id)
-    if item is None:
-        raise _not_found()
-    return item
-
-
-@router.put("/portfolios/{portfolio_id}")
-@router.patch("/portfolios/{portfolio_id}")
-async def update_portfolio(portfolio_id: str, body: EventPortfolioInput, context=Depends(_store)):
-    store, user, _ = context
-    return await _call(store.update_portfolio, user.user_id, portfolio_id, body)
-
-
-@router.delete("/portfolios/{portfolio_id}", status_code=204)
-async def delete_portfolio(portfolio_id: str, context=Depends(_store)):
-    store, user, _ = context
-    if not await _call(store.delete_portfolio, user.user_id, portfolio_id):
-        raise _not_found()
-
-
-@router.post("/portfolios/{portfolio_id}/analysis", status_code=201)
-async def create_analysis(portfolio_id: str, request: Request, context=Depends(_store)):
-    store, user, settings = context
-    portfolio = await _call(store.get_portfolio, user.user_id, portfolio_id)
-    if portfolio is None:
-        raise _not_found()
-    provider: AlpacaHistoryProvider = request.app.state.event_price_provider
-    symbols = sorted(portfolio.weights)
-    try:
-        prices, factor_prices = await _aligned_histories(provider, settings, symbols)
-        report = await run_in_threadpool(analyze_portfolio, prices, portfolio.weights)
-        metrics = map_quant_report(report, portfolio_id, prices.attrs.get("provenance"))
-    except RateLimitError as exc:
-        raise _error(429, "PROVIDER_RATE_LIMIT", str(exc)) from exc
-    except CoverageError as exc:
-        raise _error(422, "PRICE_COVERAGE", str(exc)) from exc
-    except ProviderUnavailable as exc:
-        raise _error(502, "PROVIDER_UNAVAILABLE", str(exc)) from exc
-    except ValueError as exc:
-        raise _error(422, "PRICE_COVERAGE", str(exc)) from exc
-    snapshot = {
-        "dates": [day.isoformat() for day in prices.index],
-        "holding_prices": {symbol: prices[symbol].astype(float).tolist() for symbol in prices.columns},
-        "factor_prices": {symbol: factor_prices[symbol].astype(float).tolist() for symbol in factor_prices.columns},
-        "provenance": prices.attrs.get("provenance", {}),
-        "factor_provenance": factor_prices.attrs.get("provenance", {}),
-    }
-    analysis_id, created_at = await _call(store.save_analysis, user.user_id, metrics,
-                                          portfolio.model_dump(mode="json"), snapshot, MODEL_VERSION)
-    return {"analysis_id": analysis_id, "portfolio_id": portfolio_id, "created_at": created_at,
-            "metrics": metrics, "price_provenance": snapshot["provenance"]}
-
-
-@router.get("/portfolios/{portfolio_id}/analyses/{analysis_id}")
-async def get_analysis(portfolio_id: str, analysis_id: str, context=Depends(_store)):
-    store, user, _ = context
-    record = await _call(store.get_analysis_record, user.user_id, portfolio_id, analysis_id)
-    if record is None:
-        raise _not_found()
-    return {"analysis_id": analysis_id, "portfolio_id": portfolio_id,
-            "created_at": record["created_at"], "metrics": record["metrics"],
-            "price_provenance": record["price_snapshot"].get("provenance", {})}
-
-
-@router.get("/portfolios/{portfolio_id}/analyses")
-async def list_analyses(portfolio_id: str, limit: int = Query(default=10, ge=1, le=50),
-                        context=Depends(_store)):
-    store, user, _ = context
-    if await _call(store.get_portfolio, user.user_id, portfolio_id) is None:
-        raise _not_found()
-    records = await _call(store.list_analyses, user.user_id, portfolio_id, limit)
-    return {"analyses": [
-        {"analysis_id": item["id"], "portfolio_id": portfolio_id,
-         "created_at": item["created_at"], "metrics": item["metrics"],
-         "price_provenance": item.get("price_snapshot", {}).get("provenance", {})}
-        for item in records
-    ]}
-
-
-async def _saved_analysis_workflow(workflow: str, portfolio_id: str,
-                                   body: AnalysisWorkflowRequest, context) -> AIWorkflowResponse:
-    store, user, settings = context
-    record = await _call(store.get_analysis_record, user.user_id, portfolio_id, body.analysis_id)
-    if record is None:
-        raise _not_found()
-    metrics = AnalyticsSnapshot.model_validate(record["metrics"])
-    try:
-        output = await generate_analysis_workflow(
-            workflow, body.question, metrics, body.analysis_id, settings,
-        )
-    except GeminiRateLimited as exc:
-        raise _gemini_rate_limit_error(exc.retry_after_seconds) from exc
-    except GeminiUnavailable as exc:
-        raise _error(502, "GEMINI_UNAVAILABLE", str(exc)) from exc
-    return AIWorkflowResponse(
-        workflow=workflow, analyst_mode="gemini", status="complete",
-        analysis_id=body.analysis_id, **output,
-    )
-
-
-@router.post("/portfolios/{portfolio_id}/briefing", response_model=AIWorkflowResponse)
-async def saved_briefing(portfolio_id: str, body: AnalysisWorkflowRequest,
-                         context=Depends(_store)):
-    return await _saved_analysis_workflow("analysis_briefing", portfolio_id, body, context)
-
-
-@router.post("/portfolios/{portfolio_id}/risk/explanation", response_model=AIWorkflowResponse)
-async def saved_risk_explanation(portfolio_id: str, body: AnalysisWorkflowRequest,
-                                 context=Depends(_store)):
-    return await _saved_analysis_workflow("risk_explanation", portfolio_id, body, context)
-
-
 @router.get("/instruments")
 async def instruments(q: str = Query(default="", max_length=80), context=Depends(_store)):
     return {"instruments": [asdict(item) for item in search_instruments(q)]}
 
 
 @router.get("/events/templates")
-async def templates(portfolio_id: str | None = None, context=Depends(_store)):
+async def templates(portfolio_id: str | None = None,
+                    proposed_symbol: list[str] = Query(default=[]), context=Depends(_store)):
     store, user, _ = context
     instruments_for_portfolio = None
     if portfolio_id:
         portfolio = await _call(store.get_portfolio, user.user_id, portfolio_id)
         if portfolio is None:
             raise _not_found()
-        instruments_for_portfolio = [resolve_instrument(symbol) for symbol in portfolio.weights]
+        symbols = set(portfolio.weights) | {symbol.strip().upper() for symbol in proposed_symbol}
+        if len(symbols) > MAX_PORTFOLIO_SYMBOLS:
+            raise _error(422, "SYMBOL_LIMIT_EXCEEDED", "Event research supports at most eight symbols across both allocations.")
+        try:
+            instruments_for_portfolio = [resolve_instrument(symbol) for symbol in sorted(symbols)]
+        except (KeyError, ValueError) as exc:
+            raise _error(422, "UNSUPPORTED_SYMBOL", "An event allocation symbol is unsupported.") from exc
     templates = [asdict(item) for item in list_event_templates(instruments_for_portfolio)]
     for template in templates:
         template["target_symbols"] = (
@@ -283,7 +167,7 @@ async def drafts(portfolio_id: str, context=Depends(_store)):
 
 
 @router.post("/scenarios/drafts", status_code=202)
-async def create_draft(body: DraftRequest, context=Depends(_store),
+async def create_draft(body: DraftRequest, request: Request, context=Depends(_store),
                        idempotency_key: str | None = Header(default=None, max_length=128)):
     store, user, settings = context
     try:
@@ -291,25 +175,66 @@ async def create_draft(body: DraftRequest, context=Depends(_store),
     except EventTemplateNotFound as exc:
         raise _error(422, "UNKNOWN_TEMPLATE", "Event template is unsupported.") from exc
     situation = _situation_snapshot(template, body)
-    if await _call(store.get_portfolio, user.user_id, body.portfolio_id) is None:
-        raise _not_found()
-    record = await _call(store.get_analysis_record, user.user_id, body.portfolio_id, body.analysis_id)
-    if record is None:
-        raise _not_found()
-    _validate_draft_allocation(template, body, record["metrics"]["weights"])
-    try:
-        _check_snapshot_coverage(record, set(record["metrics"]["weights"]))
-    except ValueError as exc:
-        raise _error(422, "PRICE_COVERAGE", str(exc)) from exc
     payload = body.model_dump(mode="json", exclude_none=True)
     payload["template_version"] = template.version
     if situation:
         payload["situation_snapshot"] = situation
+    portfolio = await _call(store.get_portfolio, user.user_id, body.portfolio_id)
+    if portfolio is None:
+        raise _not_found()
+    existing = await _call(store.existing_draft, user.user_id, body.portfolio_id,
+                           payload, idempotency_key)
+    if existing is not None:
+        return {"draft_id": existing["id"], "status": existing["status"]}
+    pinned_context = None
+    if body.portfolio_revision is not None:
+        if portfolio.revision != body.portfolio_revision:
+            raise _error(409, "PORTFOLIO_CHANGED", "Portfolio changed. Reload its allocation before researching an event.")
+        proposed = body.proposed_weights or portfolio.weights
+        union = sorted(set(portfolio.weights) | set(proposed))
+        _validate_event_allocation(template, body, union)
+        provider: AlpacaHistoryProvider = request.app.state.event_price_provider
+        try:
+            prices, factor_prices = await _aligned_histories(provider, settings, union)
+            current_union = {symbol: portfolio.weights.get(symbol, 0.0) for symbol in union}
+            proposed_union = {symbol: proposed.get(symbol, 0.0) for symbol in union}
+            report = await run_in_threadpool(analyze_portfolio, prices, current_union)
+            metrics = map_quant_report(report, body.portfolio_id, prices.attrs.get("provenance"))
+            snapshot = {
+                "dates": [day.isoformat() for day in prices.index],
+                "holding_prices": {symbol: prices[symbol].astype(float).tolist() for symbol in union},
+                "factor_prices": {symbol: factor_prices[symbol].astype(float).tolist()
+                                  for symbol in factor_prices.columns},
+                "provenance": prices.attrs.get("provenance", {}),
+                "factor_provenance": factor_prices.attrs.get("provenance", {}),
+            }
+            allocation = portfolio.model_dump(mode="json")
+            allocation["holdings"] = [{"symbol": symbol, "weight": current_union[symbol]}
+                                      for symbol in union]
+            pinned_context = {
+                "portfolio_revision": portfolio.revision,
+                "allocation_snapshot": allocation,
+                "price_snapshot": snapshot,
+                "analysis_snapshot": metrics.model_dump(mode="json"),
+                "model_version": MODEL_VERSION,
+                "proposed_weights": proposed_union,
+            }
+            _check_snapshot_coverage({"metrics": pinned_context["analysis_snapshot"],
+                                      "price_snapshot": snapshot}, set(union))
+        except RateLimitError as exc:
+            raise _error(429, "PROVIDER_RATE_LIMIT", str(exc)) from exc
+        except ProviderUnavailable as exc:
+            raise _error(502, "PROVIDER_UNAVAILABLE", str(exc)) from exc
+        except (CoverageError, ValueError) as exc:
+            raise _error(422, "PRICE_COVERAGE", str(exc)) from exc
+        latest = await _call(store.get_portfolio, user.user_id, body.portfolio_id)
+        if latest is None or latest.revision != portfolio.revision:
+            raise _error(409, "PORTFOLIO_CHANGED", "Portfolio changed while event inputs were prepared. Retry.")
     cooldown = gemini_cooldown_remaining()
     if cooldown and not settings.has_deepseek_key:
         raise _gemini_rate_limit_error(cooldown)
     draft = await _call(store.create_draft, user.user_id, body.portfolio_id,
-                        payload, idempotency_key)
+                        payload, idempotency_key, context=pinned_context)
     return {"draft_id": draft["id"], "status": draft["status"]}
 
 
@@ -333,20 +258,36 @@ def _validate_target(template, target_symbol: str | None, portfolio_weights: dic
         raise _error(422, "INVALID_TARGET", "This event does not use a target stock.")
 
 
-def _validate_draft_allocation(template, body: DraftRequest, analysis_weights: dict) -> None:
-    eligible = {item.template_id for item in list_event_templates(
-        [resolve_instrument(symbol) for symbol in analysis_weights])}
+def _validate_event_allocation(template, body: DraftRequest, symbols: list[str]) -> None:
+    if len(symbols) > MAX_PORTFOLIO_SYMBOLS:
+        raise _error(422, "SYMBOL_LIMIT_EXCEEDED",
+                     f"Current and proposed allocations may contain at most {MAX_PORTFOLIO_SYMBOLS} symbols combined.")
+    try:
+        instruments = [resolve_instrument(symbol) for symbol in symbols]
+    except (KeyError, ValueError) as exc:
+        raise _error(422, "UNSUPPORTED_SYMBOL", "An allocation symbol is not supported by event research.") from exc
+    eligible = {item.template_id for item in list_event_templates(instruments)}
     if template.template_id not in eligible:
-        raise _error(422, "UNKNOWN_TEMPLATE", "This template does not apply to the saved analysis.")
-    _validate_target(template, body.target_symbol, analysis_weights)
-    if body.proposed_weights is not None and set(body.proposed_weights) != set(analysis_weights):
-        raise _error(422, "INVALID_WEIGHTS", "Proposed weights must cover the saved holdings.")
+        raise _error(422, "UNKNOWN_TEMPLATE", "This template does not apply to the selected allocation.")
+    _validate_target(template, body.target_symbol, dict.fromkeys(symbols, 0.0))
+
+
+def _price_window(snapshot: dict | None) -> dict:
+    dates = (snapshot or {}).get("dates") or []
+    return {"start": dates[0] if dates else None, "end": dates[-1] if dates else None}
 
 
 def public_draft(item: dict) -> dict:
+    context = item.get("context") or {}
+    request = {key: value for key, value in item["request"].items() if key != "analysis_id"}
     return {"draft_id": item["id"], "portfolio_id": item["portfolio_id"],
             "status": item["status"], "revision": item.get("revision"),
-            "request": item["request"], "proposal": item.get("proposal"),
+            "request": request, "proposal": item.get("proposal"),
+            "portfolio_revision": context.get("portfolio_revision"),
+            "allocation_snapshot": context.get("allocation_snapshot"),
+            "proposed_weights": context.get("proposed_weights"),
+            "price_provenance": (context.get("price_snapshot") or {}).get("provenance"),
+            "price_window": _price_window(context.get("price_snapshot")),
             "confirmed_shocks": item.get("confirmed_shocks"),
             "attempt_count": item["attempt_count"], "last_error": item.get("last_error"),
             "created_at": item["created_at"], "updated_at": item["updated_at"]}
@@ -369,10 +310,11 @@ async def confirm(draft_id: str, body: ConfirmRequest, context=Depends(_store)):
         raise _not_found()
     if item["status"] not in {"ready", "confirmed"} or item.get("revision") != body.revision:
         raise _map_store_error(InvalidTransition(draft_id))
-    record = await _call(store.get_analysis_record, user.user_id, item["portfolio_id"],
-                         item["request"]["analysis_id"])
-    if record is None:
-        raise _not_found()
+    context_snapshot = item.get("context")
+    if context_snapshot is None:
+        raise _error(409, "MIGRATION_REQUIRED", "This draft needs its saved inputs restored before confirmation.")
+    record = {"metrics": context_snapshot["analysis_snapshot"],
+              "price_snapshot": context_snapshot["price_snapshot"]}
     symbols = set(record["metrics"]["weights"])
     try:
         _check_snapshot_coverage(record, symbols)
@@ -393,8 +335,7 @@ async def confirm(draft_id: str, body: ConfirmRequest, context=Depends(_store)):
                 raise
     # A stable server key gives one run per confirmed draft. If run insertion or
     # quota checks fail after confirmation, the same request can be retried.
-    run = await _call(store.create_run, user.user_id, draft_id, item["request"]["analysis_id"],
-                      f"confirmed:{draft_id}")
+    run = await _call(store.create_run, user.user_id, draft_id, f"confirmed:{draft_id}")
     return {"run_id": run["id"], "status": run["status"]}
 
 
@@ -421,9 +362,17 @@ async def runs(portfolio_id: str, context=Depends(_store)):
 
 
 def public_run(item: dict) -> dict:
+    result = item.get("result")
+    if isinstance(result, dict):
+        result = {key: value for key, value in result.items() if key != "analysis_id"}
     return {"run_id": item["id"], "portfolio_id": item["portfolio_id"],
-            "draft_id": item["draft_id"], "analysis_id": item["analysis_id"],
-            "status": item["status"], "result": item.get("result"),
+            "draft_id": item["draft_id"],
+            "portfolio_revision": item.get("portfolio_revision"),
+            "allocation_snapshot": item.get("allocation_snapshot"),
+            "proposed_weights": item.get("proposed_weights"),
+            "price_provenance": (item.get("price_snapshot") or {}).get("provenance"),
+            "price_window": _price_window(item.get("price_snapshot")),
+            "status": item["status"], "result": result,
             "attempt_count": item["attempt_count"], "last_error": item.get("last_error"),
             "created_at": item["created_at"], "updated_at": item["updated_at"]}
 
@@ -541,15 +490,19 @@ async def post_message(run_id: str, body: ChatRequest, context=Depends(_store),
                     (symbol for symbol in saved_weights
                      if resolve_instrument(symbol).kind == "us_stock"), None,
                 )
+            if item.get("portfolio_revision") is None:
+                raise _error(409, "REVISION_UNAVAILABLE", "This older run needs its saved inputs restored before revision.")
             revision = body.revision or DraftRequest(
-                portfolio_id=item["portfolio_id"], analysis_id=item["analysis_id"],
+                portfolio_id=item["portfolio_id"],
+                portfolio_revision=item["portfolio_revision"],
                 template_id=template_id, question=body.content,
                 situation_id=prior.get("situation_id"),
                 target_symbol=prior_target,
                 proposed_weights=item.get("proposed_weights"),
             )
-            if revision.portfolio_id != item["portfolio_id"] or revision.analysis_id != item["analysis_id"]:
-                raise _error(422, "INVALID_REVISION", "A run revision must use its saved portfolio and analysis.")
+            if (revision.portfolio_id != item["portfolio_id"]
+                    or revision.portfolio_revision != item["portfolio_revision"]):
+                raise _error(422, "INVALID_REVISION", "A run revision must use its saved portfolio inputs.")
             try:
                 template = get_event_template(revision.template_id)
             except EventTemplateNotFound as exc:
@@ -557,16 +510,28 @@ async def post_message(run_id: str, body: ChatRequest, context=Depends(_store),
             situation = _situation_snapshot(template, revision)
             if await _call(store.get_portfolio, user.user_id, item["portfolio_id"]) is None:
                 raise _not_found()
-            _validate_draft_allocation(template, revision, saved_weights)
+            _validate_event_allocation(template, revision, list(saved_weights))
+            if revision.proposed_weights is not None and set(revision.proposed_weights) != set(saved_weights):
+                raise _error(422, "INVALID_WEIGHTS", "A run revision must cover its saved symbols.")
             payload = revision.model_dump(mode="json", exclude_none=True)
             payload["template_version"] = template.version
+            payload["source_run_id"] = run_id
             if situation:
                 payload["situation_snapshot"] = situation
             cooldown = gemini_cooldown_remaining()
             if cooldown and not settings.has_deepseek_key:
                 raise _gemini_rate_limit_error(cooldown)
+            pinned_context = {
+                "portfolio_revision": item["portfolio_revision"],
+                "allocation_snapshot": item["allocation_snapshot"],
+                "price_snapshot": item["price_snapshot"],
+                "analysis_snapshot": item["analysis_snapshot"],
+                "model_version": item["model_version"],
+                "proposed_weights": revision.proposed_weights or item["proposed_weights"],
+            }
             new_draft = await _call(store.create_draft, user.user_id, item["portfolio_id"],
-                                    payload, idempotency_key)
+                                    payload, idempotency_key, context=pinned_context,
+                                    allow_historical_revision=True)
             return await _save_chat_message(
                 store, user.user_id, run_id,
                 {"role": "user", "content": body.content, "request": request_payload,

@@ -51,3 +51,7 @@ An event draft SHALL retain the allocation and portfolio revision with which it 
 #### Scenario: Open a saved run
 - **WHEN** an owner opens a saved event run after changing the portfolio
 - **THEN** the run shows its original portfolio label, allocations, evidence, assumptions, and modeled results
+
+#### Scenario: Revise a saved run after changing the portfolio
+- **WHEN** an owner requests a new draft from a saved run whose portfolio allocation has since changed
+- **THEN** the new draft identifies that it uses the saved run's historical inputs and can be reviewed and confirmed without substituting the current editor allocation

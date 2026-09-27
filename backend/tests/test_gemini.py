@@ -54,7 +54,7 @@ def test_invalid_model_output_is_rejected(raw):
     client = FakeClient(response_with_text(raw))
     with pytest.raises(GeminiUnavailable):
         asyncio.run(generate_analysis_workflow(
-            "risk_explanation", "Explain risk", demo_metrics(), "analysis-42",
+            "risk_explanation", "Explain risk", demo_metrics(),
             settings(), client_factory=lambda **_: client,
         ))
     assert client.closed
@@ -67,7 +67,7 @@ def test_entire_gemini_operation_times_out_and_closes_client():
     client = FakeClient(side_effect=slow_response)
     with pytest.raises(GeminiUnavailable, match="time limit"):
         asyncio.run(generate_analysis_workflow(
-            "risk_explanation", "Explain risk", demo_metrics(), "analysis-42",
+            "risk_explanation", "Explain risk", demo_metrics(),
             settings(gemini_timeout_seconds=0.02), client_factory=lambda **_: client,
         ))
     assert client.closed
@@ -103,7 +103,7 @@ def test_risk_workflow_rejects_model_authored_numbers(explanation):
     client = FakeClient(response_with_text(raw))
     with pytest.raises(GeminiUnavailable, match="numerical prose"):
         asyncio.run(generate_analysis_workflow(
-            "risk_explanation", "Explain risk", demo_metrics(), "analysis-42",
+            "risk_explanation", "Explain risk", demo_metrics(),
             settings(), client_factory=lambda **_: client,
         ))
 
@@ -116,13 +116,13 @@ def test_analysis_workflow_uses_its_prompt_and_no_web_tools():
     client = FakeClient(response_with_text(raw))
     result = asyncio.run(generate_analysis_workflow(
         "risk_explanation", "Explain the largest risk driver.", demo_metrics(),
-        "analysis-42", settings(), client_factory=lambda **_: client,
+        settings(), client_factory=lambda **_: client,
     ))
     call = client.models.generate_content.call_args.kwargs
     context = json.loads(call["contents"])
     assert "risk explanation writer" in call["config"].system_instruction.lower()
     assert call["config"].tools is None
-    assert context["analysis_id"] == "analysis-42"
+    assert "analysis_id" not in context
     assert context["available_metrics"]["risk_contribution.NVDA"] == 0.41
     assert "series" not in context["portfolio_snapshot"]
     assert result["citations"][0].value == 0.41
@@ -142,11 +142,11 @@ def test_briefing_and_risk_use_distinct_saved_evidence():
     })))
 
     briefing_result = asyncio.run(generate_analysis_workflow(
-        "analysis_briefing", "Brief this portfolio.", metrics, "analysis-42",
+        "analysis_briefing", "Brief this portfolio.", metrics,
         settings(), client_factory=lambda **_: briefing,
     ))
     risk_result = asyncio.run(generate_analysis_workflow(
-        "risk_explanation", "Explain my risk.", metrics, "analysis-42",
+        "risk_explanation", "Explain my risk.", metrics,
         settings(), client_factory=lambda **_: risk,
     ))
 
@@ -171,7 +171,7 @@ def test_briefing_and_risk_use_distinct_saved_evidence():
     })))
     with pytest.raises(GeminiUnavailable, match="not present"):
         asyncio.run(generate_analysis_workflow(
-            "risk_explanation", "Explain my risk.", metrics, "analysis-42",
+            "risk_explanation", "Explain my risk.", metrics,
             settings(), client_factory=lambda **_: wrong_field,
         ))
 
@@ -198,11 +198,10 @@ def test_scenario_citations_are_resolved_from_the_quant_comparison():
     })
     client = FakeClient(response_with_text(raw))
     generated = asyncio.run(generate_scenario_workflow(
-        "Explain the trade-offs.", comparison, settings(), analysis_id="analysis-42",
-        client_factory=lambda **_: client,
+        "Explain the trade-offs.", comparison, settings(), client_factory=lambda **_: client,
     ))
     context = json.loads(client.models.generate_content.call_args.kwargs["contents"])
-    assert context["analysis_id"] == "analysis-42"
+    assert "analysis_id" not in context
     assert context["available_metrics"]["delta.portfolio_volatility"] == 0.012
     assert "series" not in context["baseline"]
     assert "series" not in context["proposed"]

@@ -32,3 +32,7 @@ Before retiring the event portfolio collection, the migration SHALL import each 
 #### Scenario: Conflicting portfolio
 - **WHEN** an event-only portfolio conflicts with an existing main portfolio
 - **THEN** migration records the conflict and leaves both source records unchanged for resolution
+
+#### Scenario: Legacy portfolio exceeds the analysis limit
+- **WHEN** an event-only portfolio has more than eight valid holdings
+- **THEN** migration preserves the portfolio in the main owner-scoped list and analysis reports the symbol limit until its owner edits the allocation

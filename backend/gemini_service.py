@@ -495,7 +495,6 @@ async def generate_analysis_workflow(
     workflow: Literal["analysis_briefing", "risk_explanation"],
     question: str,
     metrics: AnalyticsSnapshot,
-    analysis_id: str,
     settings: Settings,
     *,
     client_factory=None,
@@ -518,7 +517,6 @@ async def generate_analysis_workflow(
         prompt=workflow_prompt(workflow),
         context={
             "question": question,
-            "analysis_id": analysis_id,
             "portfolio_snapshot": snapshot,
             "available_metrics": available_metrics,
         },
@@ -541,7 +539,6 @@ async def generate_scenario_workflow(
     comparison: dict[str, Any],
     settings: Settings,
     *,
-    analysis_id: str | None = None,
     client_factory=None,
 ) -> dict[str, Any]:
     catalog, _, _ = scenario_metric_catalog(comparison)
@@ -556,7 +553,6 @@ async def generate_scenario_workflow(
         prompt=workflow_prompt("scenario_explanation"),
         context={
             "question": question,
-            "analysis_id": analysis_id,
             "baseline": workflow_snapshot_context(baseline),
             "proposed": workflow_snapshot_context(proposed),
             "delta": comparison.get("delta", {}),

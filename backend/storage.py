@@ -7,11 +7,7 @@ from uuid import uuid4
 from .schemas import AnalyticsSnapshot, Portfolio, PortfolioInput
 
 
-class SnapshotNotFound(Exception):
-    pass
-
-
-class StalePortfolio(Exception):
+class PortfolioImportConflict(Exception):
     pass
 
 
@@ -75,6 +71,48 @@ class PortfolioStore:
             )
         return portfolio
 
+    @staticmethod
+    def _import_state(row, portfolio: Portfolio, owner_id: str) -> str:
+        if row is None:
+            return "candidate"
+        payload, existing_owner = row
+        if existing_owner != owner_id:
+            return "owner_conflict"
+        existing = Portfolio.model_validate_json(payload)
+        if existing.name != portfolio.name or existing.weights != portfolio.weights:
+            return "content_conflict"
+        return "already_imported"
+
+    def inspect_import(self, portfolio: Portfolio, owner_id: str) -> str:
+        if not owner_id.strip():
+            raise ValueError("An owner is required for portfolio import.")
+        with self.connection() as connection:
+            row = connection.execute(
+                "SELECT payload, owner_id FROM portfolios WHERE portfolio_id = ?",
+                (portfolio.portfolio_id,),
+            ).fetchone()
+        return self._import_state(row, portfolio, owner_id)
+
+    def import_existing(self, portfolio: Portfolio, owner_id: str) -> str:
+        """Import an owner-scoped portfolio without replacing any existing ID."""
+        if not owner_id.strip():
+            raise ValueError("An owner is required for portfolio import.")
+        with self.connection() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute(
+                "SELECT payload, owner_id FROM portfolios WHERE portfolio_id = ?",
+                (portfolio.portfolio_id,),
+            ).fetchone()
+            state = self._import_state(row, portfolio, owner_id)
+            if state == "candidate":
+                connection.execute(
+                    "INSERT INTO portfolios (portfolio_id, payload, owner_id) VALUES (?, ?, ?)",
+                    (portfolio.portfolio_id, portfolio.model_dump_json(), owner_id),
+                )
+            elif state != "already_imported":
+                raise PortfolioImportConflict(state)
+        return "imported" if state == "candidate" else state
+
     def get(self, portfolio_id: str, owner_id: str) -> Portfolio | None:
         with self.connection() as connection:
             row = connection.execute(
@@ -95,13 +133,12 @@ class PortfolioStore:
             updated = Portfolio(
                 **request.model_dump(), portfolio_id=portfolio_id,
                 created_at=previous.created_at,
+                revision=previous.revision + 1,
             )
             connection.execute(
                 "UPDATE portfolios SET payload = ? WHERE portfolio_id = ? AND owner_id = ?",
                 (updated.model_dump_json(), portfolio_id, owner_id),
             )
-            if updated.weights != previous.weights:
-                connection.execute("DELETE FROM analyses WHERE portfolio_id = ?", (portfolio_id,))
         return updated
 
     def list_for_owner(self, owner_id: str) -> list[Portfolio]:
@@ -126,30 +163,3 @@ class PortfolioStore:
                 (portfolio_id, owner_id),
             )
         return True
-
-    def save_analysis(self, metrics: AnalyticsSnapshot, owner_id: str) -> tuple[str, datetime]:
-        analysis_id = "analysis_" + uuid4().hex
-        created_at = datetime.now(timezone.utc)
-        with self.connection() as connection:
-            connection.execute("BEGIN IMMEDIATE")
-            row = connection.execute(
-                "SELECT payload FROM portfolios WHERE portfolio_id = ? AND owner_id = ?",
-                (metrics.portfolio_id, owner_id),
-            ).fetchone()
-            if row is None or Portfolio.model_validate_json(row[0]).weights != metrics.weights:
-                raise StalePortfolio(metrics.portfolio_id)
-            connection.execute(
-                "INSERT INTO analyses VALUES (?, ?, ?, ?)",
-                (analysis_id, metrics.portfolio_id, created_at.isoformat(), metrics.model_dump_json()),
-            )
-        return analysis_id, created_at
-
-    def get_analysis(self, portfolio_id: str, analysis_id: str) -> tuple[AnalyticsSnapshot, datetime]:
-        with self.connection() as connection:
-            row = connection.execute(
-                "SELECT metrics, created_at FROM analyses WHERE portfolio_id = ? AND analysis_id = ?",
-                (portfolio_id, analysis_id),
-            ).fetchone()
-        if not row:
-            raise SnapshotNotFound(analysis_id)
-        return AnalyticsSnapshot.model_validate_json(row[0]), datetime.fromisoformat(row[1])

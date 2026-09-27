@@ -1,6 +1,5 @@
 import sqlite3
-from contextlib import contextmanager
-from threading import Event, Thread, current_thread
+from threading import Event, Thread
 from uuid import uuid4
 
 import pytest
@@ -9,7 +8,8 @@ from pydantic import SecretStr
 
 from backend.config import Settings, get_settings
 from backend.main import create_app
-from backend.storage import PortfolioStore, SnapshotNotFound, StalePortfolio
+from backend.providers import SamplePriceProvider, EngineQuantProvider, get_provider
+from backend.storage import PortfolioStore
 from backend.schemas import PortfolioInput
 
 
@@ -51,12 +51,11 @@ def test_auth_and_portfolio_ownership(client):
     assert api.get(f"/api/v1/portfolios/{portfolio_id}", headers=owner).status_code == 200
     assert api.get(f"/api/v1/portfolios/{portfolio_id}", headers=other).status_code == 404
     for method, path, body in [
-        ("post", "analysis", None),
-        ("get", "analyses/nonexistent", None),
-        ("post", "briefing", {"analysis_id": "nonexistent"}),
-        ("post", "risk/explanation", {"analysis_id": "nonexistent"}),
+        ("get", "metrics", None),
+        ("post", "briefing", {"portfolio_revision": 1}),
+        ("post", "risk/explanation", {"portfolio_revision": 1}),
         ("post", "what-if", {"holdings": payload["holdings"]}),
-        ("post", "what-if/explanation", {"analysis_id": "nonexistent", "proposed_weights": {"SPY": 1.0}}),
+        ("post", "what-if/explanation", {"portfolio_revision": 1, "proposed_weights": {"SPY": 1.0}}),
     ]:
         response = getattr(api, method)(f"/api/v1/portfolios/{portfolio_id}/{path}", json=body, headers=other) if method == "post" else api.get(f"/api/v1/portfolios/{portfolio_id}/{path}", headers=other)
         assert response.status_code == 404, (path, response.text)
@@ -86,8 +85,8 @@ def test_legacy_sqlite_migrates_without_assigning_owner(tmp_path):
         assert db.execute("SELECT owner_id FROM portfolios WHERE portfolio_id='legacy'").fetchone() == (None,)
 
 
-def test_update_preserves_identity_and_owner_and_invalidates_old_analyses(client):
-    api, users = client
+def test_update_preserves_identity_and_owner_and_increments_revision(client):
+    api, _ = client
     owner = {"Authorization": "Bearer owner"}
     other = {"Authorization": "Bearer other"}
     created = api.post("/api/v1/portfolios", json={
@@ -95,34 +94,33 @@ def test_update_preserves_identity_and_owner_and_invalidates_old_analyses(client
     }, headers=owner).json()
     portfolio_id = created["portfolio_id"]
     path = f"/api/v1/portfolios/{portfolio_id}"
-    analysis = api.post(path + "/analysis", headers=owner)
-    assert analysis.status_code == 200, analysis.text
-    analysis_id = analysis.json()["analysis_id"]
-    old_metrics, _ = api.app.state.store.get_analysis(portfolio_id, analysis_id)
+    metrics = api.get(path + "/metrics", headers=owner)
+    assert metrics.status_code == 200, metrics.text
+    assert metrics.json()["portfolio_revision"] == 1
 
     replacement = {"name": "Updated", "holdings": [{"symbol": "TLT", "weight": 1.0}]}
     assert api.put(path, json=replacement).status_code == 401
     assert api.put(path, json=replacement, headers=other).status_code == 404
     assert api.put(path, json={"name": "Bad", "holdings": []}, headers=owner).status_code == 422
-    for _ in range(2):
+    for revision in (2, 3):
         updated_response = api.put(path, json=replacement, headers=owner)
         assert updated_response.status_code == 200, updated_response.text
         updated = updated_response.json()
         assert updated["portfolio_id"] == portfolio_id
         assert updated["created_at"] == created["created_at"]
         assert updated["holdings"] == replacement["holdings"]
+        assert updated["revision"] == revision
         assert len(api.get("/api/v1/portfolios", headers=owner).json()) == 1
     assert api.get(path, headers=owner).json()["holdings"] == replacement["holdings"]
     assert api.get(path, headers=other).status_code == 404
-    assert api.get(path + f"/analyses/{analysis_id}", headers=owner).status_code == 404
-    with pytest.raises(StalePortfolio):
-        api.app.state.store.save_analysis(old_metrics, users["owner"])
-    refreshed = api.post(path + "/analysis", headers=owner)
+    assert api.post(path + "/briefing", json={"portfolio_revision": 1}, headers=owner).status_code == 409
+    refreshed = api.get(path + "/metrics", headers=owner)
     assert refreshed.status_code == 200, refreshed.text
     assert refreshed.json()["weights"] == {"TLT": 1.0}
+    assert refreshed.json()["portfolio_revision"] == 3
 
 
-def test_delete_requires_owner_and_removes_saved_analyses(client):
+def test_delete_requires_owner_and_removes_portfolio(client):
     api, users = client
     owner = {"Authorization": "Bearer owner"}
     other = {"Authorization": "Bearer other"}
@@ -130,7 +128,6 @@ def test_delete_requires_owner_and_removes_saved_analyses(client):
         "name": "Delete me", "holdings": [{"symbol": "SPY", "weight": 1.0}],
     }, headers=owner).json()
     path = f"/api/v1/portfolios/{created['portfolio_id']}"
-    analysis = api.post(path + "/analysis", headers=owner).json()
     assert api.delete(path).status_code == 401
     assert api.delete(path, headers=other).status_code == 404
     assert api.get(path, headers=owner).status_code == 200
@@ -138,8 +135,7 @@ def test_delete_requires_owner_and_removes_saved_analyses(client):
     assert api.get(path, headers=owner).status_code == 404
     assert api.delete(path, headers=owner).status_code == 404
     assert api.get("/api/v1/portfolios", headers=owner).json() == []
-    with pytest.raises(SnapshotNotFound):
-        api.app.state.store.get_analysis(created["portfolio_id"], analysis["analysis_id"])
+    assert api.get(path + "/metrics", headers=owner).status_code == 404
     assert api.app.state.store.list_for_owner(users["other"]) == []
 
 
@@ -184,7 +180,7 @@ def test_provider_outage_does_not_persist_unverified_portfolio(client, monkeypat
     assert api.get("/api/v1/portfolios", headers=owner).json() == []
 
 
-def test_preflight_history_is_reused_by_following_analysis(client, monkeypatch):
+def test_preflight_history_is_reused_by_following_metrics(client, monkeypatch):
     from backend.providers import SamplePriceProvider
 
     api, _ = client
@@ -203,12 +199,12 @@ def test_preflight_history_is_reused_by_following_analysis(client, monkeypatch):
         {"symbol": "SPY", "weight": 0.5}, {"symbol": "TLT", "weight": 0.5},
     ]}, headers=headers)
     assert created.status_code == 201
-    analysis = api.post(f"/api/v1/portfolios/{created.json()['portfolio_id']}/analysis", headers=headers)
+    analysis = api.get(f"/api/v1/portfolios/{created.json()['portfolio_id']}/metrics", headers=headers)
     assert analysis.status_code == 200, analysis.text
     assert calls == [(("SPY",), 252), (("TLT",), 252)]
 
 
-def test_alpaca_preflight_is_reused_by_analysis_when_cache_rights_confirmed(client, monkeypatch):
+def test_alpaca_preflight_is_reused_by_metrics_when_cache_rights_confirmed(client, monkeypatch):
     import pandas as pd
     from backend.alpaca_history import AlpacaHistoryProvider
 
@@ -241,14 +237,14 @@ def test_alpaca_preflight_is_reused_by_analysis_when_cache_rights_confirmed(clie
         {"symbol": "SPY", "weight": 1.0},
     ]}, headers=headers)
     assert created.status_code == 201, created.text
-    analysis = api.post(f"/api/v1/portfolios/{created.json()['portfolio_id']}/analysis", headers=headers)
+    analysis = api.get(f"/api/v1/portfolios/{created.json()['portfolio_id']}/metrics", headers=headers)
     assert analysis.status_code == 200, analysis.text
     assert analysis.json()["data_mode"] == "live"
     assert analysis.json()["observation_count"] == 252
     assert calls == [("SPY",)]
 
 
-def test_alpaca_analysis_uses_each_saved_portfolios_symbols_and_weights(client, monkeypatch):
+def test_alpaca_metrics_use_each_saved_portfolios_symbols_and_weights(client, monkeypatch):
     import pandas as pd
     from backend.alpaca_history import AlpacaHistoryProvider
 
@@ -283,14 +279,14 @@ def test_alpaca_analysis_uses_each_saved_portfolios_symbols_and_weights(client, 
             "name": f"Saved {index}", "holdings": holdings,
         }, headers=headers)
         assert created.status_code == 201, created.text
-        response = api.post(
-            f"/api/v1/portfolios/{created.json()['portfolio_id']}/analysis",
+        response = api.get(
+            f"/api/v1/portfolios/{created.json()['portfolio_id']}/metrics",
             headers=headers,
         )
         assert response.status_code == 200, response.text
         analyses.append(response.json())
 
-    assert calls == [("SPY",), ("SPY", "TLT")]
+    assert calls == [("SPY",), ("SPY",), ("SPY", "TLT"), ("SPY", "TLT")]
     assert analyses[0]["weights"] == {"SPY": 1.0}
     assert analyses[1]["weights"] == {"SPY": 0.25, "TLT": 0.75}
     assert set(analyses[0]["series"]["asset_index"]) == {"SPY"}
@@ -307,10 +303,15 @@ def test_alpaca_analysis_uses_each_saved_portfolios_symbols_and_weights(client, 
     ("rate_limit", 429, "PROVIDER_RATE_LIMIT"),
     ("incomplete", 404, "MARKET_HISTORY_NOT_FOUND"),
 ])
-def test_alpaca_analysis_failures_never_save_sample_results(client, monkeypatch, failure, status, code):
+def test_alpaca_metric_failures_never_save_sample_results(client, monkeypatch, failure, status, code):
     from backend.alpaca_history import AlpacaHistoryProvider, CoverageError, RateLimitError
 
     api, _ = client
+    headers = {"Authorization": "Bearer owner"}
+    created = api.post("/api/v1/portfolios", json={
+        "name": "Unavailable", "holdings": [{"symbol": "SPY", "weight": 1.0}],
+    }, headers=headers)
+    assert created.status_code == 201
     settings = api.app.dependency_overrides[get_settings]().model_copy(update={
         "market_data_provider": "alpaca",
         "alpaca_api_key": SecretStr("" if failure == "missing_config" else "test-key"),
@@ -327,13 +328,8 @@ def test_alpaca_analysis_failures_never_save_sample_results(client, monkeypatch,
         raise CoverageError("Alpaca history is incomplete.")
 
     monkeypatch.setattr(AlpacaHistoryProvider, "_fetch", fetch)
-    headers = {"Authorization": "Bearer owner"}
-    created = api.post("/api/v1/portfolios", json={
-        "name": "Unavailable", "holdings": [{"symbol": "SPY", "weight": 1.0}],
-    }, headers=headers)
-    assert created.status_code == 201
-    response = api.post(
-        f"/api/v1/portfolios/{created.json()['portfolio_id']}/analysis",
+    response = api.get(
+        f"/api/v1/portfolios/{created.json()['portfolio_id']}/metrics",
         headers=headers,
     )
     assert response.status_code == status, response.text
@@ -381,58 +377,35 @@ def test_what_if_uses_aligned_alpaca_history_for_added_holding(client, monkeypat
     assert any("IEX" in note for note in payload["proposed_analysis"]["notes"])
 
 
-def test_concurrent_update_cannot_leave_an_old_analysis_after_commit(client, monkeypatch):
+def test_metrics_reject_a_portfolio_edit_during_calculation(client):
     api, users = client
     headers = {"Authorization": "Bearer owner"}
     created = api.post("/api/v1/portfolios", json={"name": "Before", "holdings": [
         {"symbol": "SPY", "weight": 1.0},
     ]}, headers=headers).json()
-    portfolio_id = created["portfolio_id"]
-    response = api.post(f"/api/v1/portfolios/{portfolio_id}/analysis", headers=headers)
-    assert response.status_code == 200
-    metrics, _ = api.app.state.store.get_analysis(portfolio_id, response.json()["analysis_id"])
+    selected, resume = Event(), Event()
     store = api.app.state.store
-    original_connection = store.connection
-    selected = Event()
-    resume = Event()
-    update_started = Event()
+
+    class BlockingProvider(EngineQuantProvider):
+        def analyze(self, portfolio):
+            selected.set()
+            assert resume.wait(5)
+            return super().analyze(portfolio)
+
+    api.app.dependency_overrides[get_provider] = lambda: BlockingProvider(store, SamplePriceProvider())
     outcome = {}
 
-    @contextmanager
-    def paused_connection():
-        with original_connection() as connection:
-            class ConnectionProxy:
-                def execute(self, sql, parameters=()):
-                    result = connection.execute(sql, parameters)
-                    if current_thread().name == "save-old-analysis" and sql.startswith("SELECT payload FROM portfolios"):
-                        selected.set()
-                        assert resume.wait(5)
-                    return result
+    def calculate():
+        outcome["response"] = api.get(f"/api/v1/portfolios/{created['portfolio_id']}/metrics", headers=headers)
 
-            yield ConnectionProxy()
-
-    monkeypatch.setattr(store, "connection", paused_connection)
-
-    def save_old():
-        outcome["analysis"] = store.save_analysis(metrics, users["owner"])[0]
-
-    def update():
-        update_started.set()
-        outcome["updated"] = store.update(portfolio_id, users["owner"], PortfolioInput(
-            name="After", holdings=[{"symbol": "TLT", "weight": 1.0}],
-        ))
-
-    saver = Thread(target=save_old, name="save-old-analysis")
-    updater = Thread(target=update, name="update-portfolio")
-    saver.start()
+    worker = Thread(target=calculate)
+    worker.start()
     assert selected.wait(5)
-    updater.start()
-    assert update_started.wait(5)
-    assert updater.is_alive()
+    store.update(created["portfolio_id"], users["owner"], PortfolioInput(name="After", holdings=[
+        {"symbol": "TLT", "weight": 1.0},
+    ]))
     resume.set()
-    saver.join(5)
-    updater.join(5)
-    assert not saver.is_alive() and not updater.is_alive()
-    assert outcome["updated"].weights == {"TLT": 1.0}
-    with pytest.raises(SnapshotNotFound):
-        store.get_analysis(portfolio_id, outcome["analysis"])
+    worker.join(5)
+    assert not worker.is_alive()
+    assert outcome["response"].status_code == 409
+    assert outcome["response"].json()["error"]["code"] == "PORTFOLIO_CHANGED"

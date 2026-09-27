@@ -2,7 +2,7 @@
 
 Records use opaque string IDs. Every user-data query includes ``owner_id``;
 the owner is supplied only by the verified API identity, never request JSON.
-Analysis and run inputs are copied at creation so refreshed prices and edited
+Draft and run inputs are copied at creation so refreshed prices and edited
 portfolios cannot alter a saved result.
 """
 
@@ -18,8 +18,7 @@ from pymongo.database import Database
 from pymongo.errors import DuplicateKeyError
 
 from .event_schemas import EventPortfolio, EventPortfolioInput
-from .schemas import AnalyticsSnapshot
-from .storage import SnapshotNotFound
+from .storage import PortfolioStore
 
 
 class IdempotencyConflict(Exception):
@@ -95,6 +94,7 @@ class MongoPortfolioStore:
         database_name: str = "portfoliolens",
         *,
         database: Database | None = None,
+        portfolio_repository: PortfolioStore | None = None,
         supported_symbol: Callable[[str], bool] | None = None,
         max_active_jobs_per_owner: int = 5,
         max_messages_per_run: int = 100,
@@ -107,12 +107,11 @@ class MongoPortfolioStore:
         else:
             self.client = database.client
         self.db = database
+        self.portfolio_repository = portfolio_repository
         self.supported_symbol = supported_symbol
         self.max_active_jobs_per_owner = max_active_jobs_per_owner
         self.max_messages_per_run = max_messages_per_run
         self.portfolios = database["portfolios"]
-        self.analyses = database["analyses"]
-        self.analysis_counters = database["analysis_counters"]
         self.drafts = database["scenario_drafts"]
         self.runs = database["scenario_runs"]
         self.messages = database["run_messages"]
@@ -126,7 +125,6 @@ class MongoPortfolioStore:
 
     def _ensure_indexes(self) -> None:
         self.portfolios.create_index([("owner_id", ASCENDING), ("created_at", DESCENDING)])
-        self.analyses.create_index([("owner_id", ASCENDING), ("portfolio_id", ASCENDING), ("sequence", DESCENDING)])
         self.drafts.create_index([("owner_id", ASCENDING), ("portfolio_id", ASCENDING), ("created_at", DESCENDING)])
         self.runs.create_index([("owner_id", ASCENDING), ("portfolio_id", ASCENDING), ("created_at", DESCENDING)])
         self.messages.create_index([("owner_id", ASCENDING), ("run_id", ASCENDING), ("created_at", ASCENDING)])
@@ -314,10 +312,16 @@ class MongoPortfolioStore:
         return portfolio
 
     def list_portfolios(self, owner_id: str) -> list[EventPortfolio]:
+        if self.portfolio_repository is not None:
+            return [EventPortfolio.model_validate(item.model_dump())
+                    for item in self.portfolio_repository.list_for_owner(_owner(owner_id))]
         cursor = self.portfolios.find(_visible(owner_id)).sort("created_at", DESCENDING)
         return [EventPortfolio.model_validate(doc["payload"]) for doc in cursor]
 
     def get_portfolio(self, owner_id: str, portfolio_id: str) -> EventPortfolio | None:
+        if self.portfolio_repository is not None:
+            portfolio = self.portfolio_repository.get(portfolio_id, _owner(owner_id))
+            return EventPortfolio.model_validate(portfolio.model_dump()) if portfolio else None
         doc = self.portfolios.find_one(_visible(owner_id, portfolio_id))
         return EventPortfolio.model_validate(doc["payload"]) if doc else None
 
@@ -352,73 +356,8 @@ class MongoPortfolioStore:
         self.messages.delete_many(scope)
         self.runs.delete_many(scope)
         self.drafts.delete_many(scope)
-        self.analyses.delete_many(scope)
         self.portfolios.delete_one({"_id": portfolio_id, "owner_id": owner_id, "deleted_at": {"$exists": True}})
         return True
-
-    def save_analysis(
-        self,
-        owner_id: str,
-        metrics: AnalyticsSnapshot,
-        allocation_snapshot: dict[str, Any] | None = None,
-        price_snapshot: dict[str, Any] | None = None,
-        model_version: str = "unknown",
-    ) -> tuple[str, datetime]:
-        portfolio = self.get_portfolio(owner_id, metrics.portfolio_id)
-        if portfolio is None:
-            raise RecordNotFound(metrics.portfolio_id)
-        if metrics.weights != portfolio.weights:
-            raise ValueError("Analysis allocation must match the selected portfolio.")
-        allocation = portfolio.model_dump(mode="json")
-        if allocation_snapshot is not None and allocation_snapshot != allocation:
-            raise ValueError("Allocation snapshot must match the saved portfolio.")
-        if not isinstance(allocation, dict) or not isinstance(price_snapshot, dict) or not price_snapshot:
-            raise ValueError("Allocation and adjusted-price snapshots are required.")
-        if not isinstance(model_version, str) or not model_version.strip():
-            raise ValueError("A model version is required.")
-        analysis_id, created_at = "analysis_" + uuid4().hex, _now()
-        counter = self.analysis_counters.find_one_and_update(
-            {"_id": f"{owner_id}:{metrics.portfolio_id}"},
-            {"$inc": {"sequence": 1}}, upsert=True, return_document=ReturnDocument.AFTER,
-        )
-        self.analyses.insert_one({
-            "_id": analysis_id,
-            "owner_id": _owner(owner_id),
-            "portfolio_id": metrics.portfolio_id,
-            "created_at": created_at,
-            "sequence": counter["sequence"],
-            "metrics": metrics.model_dump(mode="json"),
-            "allocation_snapshot": deepcopy(allocation),
-            "price_snapshot": deepcopy(price_snapshot),
-            "model_version": model_version,
-        })
-        return analysis_id, created_at
-
-    def get_analysis(self, owner_id: str, portfolio_id: str, analysis_id: str) -> tuple[AnalyticsSnapshot, datetime]:
-        record = self.get_analysis_record(owner_id, portfolio_id, analysis_id)
-        if record is None:
-            raise SnapshotNotFound(analysis_id)
-        return AnalyticsSnapshot.model_validate(record["metrics"]), record["created_at"]
-
-    def list_analyses(self, owner_id: str, portfolio_id: str, limit: int = 20) -> list[dict[str, Any]]:
-        """Newest saved analyses, including their immutable metrics, for one owner."""
-        if not isinstance(limit, int) or isinstance(limit, bool) or not 1 <= limit <= 50:
-            raise ValueError("Analysis list limit must be between 1 and 50.")
-        if self.get_portfolio(owner_id, portfolio_id) is None:
-            raise RecordNotFound(portfolio_id)
-        query = {**_visible(owner_id), "portfolio_id": portfolio_id}
-        cursor = self.analyses.find(
-            query, {"_id": 1, "portfolio_id": 1, "created_at": 1, "metrics": 1,
-                    "price_snapshot.provenance": 1}
-        ).sort("sequence", DESCENDING).limit(limit)
-        return [_public(doc) for doc in cursor]
-
-    def get_analysis_record(self, owner_id: str, portfolio_id: str, analysis_id: str) -> dict[str, Any] | None:
-        if self.get_portfolio(owner_id, portfolio_id) is None:
-            return None
-        query = _visible(owner_id, analysis_id)
-        query["portfolio_id"] = portfolio_id
-        return _public(self.analyses.find_one(query))
 
     def _insert_idempotent(
         self,
@@ -429,9 +368,10 @@ class MongoPortfolioStore:
         idempotency_key: str | None,
         *,
         initializing: bool = False,
+        hash_payload: dict[str, Any] | None = None,
     ) -> tuple[dict[str, Any], bool]:
         key = _idempotency_key(idempotency_key)
-        content_hash = _payload_hash(payload)
+        content_hash = _payload_hash(hash_payload if hash_payload is not None else payload)
         now = _now()
         doc = {
             "_id": record_id,
@@ -451,7 +391,9 @@ class MongoPortfolioStore:
         except DuplicateKeyError as exc:
             if key is None:
                 raise
-            existing = self._existing_idempotent(collection, owner_id, key, payload)
+            existing = self._existing_idempotent(
+                collection, owner_id, key, hash_payload if hash_payload is not None else payload
+            )
             if existing is None:
                 raise IdempotencyConflict(key) from exc
             return existing, False
@@ -509,28 +451,38 @@ class MongoPortfolioStore:
         portfolio_id: str,
         request: dict[str, Any],
         idempotency_key: str | None = None,
+        *,
+        context: dict[str, Any] | None = None,
+        allow_historical_revision: bool = False,
     ) -> dict[str, Any]:
-        if self.get_portfolio(owner_id, portfolio_id) is None:
+        portfolio = self.get_portfolio(owner_id, portfolio_id)
+        if portfolio is None:
             raise RecordNotFound(portfolio_id)
         if not isinstance(request, dict) or not request:
             raise ValueError("Draft request must be a nonempty object.")
-        analysis_id = request.get("analysis_id")
-        if not isinstance(analysis_id, str) or self.get_analysis_record(owner_id, portfolio_id, analysis_id) is None:
-            raise SnapshotNotFound(str(analysis_id))
-        payload = {
+        if context is None or not all(context.get(field) for field in (
+            "portfolio_revision", "allocation_snapshot", "price_snapshot",
+            "analysis_snapshot", "model_version", "proposed_weights",
+        )):
+            raise ValueError("A complete pinned event context is required.")
+        if not allow_historical_revision and portfolio.revision != context["portfolio_revision"]:
+            raise InvalidTransition("Portfolio changed before event inputs were saved.")
+        stable_payload = {
             "portfolio_id": portfolio_id,
             "status": "pending",
             "attempt_count": 0,
             "request": deepcopy(request),
         }
-        existing = self._existing_idempotent(self.drafts, owner_id, idempotency_key, payload)
+        payload = {**stable_payload, "context": deepcopy(context)}
+        existing = self._existing_idempotent(self.drafts, owner_id, idempotency_key, stable_payload)
         if existing is not None:
             return existing
         draft_id = "draft_" + uuid4().hex
         self._reserve_job(owner_id, draft_id)
         try:
             record, inserted = self._insert_idempotent(
-                self.drafts, draft_id, owner_id, payload, idempotency_key, initializing=True
+                self.drafts, draft_id, owner_id, payload, idempotency_key,
+                initializing=True, hash_payload=stable_payload,
             )
         except Exception:
             self._release_job(owner_id, draft_id)
@@ -540,9 +492,22 @@ class MongoPortfolioStore:
             return record
         return self._finish_admission(
             self.drafts, self._job_quota_id(owner_id), owner_id, draft_id,
-            ready_status="pending", parent_exists=lambda: self.get_portfolio(owner_id, portfolio_id) is not None,
+            ready_status="pending", parent_exists=lambda: (
+                (current := self.get_portfolio(owner_id, portfolio_id)) is not None
+                and (allow_historical_revision or current.revision == context["portfolio_revision"])
+            ),
             parent_id=portfolio_id,
         )
+
+    def existing_draft(self, owner_id: str, portfolio_id: str,
+                       request: dict[str, Any], idempotency_key: str | None) -> dict[str, Any] | None:
+        """Return an earlier pinned draft for an identical retry, even if prices changed."""
+        if self.get_portfolio(owner_id, portfolio_id) is None:
+            raise RecordNotFound(portfolio_id)
+        return self._existing_idempotent(self.drafts, owner_id, idempotency_key, {
+            "portfolio_id": portfolio_id, "status": "pending", "attempt_count": 0,
+            "request": request,
+        })
 
     def get_draft(self, owner_id: str, draft_id: str) -> dict[str, Any] | None:
         doc = self.drafts.find_one(_visible(owner_id, draft_id))
@@ -681,32 +646,30 @@ class MongoPortfolioStore:
         self,
         owner_id: str,
         draft_id: str,
-        analysis_id: str,
         idempotency_key: str | None = None,
     ) -> dict[str, Any]:
         draft = self.get_draft(owner_id, draft_id)
         if draft is None or draft["status"] != "confirmed":
             raise InvalidTransition(draft_id)
         portfolio_id = draft["portfolio_id"]
-        analysis = self.get_analysis_record(owner_id, portfolio_id, analysis_id)
-        if analysis is None:
-            raise SnapshotNotFound(analysis_id)
-        if draft["request"].get("analysis_id") != analysis_id:
-            raise ValueError("Run analysis must match the confirmed draft.")
+        context = draft.get("context")
+        if context is None:
+            raise ValueError("Event draft inputs need migration before a run can start.")
         payload = {
             "portfolio_id": portfolio_id,
             "draft_id": draft_id,
-            "analysis_id": analysis_id,
             "status": "pending",
             "attempt_count": 0,
             "confirmed_shocks": deepcopy(draft["confirmed_shocks"]),
-            "allocation_snapshot": deepcopy(analysis["allocation_snapshot"]),
-            "price_snapshot": deepcopy(analysis["price_snapshot"]),
-            "analysis_snapshot": deepcopy(analysis["metrics"]),
-            "model_version": analysis["model_version"],
-            "proposed_weights": deepcopy(draft["request"].get("proposed_weights") or analysis["metrics"]["weights"]),
+            "allocation_snapshot": deepcopy(context["allocation_snapshot"]),
+            "price_snapshot": deepcopy(context["price_snapshot"]),
+            "analysis_snapshot": deepcopy(context["analysis_snapshot"]),
+            "model_version": context["model_version"],
+            "proposed_weights": deepcopy(context["proposed_weights"]),
             "proposal_snapshot": deepcopy(draft["proposal"]),
         }
+        if context.get("portfolio_revision") is not None:
+            payload["portfolio_revision"] = context["portfolio_revision"]
         existing = self._existing_idempotent(self.runs, owner_id, idempotency_key, payload)
         if existing is not None:
             return existing

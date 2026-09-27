@@ -41,7 +41,6 @@ after(() => {
 });
 
 const analysis = {
-  analysis_id: "analysis_fixture",
   portfolio_id: "saved",
   as_of: "2026-09-25T00:00:00Z",
   data_mode: "demo",

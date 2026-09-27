@@ -2,16 +2,14 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowPath, ArrowUpRight, InformationCircle } from "./icons";
 import { Modal } from "./UI";
 import {
-  requestSavedAnalysisBriefing,
-  requestSavedRiskExplanation,
-} from "../api/eventLab";
-import {
   createRequestGuard,
   requestAnalysisBriefing,
   requestResearchSummary,
   requestRiskExplanation,
   requestScenarioExplanation,
+  type AnalysisResponse,
   type AIWorkflowResponse,
+  type WhatIfResponse,
 } from "../api/portfolio";
 
 export type AIWorkflowAction =
@@ -21,6 +19,7 @@ export type AIWorkflowAction =
       workflow: "scenario_explanation";
       proposedWeights: number[];
       symbols: string[];
+      comparison: WhatIfResponse;
     }
   | { workflow: "research_summary"; symbol: string };
 
@@ -68,14 +67,14 @@ function retrievalStatus(response: AIWorkflowResponse) {
 export function AIWorkflowModal({
   action,
   portfolioId,
-  analysisId,
-  authenticated = false,
+  portfolioRevision,
+  onMetrics,
   onClose,
 }: {
   action: AIWorkflowAction;
   portfolioId: string;
-  analysisId: string;
-  authenticated?: boolean;
+  portfolioRevision?: number;
+  onMetrics?: (metrics: AnalysisResponse) => void;
   onClose: () => void;
 }) {
   const [response, setResponse] = useState<AIWorkflowResponse | null>(null);
@@ -89,32 +88,54 @@ export function AIWorkflowModal({
     setError("");
     setResponse(null);
     try {
+      if (action.workflow !== "research_summary" && !portfolioRevision) {
+        throw new Error("Portfolio revision is unavailable. Reload this page.");
+      }
       const result =
         action.workflow === "analysis_briefing"
-          ? await (authenticated
-              ? requestSavedAnalysisBriefing(portfolioId, analysisId)
-              : requestAnalysisBriefing(portfolioId, analysisId))
+          ? await requestAnalysisBriefing(portfolioId, portfolioRevision!)
           : action.workflow === "risk_explanation"
-            ? await (authenticated
-                ? requestSavedRiskExplanation(
-                    portfolioId,
-                    analysisId,
-                    action.question,
-                  )
-                : requestRiskExplanation(
-                    portfolioId,
-                    analysisId,
-                    action.question,
-                  ))
+            ? await requestRiskExplanation(
+                portfolioId,
+                portfolioRevision!,
+                action.question,
+              )
             : action.workflow === "scenario_explanation"
               ? await requestScenarioExplanation(
                   portfolioId,
-                  analysisId,
+                  portfolioRevision!,
                   action.proposedWeights,
                   action.symbols,
                 )
               : await requestResearchSummary(action.symbol);
-      if (requestGuard.current.isCurrent(id)) setResponse(result);
+      if (action.workflow !== "research_summary") {
+        if (result.portfolio_revision !== portfolioRevision) {
+          throw new Error(
+            "Portfolio changed while the explanation was prepared. Retry.",
+          );
+        }
+        if (
+          action.workflow === "scenario_explanation" &&
+          JSON.stringify([
+            result.comparison?.current_analysis,
+            result.comparison?.proposed_analysis,
+            result.comparison?.delta,
+          ]) !==
+            JSON.stringify([
+              action.comparison.current_analysis,
+              action.comparison.proposed_analysis,
+              action.comparison.delta,
+            ])
+        ) {
+          throw new Error(
+            "Market data changed. Recalculate the comparison before asking for an explanation.",
+          );
+        }
+      }
+      if (requestGuard.current.isCurrent(id)) {
+        if (result.metrics) onMetrics?.(result.metrics);
+        setResponse(result);
+      }
     } catch (reason) {
       if (requestGuard.current.isCurrent(id)) {
         setError(
@@ -141,7 +162,7 @@ export function AIWorkflowModal({
         <span>
           {action.workflow === "research_summary"
             ? `${action.symbol} · selected issuer source`
-            : `Saved analysis ${analysisId} · backend-calculated context`}
+            : "Modeled portfolio · backend-calculated context"}
         </span>
       </div>
       <section className="ai-workflow-result" aria-busy={busy}>
@@ -171,6 +192,30 @@ export function AIWorkflowModal({
                 : response.status.toUpperCase()}
             </span>
             <p className="workflow-answer">{response.answer}</p>
+            {response.metrics && (
+              <p className="muted">
+                Context: {response.metrics.data_quality.source} ·{" "}
+                {response.metrics.lookback_days} daily observations
+                {response.metrics.as_of
+                  ? ` · through ${new Date(response.metrics.as_of).toLocaleDateString("en-US", { timeZone: "UTC" })}`
+                  : " · illustrative sample data"}
+              </p>
+            )}
+            {response.comparison && (
+              <p className="muted">
+                Matched modeled comparison: current volatility{" "}
+                {(
+                  (response.comparison.current_analysis.portfolio_volatility ??
+                    0) * 100
+                ).toFixed(2)}
+                % · proposed volatility{" "}
+                {(
+                  (response.comparison.proposed_analysis.portfolio_volatility ??
+                    0) * 100
+                ).toFixed(2)}
+                %
+              </p>
+            )}
             {response.status === "unavailable" && (
               <button
                 className="text-button"

@@ -22,6 +22,7 @@ import {
 } from "../api/portfolio";
 import { AssetMark, PageHeading, SectionTitle, Modal } from "../components/UI";
 import { LineChart } from "../components/LineChart";
+import { EventResearch } from "../components/EventResearch";
 import { parsePercentageDraft, workspaceAsset } from "../workspace/holdings";
 import {
   PERCENT_SCALE,
@@ -44,7 +45,11 @@ export default function WhatIf({
   holdings: Asset[];
   weights: number[];
   onApply: (weights: number[], symbols: string[]) => Promise<boolean>;
-  onExplainScenario: (weights: number[], symbols: string[]) => void;
+  onExplainScenario: (
+    weights: number[],
+    symbols: string[],
+    comparison: WhatIfResponse,
+  ) => void;
   query: URLSearchParams;
 }) {
   const [scenarioAssets, setScenarioAssets] = useState(holdings);
@@ -573,7 +578,9 @@ export default function WhatIf({
                 <button
                   className="text-button"
                   disabled={busy || stale || !comparison || !valid}
-                  onClick={() => onExplainScenario(draft, symbols)}
+                  onClick={() =>
+                    available && onExplainScenario(draft, symbols, available)
+                  }
                 >
                   <Scale size={16} />
                   Explain the trade-offs
@@ -653,6 +660,18 @@ export default function WhatIf({
           </div>
         </section>
       </div>
+      <EventResearch
+        key={analysis.portfolio_id}
+        portfolioId={analysis.portfolio_id}
+        portfolioRevision={analysis.portfolio_revision ?? 1}
+        proposedWeights={Object.fromEntries(
+          scenarioAssets.map((asset, index) => [
+            asset.symbol,
+            draft[index] / 100,
+          ]),
+        )}
+        validAllocation={valid && combinedSymbols.size <= MAX_COMBINED_SYMBOLS}
+      />
       {confirm && comparison && (
         <Modal
           title="Use this allocation?"

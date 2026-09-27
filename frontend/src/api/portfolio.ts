@@ -6,6 +6,7 @@ export type PortfolioInput = { name: string; holdings: Holding[] };
 export type Portfolio = PortfolioInput & {
   portfolio_id: string;
   created_at: string;
+  revision: number;
 };
 export type Freshness = "fresh" | "stale" | "unknown";
 export type AnalysisSeries = {
@@ -41,8 +42,8 @@ export type AnalysisResponse = Omit<
   MetricSnapshot,
   "data_as_of" | "lookback_trading_days" | "data_source" | "freshness" | "notes"
 > & {
-  analysis_id: string;
-  created_at: string;
+  portfolio_revision: number;
+  calculated_at?: string;
   as_of: string | null;
   lookback_days: number;
   data_quality: { source: string; freshness: Freshness; warnings: string[] };
@@ -88,7 +89,9 @@ export type AIWorkflowResponse = {
   analyst_mode: "demo" | "gemini";
   status: "complete" | "demo" | "unavailable";
   answer: string;
-  analysis_id: string | null;
+  portfolio_revision: number | null;
+  metrics: AnalysisResponse | null;
+  comparison: WhatIfResponse | null;
   symbol: string | null;
   source_url: string | null;
   citations: { field: string; value: number }[];
@@ -100,6 +103,9 @@ export type AIWorkflowResponse = {
   error_code: string | null;
 };
 export type WhatIfResponse = {
+  portfolio_revision: number;
+  calculated_at: string;
+  modeled_result: boolean;
   current_analysis: MetricSnapshot;
   proposed_analysis: MetricSnapshot;
   delta: {
@@ -260,38 +266,9 @@ export function deletePortfolio(portfolioId: string) {
 }
 
 export function analyzeExistingPortfolio(portfolio: Portfolio) {
-  return post<AnalysisResponse>(
-    `/api/v1/portfolios/${encodeURIComponent(portfolio.portfolio_id)}/analysis`,
-  ).then((analysis) => ({ portfolio, analysis }));
-}
-
-export async function analyzePortfolio(weights: number[]) {
-  const portfolio = await post<Portfolio>(
-    "/api/v1/portfolios",
-    portfolioInput(weights),
-  );
-  const analysis = await post<AnalysisResponse>(
-    `/api/v1/portfolios/${encodeURIComponent(portfolio.portfolio_id)}/analysis`,
-  );
-  if (
-    analysis.portfolio_id !== portfolio.portfolio_id ||
-    assets.some(
-      (asset, index) =>
-        Math.abs((analysis.weights[asset.symbol] ?? 0) * 100 - weights[index]) >
-        0.001,
-    )
-  ) {
-    throw new Error(
-      "Pandaset API returned an analysis for a different portfolio allocation.",
-    );
-  }
-  return { portfolio, analysis };
-}
-
-export async function getAnalysis(portfolioId: string, analysisId: string) {
   return request<AnalysisResponse>(
-    `/api/v1/portfolios/${encodeURIComponent(portfolioId)}/analyses/${encodeURIComponent(analysisId)}`,
-  );
+    `/api/v1/portfolios/${encodeURIComponent(portfolio.portfolio_id)}/metrics`,
+  ).then((analysis) => ({ portfolio, analysis }));
 }
 
 export function searchAssets(query: string, signal?: AbortSignal) {
@@ -405,35 +382,35 @@ export function comparePortfolio(
 
 export function requestAnalysisBriefing(
   portfolioId: string,
-  analysisId: string,
+  portfolioRevision: number,
 ) {
   return post<AIWorkflowResponse>(
     `/api/v1/portfolios/${encodeURIComponent(portfolioId)}/briefing`,
-    { analysis_id: analysisId },
+    { portfolio_revision: portfolioRevision },
   );
 }
 
 export function requestRiskExplanation(
   portfolioId: string,
-  analysisId: string,
+  portfolioRevision: number,
   question: string,
 ) {
   return post<AIWorkflowResponse>(
     `/api/v1/portfolios/${encodeURIComponent(portfolioId)}/risk/explanation`,
-    { analysis_id: analysisId, question },
+    { portfolio_revision: portfolioRevision, question },
   );
 }
 
 export function requestScenarioExplanation(
   portfolioId: string,
-  analysisId: string,
+  portfolioRevision: number,
   weights: number[],
   symbols?: string[],
 ) {
   return post<AIWorkflowResponse>(
     `/api/v1/portfolios/${encodeURIComponent(portfolioId)}/what-if/explanation`,
     {
-      analysis_id: analysisId,
+      portfolio_revision: portfolioRevision,
       proposed_weights: Object.fromEntries(
         allocation(weights, symbols).map(({ symbol, weight }) => [
           symbol,

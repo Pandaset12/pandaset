@@ -31,11 +31,11 @@ def create(client, weights):
     return response.json()["portfolio_id"]
 
 
-def test_creation_analysis_mapping_and_persistence(client):
+def test_current_metrics_mapping_without_persistence(client):
     weights = {"NVDA": 0.6, "TLT": 0.4}
     portfolio_id = create(client, weights)
     report = analyze_portfolio(SamplePriceProvider().prices(sorted(weights)), weights)
-    response = client.post(f"/api/v1/portfolios/{portfolio_id}/analysis")
+    response = client.get(f"/api/v1/portfolios/{portfolio_id}/metrics")
     assert response.status_code == 200, response.text
     analysis = response.json()
     assert analysis["weights"] == weights
@@ -64,7 +64,9 @@ def test_creation_analysis_mapping_and_persistence(client):
     assert analysis["data_quality"]["freshness"] == "unknown"
     assert set(report["warnings"]) <= set(analysis["data_quality"]["warnings"])
     assert set(report["metadata"]["assumptions"]) <= set(analysis["assumptions"])
-    assert client.get(f"/api/v1/portfolios/{portfolio_id}/analyses/{analysis['analysis_id']}").json() == analysis
+    assert "analysis_id" not in analysis
+    with client.app.state.store.connection() as db:
+        assert db.execute("SELECT COUNT(*) FROM analyses").fetchone()[0] == 0
     assert client.get("/health").json()["quant_integration"] == "quant_engine_sample_prices"
 
 
@@ -74,7 +76,7 @@ def test_creation_analysis_mapping_and_persistence(client):
 ])
 def test_frontend_portfolios_have_sample_prices(client, weights):
     portfolio_id = create(client, weights)
-    response = client.post(f"/api/v1/portfolios/{portfolio_id}/analysis")
+    response = client.get(f"/api/v1/portfolios/{portfolio_id}/metrics")
     assert response.status_code == 200, response.text
     analysis = response.json()
     assert analysis["portfolio_id"] == portfolio_id
@@ -107,10 +109,11 @@ def test_what_if_union_and_deltas_use_saved_baseline_without_mutation(client):
         "portfolio_id": portfolio_id, "proposed_weights": {"TLT": 1.0},
     })
     assert legacy.status_code == 200
-    assert legacy.json() == result
+    for field in ("current_analysis", "proposed_analysis", "delta"):
+        assert legacy.json()[field] == result[field]
 
 
-def test_undefined_metrics_and_warnings_survive_storage(client):
+def test_undefined_metrics_and_warnings_remain_serializable(client):
     class ConstantPrices:
         def prices(self, symbols, lookback_days=252):
             return pd.DataFrame({symbol: [100.0] * 4 for symbol in symbols},
@@ -119,13 +122,12 @@ def test_undefined_metrics_and_warnings_survive_storage(client):
     provider = EngineQuantProvider(client.app.state.store, ConstantPrices())
     client.app.dependency_overrides[get_provider] = lambda: provider
     portfolio_id = create(client, {"NVDA": 1.0})
-    response = client.post(f"/api/v1/portfolios/{portfolio_id}/analysis")
+    response = client.get(f"/api/v1/portfolios/{portfolio_id}/metrics")
     assert response.status_code == 200, response.text
     analysis = response.json()
     assert analysis["risk_contribution"] == {"NVDA": None}
     assert analysis["correlation_matrix"] == {"NVDA": {"NVDA": None}}
-    saved, _ = client.app.state.store.get_analysis(portfolio_id, analysis["analysis_id"])
-    assert saved.notes == analysis["data_quality"]["warnings"]
+    saved = provider.analyze(client.app.state.store.get(portfolio_id, "legacy-test-investor"))
     assert any("undefined" in warning for warning in saved.notes)
     assert "risk_contribution.NVDA" not in metric_catalog(saved)
     json.dumps(saved.model_dump(mode="json"), allow_nan=False)
@@ -148,7 +150,7 @@ def test_weight_tolerance_matches_engine_without_normalization(client):
     assert client.post("/api/v1/portfolios/demo/what-if", json={"holdings": holdings}).status_code == 422
     weights = {"NVDA": 0.5, "TLT": 0.50000000005}
     portfolio_id = create(client, weights)
-    response = client.post(f"/api/v1/portfolios/{portfolio_id}/analysis")
+    response = client.get(f"/api/v1/portfolios/{portfolio_id}/metrics")
     assert response.status_code == 200
     assert response.json()["weights"] == weights
 

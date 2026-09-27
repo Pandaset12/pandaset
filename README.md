@@ -27,7 +27,7 @@ Requires Node.js 22.22.2+ on the 22.x line, 24.15.0+ on the 24.x line, or 26+, p
    backend/.venv/bin/python -m uvicorn backend.main:app --reload
    ```
 
-   Set `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` in `backend/.env` for the **same project** as the frontend. The backend verifies bearer tokens and scopes standard portfolios and snapshots to the signed-in user. `SUPABASE_ANON_KEY` is supported for legacy configuration. The backend guide includes Windows commands and more configuration detail.
+   Set `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` in `backend/.env` for the **same project** as the frontend. The backend verifies bearer tokens and scopes portfolios, current metrics, and event records to the signed-in user. `SUPABASE_ANON_KEY` is supported for legacy configuration. The backend guide includes Windows commands and more configuration detail.
 
 3. Start the frontend:
 
@@ -41,18 +41,18 @@ The standard workspace runs with the fictional sample provider and demo AI mode.
 
 To show stock and fund logos automatically, set `VITE_LOGO_DEV_PUBLISHABLE_KEY` in `.env.local` to a Logo.dev publishable key (`pk_…`). The browser requests images by ticker; no company logo files or ticker-to-domain mappings are needed. Missing images and missing configuration show a local ticker mark. Before deploying, confirm the Logo.dev plan, allowed production origins, and [attribution terms](https://www.logo.dev/docs/platform/attribution) for the intended use. Only use a publishable key in `VITE_` configuration; keep secret keys out of the frontend.
 
-## Workspaces
+## Workspace
 
-After sign-in, create a named portfolio with supported tickers and weights totaling 100%. You can select and edit saved portfolios; the backend stores them for the authenticated account. The available experience depends on server configuration:
+After sign-in, create a named portfolio with supported tickers and weights totaling 100%. You can select and edit saved portfolios; the backend stores them for the authenticated account. All signed-in users see the same Overview, Risk, Research, Ask Panda, and What-if pages.
 
-| Experience                  | What it does                                                                                                                           | Data and access                                                                                                                                                   |
-| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Standard**                | Overview, risk and exposure, issuer research, Ask Panda, and allocation What-if comparisons.                                           | Uses the v1 API and owner-scoped SQLite storage. Analysis uses fictional sample prices by default, or adjusted daily Alpaca history when configured.       |
-| **Event-aware What-if Lab** | Research an event, review cited evidence and proposed shocks, confirm assumptions, then compare modeled cases and discuss a saved run. | Uses the v2 API, adjusted daily Alpaca history, and owner-scoped MongoDB records. Disabled by default and restricted to invited users until release gates are met. |
+| What-if path | What it does | Data and access |
+| --- | --- | --- |
+| **Quick allocation comparison** | Compare and optionally apply a proposed allocation. | Uses owner-scoped SQLite portfolios and on-demand metrics from fictional sample prices or configured adjusted daily Alpaca history. |
+| **Optional event research** | Research an event against that proposal, review evidence and shocks, then calculate and revisit a saved run. | Uses the same portfolio identity, adjusted Alpaca history, and owner-scoped MongoDB drafts/runs. It remains gated by event-service configuration and access rules. |
 
-The frontend selects the event workspace for an eligible account when the v2 service is available. Otherwise it opens the standard workspace. Event runs use hypothetical shocks and deterministic calculations; conditional probability ranges stay hidden until calibration is approved. See the [backend event-lab guide](backend/README.md#authenticated-event-lab-apiv2) and [release gates](docs/event-lab-release-gates.md) before enabling it.
+If event research is unavailable, quick comparisons and the other pages remain usable. Event runs use hypothetical shocks and deterministic calculations; conditional probability ranges stay hidden until calibration is approved. See the [backend event-lab guide](backend/README.md#authenticated-event-lab-apiv2) and [unified release gates](docs/unified-what-if-release.md) before enabling it.
 
-The standard workspace's sample asset primers and synthetic return series live in `quant/data.ts`. Its browser calculations live in `quant/analytics.ts`; the backend generates separate saved analyses with the Python quant engine. Keep asset order aligned with weight and return arrays. Research can open external issuer pages, and an on-demand AI summary can be requested when Gemini is configured. Portfolio and event records are saved by the backend; analysis availability still depends on its configured data provider.
+The sample asset primers and synthetic return series live in `quant/data.ts`. Browser calculations live in `quant/analytics.ts`; backend metrics are calculated on demand with the Python quant engine. Keep asset order aligned with weight and return arrays. Research can open external issuer pages, and an on-demand AI summary can be requested when Gemini is configured. Event drafts and runs pin their inputs so later portfolio or price changes cannot rewrite saved outcomes.
 
 ## Commands and project map
 

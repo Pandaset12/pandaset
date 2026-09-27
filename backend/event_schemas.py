@@ -20,6 +20,7 @@ class EventPortfolioInput(PortfolioInput):
 class EventPortfolio(EventPortfolioInput):
     portfolio_id: str
     created_at: datetime
+    revision: int = Field(default=1, ge=1)
 
 FACTOR_IDS = ("equity", "rates", "gold")
 FACTOR_BOUNDS = (-0.5, 0.5)  # cumulative decimal factor return
@@ -30,7 +31,7 @@ class DraftRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     portfolio_id: str = Field(min_length=1, max_length=80)
-    analysis_id: str = Field(min_length=1, max_length=80)
+    portfolio_revision: int = Field(ge=1)
     template_id: str = Field(min_length=1, max_length=80)
     situation_id: str | None = Field(default=None, min_length=1, max_length=80)
     target_symbol: str | None = Field(default=None, min_length=1, max_length=12)
