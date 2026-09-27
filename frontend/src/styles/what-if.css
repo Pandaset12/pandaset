@@ -117,6 +117,16 @@
 .scenario-editor .allocation-total.invalid strong {
   color: var(--negative);
 }
+.scenario-result-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 24px;
+}
+.scenario-result-actions > .button {
+  margin-left: auto;
+}
 @media (max-width: 600px) {
   .scenario-editor .editor-table-head,
   .scenario-editor .editor-row {
