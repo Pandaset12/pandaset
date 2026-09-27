@@ -10,8 +10,8 @@ from backend.event_templates import get_event_template, list_event_templates
 from backend.instruments import SUPPORTED_INSTRUMENTS, UnsupportedInstrument, resolve_instrument
 
 
-def test_supported_universe_has_25_stocks_and_factor_products():
-    assert sum(item.kind == "us_stock" for item in SUPPORTED_INSTRUMENTS.values()) == 25
+def test_supported_universe_has_26_stocks_and_factor_products():
+    assert sum(item.kind == "us_stock" for item in SUPPORTED_INSTRUMENTS.values()) == 26
     assert resolve_instrument("spy").kind == "equity_etf"
     assert resolve_instrument("TLT").kind == "treasury_etf"
     assert resolve_instrument("GLD").kind == "gold_etp"

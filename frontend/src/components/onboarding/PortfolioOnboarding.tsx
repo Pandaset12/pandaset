@@ -26,11 +26,13 @@ import type { HoldingDraft, TickerResult } from "./portfolioDraft";
 
 export type PortfolioOnboardingProps = {
   /** Key the component by the signed-in investor's user ID. */
-  loadState?: "loading" | "empty" | "error";
+  loadState?: "loading" | "empty" | "missing" | "error";
   hasExistingPortfolios?: boolean;
+  accountLabel?: string;
   maxHoldings?: number;
   allowDirectEntry?: boolean;
   onRetryLoad?: () => void;
+  onCreateAnyway?: () => void;
   searchTickers: SearchTickers;
   verifyTicker?: (symbol: string) => Promise<void>;
   createPortfolio: (
@@ -50,9 +52,11 @@ const steps = [
 export function PortfolioOnboarding({
   loadState = "empty",
   hasExistingPortfolios = false,
+  accountLabel,
   maxHoldings = MAX_HOLDINGS,
   allowDirectEntry = true,
   onRetryLoad,
+  onCreateAnyway,
   searchTickers,
   verifyTicker,
   createPortfolio,
@@ -245,7 +249,7 @@ export function PortfolioOnboarding({
         {intro}
         <div
           className="po-panel po-state"
-          role={loadState === "loading" ? "status" : "alert"}
+          role={loadState === "error" ? "alert" : "status"}
           aria-live="polite"
         >
           <div className="po-state-illustration" aria-hidden="true">
@@ -257,17 +261,38 @@ export function PortfolioOnboarding({
           <h2>
             {loadState === "loading"
               ? "Finding your portfolios…"
-              : "Your portfolios couldn’t load."}
+              : loadState === "missing"
+                ? "We couldn’t find your saved portfolios."
+                : "Your portfolios couldn’t load."}
           </h2>
           <p>
             {loadState === "loading"
               ? "Getting your workspace ready."
-              : "We couldn’t check your saved portfolios. Try again to pick up where you left off."}
+              : loadState === "missing"
+                ? `No saved portfolios were returned for ${accountLabel || "this signed-in account"}. Try again, or check that you’re in the right account.`
+                : "We couldn’t check your saved portfolios. Try again to pick up where you left off."}
           </p>
-          {loadState === "error" && onRetryLoad && (
-            <button className="button dark" type="button" onClick={onRetryLoad}>
-              Try again <ArrowPath size={16} aria-hidden="true" />
-            </button>
+          {(loadState === "error" || loadState === "missing") && (
+            <div className="po-state-actions">
+              {onRetryLoad && (
+                <button
+                  className="button dark"
+                  type="button"
+                  onClick={onRetryLoad}
+                >
+                  Try again <ArrowPath size={16} aria-hidden="true" />
+                </button>
+              )}
+              {loadState === "missing" && onCreateAnyway && (
+                <button
+                  className="button subtle"
+                  type="button"
+                  onClick={onCreateAnyway}
+                >
+                  Create a new portfolio
+                </button>
+              )}
+            </div>
           )}
         </div>
       </section>
@@ -333,6 +358,15 @@ export function PortfolioOnboarding({
               : "Create your first portfolio"}{" "}
             <ArrowRight size={17} aria-hidden="true" />
           </button>
+          {!hasExistingPortfolios && onRetryLoad && (
+            <button
+              className="po-retry-link"
+              type="button"
+              onClick={onRetryLoad}
+            >
+              Already have a portfolio? Try again
+            </button>
+          )}
           <span className="po-welcome-caption">
             Your tickers. Your allocation. Your perspective.
           </span>

@@ -34,9 +34,9 @@ function wait(ms: number, signal: AbortSignal) {
 }
 
 function Preview() {
-  const [loadState, setLoadState] = useState<"empty" | "loading" | "error">(
-    "empty",
-  );
+  const [loadState, setLoadState] = useState<
+    "empty" | "loading" | "missing" | "error"
+  >("empty");
   const [saveMode, setSaveMode] = useState("success");
   const [searchFailure, setSearchFailure] = useState(false);
   const [version, setVersion] = useState(0);
@@ -104,7 +104,9 @@ function Preview() {
         <PortfolioOnboarding
           key={version}
           loadState={loadState}
+          accountLabel="investor@example.com"
           onRetryLoad={() => setLoadState("empty")}
+          onCreateAnyway={() => setLoadState("empty")}
           searchTickers={searchTickers}
           createPortfolio={createPortfolio}
           onOpenPortfolio={(portfolio) => setSelected(portfolio.name)}
@@ -129,6 +131,9 @@ function Preview() {
             >
               <option value="empty">No portfolios</option>
               <option value="loading">Loading</option>
+              <option value="missing">
+                Previously saved portfolio missing
+              </option>
               <option value="error">Loading error</option>
             </select>
           </label>

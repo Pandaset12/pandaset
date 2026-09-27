@@ -232,8 +232,33 @@ const post = <T>(url: string, body?: object) =>
     body: body ? JSON.stringify(body) : undefined,
   });
 
-export function listPortfolios() {
-  return request<Portfolio[]>("/api/v1/portfolios");
+function isPortfolio(value: unknown): value is Portfolio {
+  if (typeof value !== "object" || value === null) return false;
+  const portfolio = value as Record<string, unknown>;
+  return (
+    typeof portfolio.portfolio_id === "string" &&
+    portfolio.portfolio_id.length > 0 &&
+    typeof portfolio.name === "string" &&
+    typeof portfolio.created_at === "string" &&
+    typeof portfolio.revision === "number" &&
+    Number.isFinite(portfolio.revision) &&
+    Array.isArray(portfolio.holdings) &&
+    portfolio.holdings.every(
+      (holding: unknown) =>
+        typeof holding === "object" &&
+        holding !== null &&
+        typeof (holding as Holding).symbol === "string" &&
+        typeof (holding as Holding).weight === "number" &&
+        Number.isFinite((holding as Holding).weight),
+    )
+  );
+}
+
+export async function listPortfolios() {
+  const response = await request<unknown>("/api/v1/portfolios");
+  if (!Array.isArray(response) || !response.every(isPortfolio))
+    throw new Error("Portfolio list response was invalid.");
+  return response as Portfolio[];
 }
 
 export function createPortfolio(input: PortfolioInput, signal?: AbortSignal) {

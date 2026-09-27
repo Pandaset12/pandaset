@@ -36,10 +36,23 @@ import {
   portfolioPercentages,
   workspaceAssets,
 } from "./workspace/holdings";
+import {
+  forgetPortfolio,
+  hasKnownPortfolio,
+  rememberPortfolio,
+} from "./workspace/portfolioDiscovery";
 
 type ActiveAnalysis = { portfolio: Portfolio; analysis: AnalysisResponse };
 
-export function Application({ onSignOut }: { onSignOut: () => Promise<void> }) {
+export function Application({
+  onSignOut,
+  userId,
+  accountLabel,
+}: {
+  onSignOut: () => Promise<void>;
+  userId?: string;
+  accountLabel?: string;
+}) {
   const [hash, setHash] = useState(location.hash || "#/");
   const [weights, setWeights] = useState<number[]>([]);
   const [edit, setEdit] = useState(false);
@@ -50,7 +63,7 @@ export function Application({ onSignOut }: { onSignOut: () => Promise<void> }) {
   const [analysisLoading, setAnalysisLoading] = useState(false);
   const [analysisError, setAnalysisError] = useState("");
   const [portfolioState, setPortfolioState] = useState<
-    "loading" | "empty" | "error" | "ready"
+    "loading" | "empty" | "missing" | "error" | "ready"
   >("loading");
   const [selectedPortfolio, setSelectedPortfolio] = useState<Portfolio | null>(
     null,
@@ -64,6 +77,7 @@ export function Application({ onSignOut }: { onSignOut: () => Promise<void> }) {
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [deleteError, setDeleteError] = useState("");
   const analysisRequest = useRef(createRequestGuard());
+  const discoveryRequest = useRef(createRequestGuard());
 
   useEffect(() => {
     const fn = () => {
@@ -109,18 +123,27 @@ export function Application({ onSignOut }: { onSignOut: () => Promise<void> }) {
   }
 
   async function loadPortfolios() {
+    const request = discoveryRequest.current.begin();
     setPortfolioState("loading");
     try {
-      const portfolios = await listPortfolios();
-      setPortfolios(portfolios);
-      if (!portfolios.length) setPortfolioState("empty");
-      else {
-        setSelectedPortfolio(portfolios[0]);
+      const discovered = await listPortfolios();
+      if (!discoveryRequest.current.isCurrent(request)) return;
+      setPortfolios(discovered);
+      if (!discovered.length) {
+        analysisRequest.current.invalidate();
+        setSelectedPortfolio(null);
+        setActive(null);
+        setAnalysisLoading(false);
+        setPortfolioState(hasKnownPortfolio(userId) ? "missing" : "empty");
+      } else {
+        rememberPortfolio(userId);
+        setSelectedPortfolio(discovered[0]);
         setPortfolioState("ready");
-        void loadAnalysis(portfolios[0]);
+        void loadAnalysis(discovered[0]);
       }
     } catch {
-      setPortfolioState("error");
+      if (discoveryRequest.current.isCurrent(request))
+        setPortfolioState("error");
     }
   }
 
@@ -147,6 +170,7 @@ export function Application({ onSignOut }: { onSignOut: () => Promise<void> }) {
           portfolio.portfolio_id !== portfolioToDelete.portfolio_id,
       );
       setPortfolios(remaining);
+      if (!remaining.length) forgetPortfolio(userId);
       setPortfolioToDelete(null);
       setPortfolioMenuOpen(false);
       if (selectedPortfolio?.portfolio_id === portfolioToDelete.portfolio_id) {
@@ -175,6 +199,7 @@ export function Application({ onSignOut }: { onSignOut: () => Promise<void> }) {
     void loadPortfolios();
     return () => {
       analysisRequest.current.invalidate();
+      discoveryRequest.current.invalidate();
     };
   }, []);
 
@@ -228,6 +253,8 @@ export function Application({ onSignOut }: { onSignOut: () => Promise<void> }) {
         if (!(await loadAnalysis(updated))) return false;
       } else {
         const created = await createPortfolio(input);
+        discoveryRequest.current.invalidate();
+        rememberPortfolio(userId);
         setPortfolios((current) => [created, ...current]);
         if (!(await loadAnalysis(created))) return false;
         setSelectedPortfolio(created);
@@ -270,16 +297,17 @@ export function Application({ onSignOut }: { onSignOut: () => Promise<void> }) {
       <div className="onboarding-page">
         <header className="auth-header onboarding-header">
           <Brand />
-          {showOnboarding && portfolios.length > 0 && (
-            <div className="onboarding-header-actions">
-              <button
-                className="text-button onboarding-header-back"
-                onClick={() => setShowOnboarding(false)}
-              >
-                Back to saved portfolios
-              </button>
-            </div>
-          )}
+          {showOnboarding &&
+            (portfolios.length > 0 || portfolioState === "missing") && (
+              <div className="onboarding-header-actions">
+                <button
+                  className="text-button onboarding-header-back"
+                  onClick={() => setShowOnboarding(false)}
+                >
+                  Back to saved portfolios
+                </button>
+              </div>
+            )}
         </header>
         <main className="onboarding-main" id="main-content">
           <PortfolioOnboarding
@@ -289,19 +317,27 @@ export function Application({ onSignOut }: { onSignOut: () => Promise<void> }) {
                 : portfolioState
             }
             hasExistingPortfolios={portfolios.length > 0}
+            accountLabel={accountLabel}
             onRetryLoad={() => void loadPortfolios()}
+            onCreateAnyway={() => setShowOnboarding(true)}
             searchTickers={searchTickers}
             verifyTicker={verifyPortfolioSymbol}
             onCancel={
-              showOnboarding && portfolios.length > 0
+              showOnboarding &&
+              (portfolios.length > 0 || portfolioState === "missing")
                 ? () => setShowOnboarding(false)
                 : undefined
             }
             createPortfolio={async (input, options) => {
               await verifyPortfolioHistory(input.holdings, options.signal);
-              return createPortfolio(input, options.signal);
+              const created = await createPortfolio(input, options.signal);
+              discoveryRequest.current.invalidate();
+              rememberPortfolio(userId);
+              return created;
             }}
             onOpenPortfolio={(portfolio) => {
+              discoveryRequest.current.invalidate();
+              rememberPortfolio(userId);
               setSelectedPortfolio(portfolio);
               setPortfolios((current) => [portfolio, ...current]);
               setPortfolioState("ready");
@@ -652,5 +688,12 @@ function AuthenticatedApplication({
   onSignOut: () => Promise<void>;
 }) {
   setApiAccessToken(session.access_token);
-  return <Application key={session.user.id} onSignOut={onSignOut} />;
+  return (
+    <Application
+      key={session.user.id}
+      onSignOut={onSignOut}
+      userId={session.user.id}
+      accountLabel={session.user.email}
+    />
+  );
 }

@@ -60,6 +60,7 @@ Windows PowerShell (activation is unnecessary):
 py -m venv backend/.venv
 .\backend\.venv\Scripts\python.exe -m pip install -r backend/requirements.txt
 .\backend\.venv\Scripts\python.exe -m pip install -e quant_engine
+.\backend\.venv\Scripts\python.exe -m backend.storage_preflight
 .\backend\.venv\Scripts\python.exe -m uvicorn backend.main:app --reload
 ~~~
 
@@ -68,6 +69,7 @@ macOS/Linux:
 python3 -m venv backend/.venv
 backend/.venv/bin/python -m pip install -r backend/requirements.txt
 backend/.venv/bin/python -m pip install -e quant_engine
+backend/.venv/bin/python -m backend.storage_preflight
 backend/.venv/bin/python -m uvicorn backend.main:app --reload
 ~~~
 
@@ -82,8 +84,13 @@ routes require `SUPABASE_URL` and either `SUPABASE_PUBLISHABLE_KEY` or the legac
 current metrics to the user, even in demo mode. Copy `backend/.env.example`
 to the ignored `backend/.env` and use the frontend's Supabase project. Requests
 carry the investor's access token in `Authorization: Bearer <access_token>`.
+The preflight and startup log show which SQLite file this worktree uses. The
+default lives under the user home directory so it is stable across worktrees;
+see [local portfolio storage](../docs/local-portfolio-storage.md) to retain an
+existing checkout's database safely. In production, set `STORAGE_PATH` to a
+persistent disk path rather than relying on the user-home default.
 
-V1 uses ignored `backend/data/portfoliolens.sqlite3` as the authoritative portfolio store. The gated v2 event routes use that same portfolio identity and owner-scoped MongoDB drafts/runs.
+V1 uses the resolved SQLite file as the authoritative portfolio store. The gated v2 event routes use that same portfolio identity and owner-scoped MongoDB drafts/runs.
 See the [unified migration guide](../docs/unified-what-if-release.md) before enabling event research for existing v2 users.
 Tiger Data is not connected.
 
@@ -166,7 +173,7 @@ is not used by this service. Never commit actual keys.
 | GEMINI_FALLBACK_MODEL | `gemini-3.5-flash-lite`; tried after non-quota Gemini failures. Set empty to disable. |
 | GEMINI_TIMEOUT_SECONDS | 45 per model; maximum 120 |
 | CORS_ORIGINS | Comma-separated frontend origins; localhost ports 3000 and 5173 |
-| STORAGE_PATH | Optional override for the SQLite file |
+| STORAGE_PATH | Optional local override for the SQLite file; required persistent disk path in production |
 | ALPACA_API_KEY / ALPACA_API_SECRET | Server-side credentials for optional history and IEX quote snapshots; never expose them to the frontend |
 | ALPACA_HISTORY_FEED | Explicit `iex` or entitled `sip` selection for adjusted daily history; separate from IEX quote snapshots |
 | ALPACA_ASSETS_BASE_URL | Read-only stock-directory host, paper by default; use `https://api.alpaca.markets` with live account credentials |
