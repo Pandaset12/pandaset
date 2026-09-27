@@ -7,6 +7,7 @@ from pydantic import ValidationError
 from starlette.concurrency import run_in_threadpool
 
 from .alpaca_quotes import AlpacaQuotesUnavailable, fetch_alpaca_quotes
+from .alpaca_history import RateLimitError
 from .config import Settings, get_settings
 from .auth import current_user_id
 from .observability import log_failure
@@ -256,15 +257,20 @@ def analyze(
         raise api_error(501, "QUANT_INTEGRATION_PENDING", str(exc)) from exc
     except SymbolLimitExceeded as exc:
         raise api_error(422, "SYMBOL_LIMIT_EXCEEDED", str(exc)) from exc
+    except RateLimitError as exc:
+        raise api_error(429, "PROVIDER_RATE_LIMIT", str(exc)) from exc
     except MarketHistoryNotFound as exc:
         log_failure("MARKET_HISTORY_NOT_FOUND", exc)
         raise api_error(404, "MARKET_HISTORY_NOT_FOUND", "Market history is unavailable for one or more portfolio symbols.") from exc
     except (ValidationError, ValueError) as exc:
         log_failure("INVALID_PROVIDER_DATA", exc)
         raise api_error(502, "INVALID_PROVIDER_DATA", "Provider returned inconsistent analysis data.") from exc
+    except ProviderUnavailable as exc:
+        log_failure("PROVIDER_UNAVAILABLE", exc)
+        raise api_error(502, "PROVIDER_UNAVAILABLE", "Analysis is unavailable. Check Alpaca credentials, selected history feed, entitlement, and provider status.") from exc
     except Exception as exc:
         log_failure("PROVIDER_UNAVAILABLE", exc)
-        raise api_error(502, "PROVIDER_UNAVAILABLE", "Analysis is unavailable. For Twelve Data, set TWELVE_DATA_API_KEY in backend/.env; also check key validity, usage limits, supported symbols, and provider status.") from exc
+        raise api_error(502, "PROVIDER_UNAVAILABLE", "Analysis is unavailable. Check the selected market-data provider.") from exc
     try:
         analysis_id, created_at = store.save_analysis(metrics, owner_id)
     except StalePortfolio as exc:
@@ -293,12 +299,14 @@ def market_history(
         raise api_error(422, "INVALID_MARKET_HISTORY_REQUEST", f"Provide one to {MAX_PORTFOLIO_SYMBOLS} unique symbols.")
     try:
         return provider.market_history(normalized, lookback_days)
+    except RateLimitError as exc:
+        raise api_error(429, "PROVIDER_RATE_LIMIT", str(exc)) from exc
     except MarketHistoryNotFound as exc:
         log_failure("MARKET_HISTORY_NOT_FOUND", exc)
         raise api_error(404, "MARKET_HISTORY_UNAVAILABLE", "Market history is unavailable for one or more requested symbols.") from exc
     except ProviderUnavailable as exc:
         log_failure("MARKET_HISTORY_UNAVAILABLE", exc)
-        raise api_error(502, "MARKET_HISTORY_UNAVAILABLE", "Market data is unavailable. If Twelve Data is selected, set TWELVE_DATA_API_KEY in backend/.env; also check the key, quota, requested symbols, and provider status.") from exc
+        raise api_error(502, "MARKET_HISTORY_UNAVAILABLE", "Market data is unavailable. Check Alpaca credentials, selected history feed, entitlement, and provider status.") from exc
 
 
 @router.post("/portfolios/{portfolio_id}/ask", response_model=AnalystResponse)
@@ -480,6 +488,8 @@ async def scenario_explanation(
         raise api_error(501, "QUANT_INTEGRATION_PENDING", str(exc)) from exc
     except SymbolLimitExceeded as exc:
         raise api_error(422, "SYMBOL_LIMIT_EXCEEDED", str(exc)) from exc
+    except RateLimitError as exc:
+        raise api_error(429, "PROVIDER_RATE_LIMIT", str(exc)) from exc
     except MarketHistoryNotFound as exc:
         log_failure("MARKET_HISTORY_NOT_FOUND", exc)
         raise api_error(404, "MARKET_HISTORY_NOT_FOUND", "Market history is unavailable for one or more allocation symbols.") from exc
@@ -617,6 +627,8 @@ def what_if(
         raise api_error(501, "QUANT_INTEGRATION_PENDING", str(exc)) from exc
     except SymbolLimitExceeded as exc:
         raise api_error(422, "SYMBOL_LIMIT_EXCEEDED", str(exc)) from exc
+    except RateLimitError as exc:
+        raise api_error(429, "PROVIDER_RATE_LIMIT", str(exc)) from exc
     except MarketHistoryNotFound as exc:
         log_failure("MARKET_HISTORY_NOT_FOUND", exc)
         raise api_error(404, "MARKET_HISTORY_NOT_FOUND", "Market history is unavailable for one or more allocation symbols.") from exc

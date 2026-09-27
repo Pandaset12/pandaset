@@ -27,7 +27,9 @@ from backend.schemas import AnalyticsSnapshot
 def _settings(**changes):
     values = dict(event_lab_enabled=True, supabase_url="https://example.supabase.co",
                   supabase_publishable_key="publishable", mongo_uri=SecretStr("mongodb://unused"),
-                  twelve_data_api_key=SecretStr("vendor"), gemini_api_key=SecretStr("gemini"),
+                  alpaca_api_key=SecretStr("vendor-key"), alpaca_api_secret=SecretStr("vendor-secret"),
+                  alpaca_history_feed="iex", alpaca_cache_rights_confirmed=True,
+                  gemini_api_key=SecretStr("gemini"),
                   tavily_api_key=SecretStr("tavily"), deepseek_api_key=SecretStr("deepseek"),
                   event_lab_allowed_user_ids="owner-a,owner-b")
     values.update(changes)
@@ -135,6 +137,12 @@ def test_v2_requires_bearer_and_has_error_envelope():
     assert response.json()["error"]["request_id"]
 
 
+def test_event_lab_requires_rights_to_retain_price_snapshots():
+    assert _settings(alpaca_cache_rights_confirmed=False).event_lab_ready is False
+    assert _settings().event_lab_ready is True
+    assert _settings(event_lab_public_enabled=True).event_lab_public_ready is False
+
+
 def test_v2_confirm_retry_and_owner_isolation():
     settings = _settings()
     app = create_app(settings)
@@ -199,6 +207,43 @@ def test_v2_confirm_retry_and_owner_isolation():
     assert client.get(f"/api/v2/scenarios/runs/{run_id}", headers=headers).json()["status"] == "pending"
 
 
+def test_new_event_analysis_pins_alpaca_history_and_provenance():
+    settings = _settings()
+    app = create_app(settings)
+    store = MongoPortfolioStore(database=mongomock.MongoClient()["alpaca_analysis"],
+                                supported_symbol=lambda symbol: symbol == "AAPL")
+    app.state.event_store = store
+
+    class Verifier:
+        def verify(self, token):
+            return AuthenticatedUser(user_id=token, claims={"sub": token})
+
+    class Prices:
+        def prices(self, symbols, lookback_days):
+            assert lookback_days == 252
+            dates = pd.date_range("2025-01-02", periods=253, freq="B", tz="UTC")
+            frame = pd.DataFrame({symbol: 100 + np.arange(253) * (index + 1)
+                                  for index, symbol in enumerate(symbols)}, index=dates)
+            frame.attrs["provenance"] = {"data_source": "alpaca_adjusted_daily", "feed": "iex",
+                                         "adjustment": "all"}
+            return frame
+
+    app.state.auth_verifier = Verifier()
+    app.state.event_price_provider = Prices()
+    portfolio = store.create_portfolio("owner-a", EventPortfolioInput(
+        name="Alpaca", holdings=[{"symbol": "AAPL", "weight": 1.0}]))
+    response = TestClient(app).post(
+        f"/api/v2/portfolios/{portfolio.portfolio_id}/analysis",
+        headers={"Authorization": "Bearer owner-a"},
+    )
+    assert response.status_code == 201, response.text
+    assert response.json()["price_provenance"]["feed"] == "iex"
+    record = store.get_analysis_record("owner-a", portfolio.portfolio_id,
+                                       response.json()["analysis_id"])
+    assert record["price_snapshot"]["provenance"]["data_source"] == "alpaca_adjusted_daily"
+    assert set(record["price_snapshot"]["factor_prices"]) == {"SPY", "TLT", "GLD"}
+
+
 def test_internal_gate_denies_uninvited_even_with_valid_token():
     app = create_app(_settings(event_lab_allowed_user_ids=""))
 
@@ -233,13 +278,13 @@ def test_run_worker_uses_pinned_prices_and_omits_uncalibrated_probabilities():
                               "holding_prices": {"AAPL": holding_prices.tolist()},
                               "factor_prices": {symbol: factor_prices[:, index].tolist()
                                                 for index, symbol in enumerate(("SPY", "TLT", "GLD"))},
-                              "provenance": {"data_source": "twelve_data_adjusted_daily"}},
+                              "provenance": {"data_source": "alpaca_adjusted_daily", "feed": "iex"}},
            "confirmed_shocks": _shocks()}
     result = asyncio.run(process_run(Store(), _settings(), job, "worker-a"))
     assert len(result["cases"]) == 6
     assert result["probabilities"]["status"] == "omitted"
     assert result["probabilities"]["reason"] == "calibration_gate_disabled"
-    assert result["price_provenance"]["data_source"] == "twelve_data_adjusted_daily"
+    assert result["price_provenance"]["data_source"] == "alpaca_adjusted_daily"
 
 
 def test_chat_retry_returns_saved_answer_before_gemini_and_checks_quota(monkeypatch):
@@ -324,7 +369,7 @@ def test_cached_history_rollover_refreshes_both_sides_once(monkeypatch):
 
     cached = Provider()
     fresh = Provider(fresh=True)
-    monkeypatch.setattr(event_api, "TwelveDataPriceProvider", lambda *args, **kwargs: fresh)
+    monkeypatch.setattr(event_api, "AlpacaHistoryProvider", lambda *args, **kwargs: fresh)
     symbols = [f"STOCK{i}" for i in range(23)]
     prices, factors = asyncio.run(_aligned_histories(cached, _settings(), symbols))
     assert cached.calls == 2 and fresh.calls == 2

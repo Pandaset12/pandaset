@@ -34,15 +34,15 @@ class Settings(BaseSettings):
     supabase_anon_key: SecretStr | None = None
     supabase_publishable_key: str = ""
     supabase_signing_mode: Literal["asymmetric", "legacy", "auto"] = "asymmetric"
-    market_data_provider: Literal["sample", "twelvedata"] = "sample"
-    twelve_data_api_key: SecretStr | None = None
+    market_data_provider: Literal["sample", "alpaca"] = "sample"
     alpaca_api_key: SecretStr | None = None
     alpaca_api_secret: SecretStr | None = None
+    alpaca_history_feed: Literal["iex", "sip"] | None = None
     market_data_timeout_seconds: float = Field(default=15, gt=0, le=60)
     mongo_uri: SecretStr | None = None
     mongo_database: str = "portfoliolens"
-    twelve_data_display_rights_confirmed: bool = False
-    twelve_data_cache_rights_confirmed: bool = False
+    alpaca_display_rights_confirmed: bool = False
+    alpaca_cache_rights_confirmed: bool = False
     fred_api_key: SecretStr | None = None
     tavily_api_key: SecretStr | None = None
     deepseek_api_key: SecretStr | None = None
@@ -58,7 +58,8 @@ class Settings(BaseSettings):
             and self.supabase_url.strip()
             and self.supabase_publishable_key.strip()
             and self.mongo_uri and self.mongo_uri.get_secret_value().strip()
-            and self.has_twelve_data_key
+            and self.has_alpaca_history
+            and self.alpaca_cache_rights_confirmed
             and self.has_gemini_key
             and self.has_tavily_key
             and self.has_deepseek_key
@@ -69,8 +70,8 @@ class Settings(BaseSettings):
         return bool(
             self.event_lab_ready
             and self.event_lab_public_enabled
-            and self.twelve_data_display_rights_confirmed
-            and self.twelve_data_cache_rights_confirmed
+            and self.alpaca_display_rights_confirmed
+            and self.alpaca_cache_rights_confirmed
             and self.approved_news_domains.strip()
             and self.fred_api_key and self.fred_api_key.get_secret_value().strip()
         )
@@ -88,8 +89,8 @@ class Settings(BaseSettings):
         return bool(self.deepseek_api_key and self.deepseek_api_key.get_secret_value().strip())
 
     @property
-    def has_twelve_data_key(self) -> bool:
-        return bool(self.twelve_data_api_key and self.twelve_data_api_key.get_secret_value().strip())
+    def has_alpaca_history(self) -> bool:
+        return bool(self.has_alpaca_keys and self.alpaca_history_feed)
 
     @property
     def has_alpaca_keys(self) -> bool:

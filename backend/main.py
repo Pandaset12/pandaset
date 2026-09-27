@@ -18,7 +18,7 @@ from .event_api import router as v2_router
 from .event_jobs import EventWorker
 from .instruments import SUPPORTED_INSTRUMENTS
 from .mongo_store import MongoPortfolioStore
-from .twelve_data import TwelveDataPriceProvider
+from .alpaca_history import AlpacaHistoryProvider
 from .gemini_service import GeminiNotConfigured, GeminiUnavailable, generate_answer, metric_summary
 from .api_v1 import get_store, require_portfolio, router as v1_router
 from .auth import current_user_id
@@ -75,11 +75,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                         max_active_jobs_per_owner=settings.event_max_active_jobs_per_user,
                         max_messages_per_run=settings.event_max_messages_per_run,
                     )
-                    event_price_provider = TwelveDataPriceProvider(
-                        settings.twelve_data_api_key.get_secret_value(),
-                        cache_allowed=settings.twelve_data_cache_rights_confirmed,
-                        cache_path=(Path(__file__).parent / "data" / "twelve_data_adjusted.sqlite3"
-                                    if settings.twelve_data_cache_rights_confirmed else None),
+                    event_price_provider = AlpacaHistoryProvider(
+                        settings.alpaca_api_key.get_secret_value(),
+                        settings.alpaca_api_secret.get_secret_value(),
+                        settings.alpaca_history_feed,
+                        timeout_seconds=settings.market_data_timeout_seconds,
+                        cache_allowed=settings.alpaca_cache_rights_confirmed,
+                        cache_path=(Path(__file__).parent / "data" / "alpaca_adjusted.sqlite3"
+                                    if settings.alpaca_cache_rights_confirmed else None),
                     )
                     worker = EventWorker(event_store, settings)
                     worker.start()
@@ -195,8 +198,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @application.get("/health")
     def health(request: Request, settings: Settings = Depends(get_settings)):
-        live_data = settings.market_data_provider == "twelvedata"
-        market_data_ready = not live_data or settings.has_twelve_data_key
+        live_data = settings.market_data_provider == "alpaca"
+        market_data_ready = not live_data or settings.has_alpaca_history
         event_store_ready = getattr(request.app.state, "event_store", None) is not None
         analyst_ready = settings.analyst_mode != "gemini" or settings.has_gemini_key
         configuration_issues = []
@@ -216,10 +219,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "analyst_mode": settings.analyst_mode,
             "analyst_ready": analyst_ready,
             "gemini_configured": settings.has_gemini_key,
-            "legacy_quant_integration": "quant_engine_twelvedata" if live_data else "quant_engine_sample_prices",
+            "legacy_quant_integration": "quant_engine_alpaca" if live_data else "quant_engine_sample_prices",
             "legacy_data_mode": "live" if live_data else "demo",
             "legacy_storage_backend": "sqlite",
-            "quant_integration": "quant_engine_twelvedata" if live_data else "quant_engine_sample_prices",
+            "quant_integration": "quant_engine_alpaca" if live_data else "quant_engine_sample_prices",
             "market_data_provider": settings.market_data_provider,
             "market_data_ready": market_data_ready,
             "data_mode": "live" if live_data else "demo",

@@ -1,5 +1,9 @@
 # API/Gemini self-review verification
 
+This is a historical record of the earlier review. Its Twelve Data checks
+describe the provider used at that time. For current market-data setup and
+release checks, see [ALPACA_HISTORY.md](docs/ALPACA_HISTORY.md).
+
 Reviewed against main `37bf1e4`, including authenticated portfolio persistence,
 Twelve Data history, the v2 event lab, and optional Alpaca IEX quotes. This update
 changes only backend files and docs.

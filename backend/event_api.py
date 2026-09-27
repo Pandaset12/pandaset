@@ -27,7 +27,7 @@ from .mongo_store import (IdempotencyConflict, InvalidTransition, MongoPortfolio
 from .providers import map_quant_report
 from .schemas import AIWorkflowResponse, AnalysisWorkflowRequest, AnalyticsSnapshot
 from .storage import SnapshotNotFound
-from .twelve_data import CoverageError, ProviderUnavailable, RateLimitError, TwelveDataPriceProvider
+from .alpaca_history import AlpacaHistoryProvider, CoverageError, ProviderUnavailable, RateLimitError
 
 router = APIRouter(prefix="/api/v2", tags=["event-lab"])
 
@@ -96,7 +96,7 @@ async def _call(method, *args, **kwargs):
         raise _map_store_error(exc) from exc
 
 
-async def _aligned_histories(provider: TwelveDataPriceProvider, settings: Settings,
+async def _aligned_histories(provider: AlpacaHistoryProvider, settings: Settings,
                              symbols: list[str]):
     factors = list(FACTOR_SYMBOLS.values())
     union = sorted(set(symbols) | set(factors))
@@ -112,8 +112,13 @@ async def _aligned_histories(provider: TwelveDataPriceProvider, settings: Settin
         # A licensed cache can straddle a trading-session rollover. Bypass it
         # once on both sides so a fresh holding window is compared with fresh
         # factor proxies. An upstream failure remains a provider error.
-        fresh = TwelveDataPriceProvider(settings.twelve_data_api_key.get_secret_value(),
-                                        cache_allowed=False)
+        fresh = AlpacaHistoryProvider(
+            settings.alpaca_api_key.get_secret_value(),
+            settings.alpaca_api_secret.get_secret_value(),
+            settings.alpaca_history_feed,
+            timeout_seconds=settings.market_data_timeout_seconds,
+            cache_allowed=False,
+        )
         prices = await run_in_threadpool(fresh.prices, symbols, 252)
         factor_prices = await run_in_threadpool(fresh.prices, factors, 252)
     if not prices.index.equals(factor_prices.index):
@@ -162,7 +167,7 @@ async def create_analysis(portfolio_id: str, request: Request, context=Depends(_
     portfolio = await _call(store.get_portfolio, user.user_id, portfolio_id)
     if portfolio is None:
         raise _not_found()
-    provider: TwelveDataPriceProvider = request.app.state.event_price_provider
+    provider: AlpacaHistoryProvider = request.app.state.event_price_provider
     symbols = sorted(portfolio.weights)
     try:
         prices, factor_prices = await _aligned_histories(provider, settings, symbols)

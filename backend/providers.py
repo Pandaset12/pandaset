@@ -12,7 +12,7 @@ from .schemas import (MAX_PORTFOLIO_SYMBOLS, AnalysisSeries, AnalyticsSnapshot,
                       MarketHistoryResponse, Portfolio, WhatIfRequest)
 from .market_data_errors import MarketHistoryNotFound, ProviderUnavailable, SymbolLimitExceeded
 from .price_cache import CachedPriceProvider
-from .twelve_data import TwelveDataPriceProvider
+from .alpaca_history import AlpacaHistoryProvider
 
 
 class IntegrationPending(Exception):
@@ -200,12 +200,17 @@ class EngineQuantProvider:
 
 
 def get_provider(request: Request, settings: Settings = Depends(get_settings)) -> QuantProvider:
-    if settings.market_data_provider == "twelvedata":
-        key = settings.twelve_data_api_key.get_secret_value() if settings.has_twelve_data_key else ""
-        prices = TwelveDataPriceProvider(key, timeout_seconds=settings.market_data_timeout_seconds)
+    if settings.market_data_provider == "alpaca":
+        prices = AlpacaHistoryProvider(
+            settings.alpaca_api_key.get_secret_value() if settings.alpaca_api_key else "",
+            settings.alpaca_api_secret.get_secret_value() if settings.alpaca_api_secret else "",
+            settings.alpaca_history_feed,
+            timeout_seconds=settings.market_data_timeout_seconds,
+        )
     else:
         prices = SamplePriceProvider()
     return EngineQuantProvider(
         request.app.state.store,
-        prices=CachedPriceProvider(prices, request.app.state.price_cache),
+        prices=CachedPriceProvider(prices, request.app.state.price_cache,
+                                   enabled=settings.market_data_provider == "sample" or settings.alpaca_cache_rights_confirmed),
     )

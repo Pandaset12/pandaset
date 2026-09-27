@@ -11,17 +11,16 @@ aligned adjusted-price matrix for the quant teammate. MongoDB separately owns
 users and holdings. Financial formulas and Gemini are separate responsibilities.
 
 Default execution uses explicitly synthetic fixtures and a local SQLite cache.
-Twelve Data is the proposed live adapter; Tiger Data/PostgreSQL and MongoDB are
-configurable production adapters. No cloud service is contacted without explicit
-configuration. Existing backend API/Gemini code is retained for handoff.
+The original vendor adapter was removed when the active API moved to Alpaca
+history. Tiger Data/PostgreSQL and the draft MongoDB design here remain
+unimplemented. No cloud service is contacted by this draft.
 
 ## LLD
 
 - models.py: Decimal OHLC prices, UTC session-date labels, source/freshness
   metadata, validated deduplication and quant-input schemas.
-- providers.py: injectable HTTP client, bounded retries, process-local rate
-  limiter. Request raw OHLC and adjust=all independently; do not confuse a
-  split-only close with a dividend-adjusted close.
+- providers.py: fictional fixture reader only. The active Alpaca history
+  provider is `backend/alpaca_history.py`.
 - price_store.py: batch upserts on (symbol,time), range cache checkpoints and
   parameterized range queries. Repeating an ingestion never duplicates records.
 - service.py: refresh only missing/expired ranges, validate a complete batch

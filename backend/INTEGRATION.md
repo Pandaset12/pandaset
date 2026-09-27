@@ -1,6 +1,6 @@
 # Current API integration contract
 
-This describes the integrated backend after the quant, Twelve Data, and Supabase
+This describes the integrated backend after the quant, Alpaca, and Supabase
 portfolio-persistence and event-lab changes on main. The older findings in
 [QUANT_REVIEW.md](docs/QUANT_REVIEW.md) are historical, not pending implementation.
 
@@ -25,10 +25,10 @@ old analyses. A concurrent stale analysis save returns 409.
 ## Prices and quantitative output
 
 `MARKET_DATA_PROVIDER=sample` uses the fictional JSON price fixture through the
-real quant engine. `MARKET_DATA_PROVIDER=twelvedata` uses
-`TwelveDataPriceProvider` with a server-side key and adjusted daily closes.
+real quant engine. `MARKET_DATA_PROVIDER=alpaca` uses
+`AlpacaHistoryProvider` with server-side credentials and adjusted daily closes.
 Vendor errors never silently switch to sample data. See
-[Twelve Data setup](docs/TWELVE_DATA.md) for coverage and deployment requirements.
+[Alpaca history setup](docs/ALPACA_HISTORY.md) for coverage and deployment requirements.
 The inactive `DemoQuantProvider` serves precomputed legacy regression fixtures;
 it is not the application's default provider.
 
@@ -38,7 +38,9 @@ assumptions. Weights must sum to one within 1e-10 and are not renormalized.
 UTC midnight is a historical session label, not an exchange closing instant.
 Daily historical analytics are not actual brokerage P&L or news attribution.
 
-Successful per-symbol histories are cached for 60 seconds in the API process.
+Successful sample histories are cached for 60 seconds in the API process.
+Alpaca histories use that cache only when cache rights are confirmed; the event
+lab also retains analysis snapshots.
 Preflight and immediate analysis reuse an analysis-length window. Failures are
 not cached; workers do not share this cache. Tiger Data is not connected.
 
@@ -46,7 +48,7 @@ not cached; workers do not share this cache. Tiger Data is not connected.
 
 `GET /api/v1/quotes` verifies the investor's Supabase session and requests Alpaca
 IEX snapshots for up to 25 symbols. Both `ALPACA_API_KEY` and `ALPACA_API_SECRET`
-stay on the backend. This display-only feed does not replace Twelve Data history,
+stay on the backend. This display-only feed does not enter historical analysis,
 recalculate risk, or change saved analyses. Quote timestamps identify the last
 trade; they are not the portfolio analysis date.
 
@@ -75,7 +77,7 @@ v2. The storage boundaries and potential v1 migration requirements are listed in
 ## V2 event lab
 
 The gated `/api/v2` routes preserve Supabase token verification, the internal
-user allowlist/public-release gates, adjusted Twelve Data inputs, Mongo-backed
+user allowlist/public-release gates, adjusted Alpaca inputs, Mongo-backed
 jobs and snapshots, and the event worker. Scenario research uses Tavily and
 DeepSeek; Gemini proposes assumptions and explains quant-engine results.
 See [README.md](README.md#authenticated-event-lab-apiv2),
@@ -104,7 +106,7 @@ run a natural-language What-if request.
 ## Readiness and verification
 
 Health reports missing auth configuration and missing credentials for selected
-Gemini/Twelve Data modes. An enabled lab with missing settings adds
+Gemini/Alpaca modes. An enabled lab with missing settings adds
 `EVENT_LAB_NOT_CONFIGURED`; whitespace-only credentials are missing. Event
 readiness also requires successful event-store initialization during startup.
 If that initialization fails, status remains degraded even when every credential

@@ -13,10 +13,11 @@ from backend.main import create_app
     ({"supabase_url": "https://example.supabase.co", "supabase_anon_key": "test-only"}, []),
     ({"supabase_url": "https://example.supabase.co", "supabase_publishable_key": "test-publishable"}, []),
     ({"analyst_mode": "gemini"}, ["AUTH_NOT_CONFIGURED", "GEMINI_NOT_CONFIGURED"]),
-    ({"market_data_provider": "twelvedata"}, ["AUTH_NOT_CONFIGURED", "MARKET_DATA_NOT_CONFIGURED"]),
-    ({"analyst_mode": "gemini", "market_data_provider": "twelvedata",
+    ({"market_data_provider": "alpaca"}, ["AUTH_NOT_CONFIGURED", "MARKET_DATA_NOT_CONFIGURED"]),
+    ({"analyst_mode": "gemini", "market_data_provider": "alpaca",
       "supabase_url": "https://example.supabase.co", "supabase_anon_key": "test-only",
-      "gemini_api_key": "test-gemini", "twelve_data_api_key": "test-prices"}, []),
+      "gemini_api_key": "test-gemini", "alpaca_api_key": "test-key",
+      "alpaca_api_secret": "test-secret", "alpaca_history_feed": "iex"}, []),
 ])
 def test_health_reports_configuration_readiness_without_calling_vendors(tmp_path, monkeypatch, overrides, issues):
     def unexpected_request(*args, **kwargs):
@@ -24,11 +25,11 @@ def test_health_reports_configuration_readiness_without_calling_vendors(tmp_path
 
     monkeypatch.setattr("backend.auth.httpx.get", unexpected_request)
     monkeypatch.setattr("backend.gemini_service.genai.Client", unexpected_request)
-    monkeypatch.setattr("backend.twelve_data.TwelveDataPriceProvider._fetch", unexpected_request)
+    monkeypatch.setattr("backend.alpaca_history.AlpacaHistoryProvider._fetch", unexpected_request)
     configuration = {
         "analyst_mode": "demo", "market_data_provider": "sample",
         "supabase_url": "", "supabase_anon_key": "", "supabase_publishable_key": "",
-        "gemini_api_key": "", "twelve_data_api_key": "",
+        "gemini_api_key": "", "alpaca_api_key": "", "alpaca_api_secret": "",
         "event_lab_enabled": False,
         **overrides,
     }
@@ -43,19 +44,21 @@ def test_health_reports_configuration_readiness_without_calling_vendors(tmp_path
     assert payload["authentication_enabled"] is ("AUTH_NOT_CONFIGURED" not in issues)
     assert payload["market_data_ready"] is ("MARKET_DATA_NOT_CONFIGURED" not in issues)
     assert "test-gemini" not in response.text
-    assert "test-prices" not in response.text
+    assert "test-key" not in response.text
+    assert "test-secret" not in response.text
     assert "test-only" not in response.text
     assert "test-publishable" not in response.text
 
 
 def test_whitespace_only_credentials_are_missing_configuration(tmp_path):
     settings = Settings(_env_file=None, storage_path=tmp_path / "blank.sqlite3",
-                        analyst_mode="gemini", market_data_provider="twelvedata",
-                        gemini_api_key="   ", twelve_data_api_key="\t",
+                        analyst_mode="gemini", market_data_provider="alpaca",
+                        gemini_api_key="   ", alpaca_api_key="\t", alpaca_api_secret="  ",
+                        alpaca_history_feed="iex",
                         supabase_url="https://example.supabase.co", supabase_anon_key="  ",
                         supabase_publishable_key="\t", event_lab_enabled=False)
     assert settings.has_gemini_key is False
-    assert settings.has_twelve_data_key is False
+    assert settings.has_alpaca_history is False
     assert settings.authentication_enabled is False
     assert Settings(_env_file=None, supabase_url="  ", supabase_anon_key="test-only",
                     supabase_publishable_key="").authentication_enabled is False

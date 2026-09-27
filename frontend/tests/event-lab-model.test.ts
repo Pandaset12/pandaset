@@ -36,7 +36,7 @@ test("v2 analysis keeps the saved allocation and real-data provenance", () => {
       risk_contribution: { MSFT: 0.7, IAU: 0.3 },
       return_contribution: null,
       series: null,
-      data_source: "Twelve Data adjusted close",
+      data_source: "alpaca_adjusted_daily",
       freshness: "fresh",
       notes: ["Adjusted close history"],
       assumptions: [],
@@ -51,7 +51,7 @@ test("v2 analysis keeps the saved allocation and real-data provenance", () => {
     largest_position: "MSFT",
     largest_weight: 0.6,
   });
-  assert.equal(analysis.data_quality.source, "Twelve Data adjusted close");
+  assert.equal(analysis.data_quality.source, "alpaca_adjusted_daily");
   assert.equal(analysis.as_of, "2026-09-25T20:00:00Z");
   assert.equal(analysis.data_mode, "live");
   assert.equal(
