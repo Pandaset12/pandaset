@@ -198,9 +198,23 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         live_data = settings.market_data_provider == "twelvedata"
         market_data_ready = not live_data or settings.has_twelve_data_key
         event_store_ready = getattr(request.app.state, "event_store", None) is not None
+        analyst_ready = settings.analyst_mode != "gemini" or settings.has_gemini_key
+        configuration_issues = []
+        if not settings.authentication_enabled:
+            configuration_issues.append("AUTH_NOT_CONFIGURED")
+        if not analyst_ready:
+            configuration_issues.append("GEMINI_NOT_CONFIGURED")
+        if not market_data_ready:
+            configuration_issues.append("MARKET_DATA_NOT_CONFIGURED")
+        if settings.event_lab_enabled and not settings.event_lab_ready:
+            configuration_issues.append("EVENT_LAB_NOT_CONFIGURED")
         return {
-            "status": "ok" if market_data_ready and (not settings.event_lab_enabled or event_store_ready) else "degraded",
+            "status": "degraded" if configuration_issues or (
+                settings.event_lab_enabled and not event_store_ready
+            ) else "ok",
+            "configuration_issues": configuration_issues,
             "analyst_mode": settings.analyst_mode,
+            "analyst_ready": analyst_ready,
             "gemini_configured": settings.has_gemini_key,
             "legacy_quant_integration": "quant_engine_twelvedata" if live_data else "quant_engine_sample_prices",
             "legacy_data_mode": "live" if live_data else "demo",

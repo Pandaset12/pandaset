@@ -55,10 +55,10 @@ class Settings(BaseSettings):
     def event_lab_ready(self) -> bool:
         return bool(
             self.event_lab_enabled
-            and self.supabase_url
-            and self.supabase_publishable_key
-            and self.mongo_uri
-            and self.twelve_data_api_key
+            and self.supabase_url.strip()
+            and self.supabase_publishable_key.strip()
+            and self.mongo_uri and self.mongo_uri.get_secret_value().strip()
+            and self.has_twelve_data_key
             and self.has_gemini_key
             and self.has_tavily_key
             and self.has_deepseek_key
@@ -72,24 +72,24 @@ class Settings(BaseSettings):
             and self.twelve_data_display_rights_confirmed
             and self.twelve_data_cache_rights_confirmed
             and self.approved_news_domains.strip()
-            and self.fred_api_key
+            and self.fred_api_key and self.fred_api_key.get_secret_value().strip()
         )
 
     @property
     def has_gemini_key(self) -> bool:
-        return bool(self.gemini_api_key and self.gemini_api_key.get_secret_value())
+        return bool(self.gemini_api_key and self.gemini_api_key.get_secret_value().strip())
 
     @property
     def has_tavily_key(self) -> bool:
-        return bool(self.tavily_api_key and self.tavily_api_key.get_secret_value())
+        return bool(self.tavily_api_key and self.tavily_api_key.get_secret_value().strip())
 
     @property
     def has_deepseek_key(self) -> bool:
-        return bool(self.deepseek_api_key and self.deepseek_api_key.get_secret_value())
+        return bool(self.deepseek_api_key and self.deepseek_api_key.get_secret_value().strip())
 
     @property
     def has_twelve_data_key(self) -> bool:
-        return bool(self.twelve_data_api_key and self.twelve_data_api_key.get_secret_value())
+        return bool(self.twelve_data_api_key and self.twelve_data_api_key.get_secret_value().strip())
 
     @property
     def has_alpaca_keys(self) -> bool:
@@ -106,7 +106,7 @@ class Settings(BaseSettings):
 
     @property
     def authentication_enabled(self) -> bool:
-        return bool(self.supabase_url and self.supabase_auth_api_key)
+        return bool(self.supabase_url.strip() and self.supabase_auth_api_key)
 
 
 @lru_cache
