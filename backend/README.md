@@ -71,23 +71,34 @@ backend/.venv/bin/python -m uvicorn backend.main:app --reload
 ~~~
 
 Open [interactive API docs](http://127.0.0.1:8000/docs) or
-[health](http://127.0.0.1:8000/health). Health confirms the API process/configuration,
-not connectivity to Gemini, databases, or real quant services.
+[health](http://127.0.0.1:8000/health). Health reports configuration and whether
+the enabled event store initialized; it does not make live vendor checks.
 
+The server and public sample-price history can start without vendor keys.
 The v1 market-data provider defaults to fictional sample prices. V1 portfolio
 routes require `SUPABASE_URL` and either `SUPABASE_PUBLISHABLE_KEY` or the legacy
 `SUPABASE_ANON_KEY` to verify the bearer session and scope SQLite portfolios and
-analysis snapshots to the user. The gated v2
-routes use verified Supabase identity and owner-scoped MongoDB records.
+analysis snapshots to the user, even in demo mode. Copy `backend/.env.example`
+to the ignored `backend/.env` and use the frontend's Supabase project. Requests
+carry the investor's access token in `Authorization: Bearer <access_token>`.
+
+V1 uses ignored `backend/data/portfoliolens.sqlite3`. The gated v2 routes use
+verified Supabase identity and the implemented owner-scoped MongoDB store.
+See the event-lab configuration above; enabling it does not migrate v1 records.
+Tiger Data is not connected.
 
 ## First frontend flow
 
-Use the interactive docs' **Try it out** buttons:
+Sign in through the frontend, or use the interactive docs' **Try it out** buttons
+with your session's Bearer token in the `authorization` header field. Keep the
+token local. Do not paste it into issues or commit it.
 
-1. `GET /api/v1/portfolios/demo` loads the seeded portfolio.
-2. `POST /api/v1/portfolios/demo/analysis` creates a saved analysis. Copy its
+1. `POST /api/v1/portfolios` creates a portfolio owned by the current investor:
+   `{"name":"My portfolio","holdings":[{"symbol":"SPY","weight":1.0}]}`.
+   Copy its `portfolio_id`; `GET /api/v1/portfolios` lists your saved portfolios.
+2. `POST /api/v1/portfolios/{portfolio_id}/analysis` creates a saved analysis. Copy its
    `analysis_id`.
-3. `POST /api/v1/portfolios/demo/ask` with:
+3. `POST /api/v1/portfolios/{portfolio_id}/ask` with:
 ~~~json
 {
   "analysis_id": "paste-the-returned-analysis-id",
@@ -99,7 +110,8 @@ Use the interactive docs' **Try it out** buttons:
 
 The default answer has `status: "demo"` and explicitly labels the fixture as
 fictional. It is a deterministic snapshot summary, not an arbitrary-question AI.
-The seeded allocation is NVDA 30%, SPY 40%, JPM 20%, TLT 10%. Any valid allocation
+The legacy seeded `demo` portfolio is unassigned and is not accessible to investor
+accounts; create an owned portfolio for manual testing. Any valid allocation
 using NVDA, MSFT, AAPL, JPM, VTI, TLT, AMD, GLD, or SPY can be analyzed and compared
 using seven fictional price rows (six daily returns). Unsupported symbols return 404; prices are never
 invented or filled. Weights must total one within 1e-10 and are never renormalized.
@@ -114,6 +126,7 @@ is a sample session-date label, not a live quote or exchange closing timestamp.
 | --- | --- | --- |
 | GET | `/health` | Process/configuration status |
 | POST | `/api/v1/portfolios` | Validate and save `name` plus `holdings`; returns 201 |
+| GET | `/api/v1/portfolios` | List portfolios owned by the authenticated investor |
 | PUT | `/api/v1/portfolios/{id}` | Replace the authenticated owner's portfolio name and holdings; retains ID and creation time |
 | GET | `/api/v1/portfolios/{id}` | Read saved portfolio |
 | POST | `/api/v1/portfolios/{id}/analysis` | Validate provider output and save a snapshot |
@@ -131,7 +144,9 @@ decimals and must sum to 1 (tolerance 1e-10). Duplicate symbols are rejected
 after normalization. We never silently rescale inputs.
 
 V1 errors use `{"error":{"code":"...","message":"..."}}`. Input errors are
-422, missing objects 404, pending quant integration 501, and provider errors 502.
+422, missing/invalid sessions 401, unconfigured auth 503, missing or another
+investor's objects 404, a portfolio changed during analysis 409, and provider
+errors 502. The inactive precomputed test provider can also return 501.
 AI failures on Ask Panda and the contextual workflow routes return HTTP 200
 with `status: "unavailable"`, an `error_code` when available, and warnings.
 Saved metrics or the selected Research source remain accessible. Quant-provider
@@ -240,6 +255,12 @@ selected in the Research page; it does not use Google Search. Research does not
 crawl pages in the background. Choose a model supporting structured output and
 the URL Context tool.
 
+User-supplied sources require HTTPS domain URLs without credentials. IP addresses,
+single-label hosts, empty DNS labels, and `.localhost`, `.local`, or `.internal`
+names are rejected, including their trailing-root-dot forms. Public domains with
+one trailing root dot remain valid. This is syntactic input validation, not a
+DNS-resolution or redirect audit; retrieval and retrieval status come from Gemini.
+
 The response includes `sources`, `grounding_supports`, `url_retrievals` and
 `search_suggestions_html`. Preserve source array order: grounding indices refer
 to it. Text offsets refer to `grounding_text` (the original JSON model response),
@@ -249,8 +270,8 @@ and [URL retrieval status](https://ai.google.dev/gemini-api/docs/generate-conten
 
 Enabling Gemini does not enable live prices. Quant calculations run through the
 provider before any scenario explanation. The explanation route cannot apply or
-save proposed holdings; the existing explicit frontend confirmation remains the
-only way to apply a scenario to the current browser session. Daily P&L
+save proposed holdings. Persisting an allocation is a separate authenticated
+`PUT /api/v1/portfolios/{id}` action. Daily P&L
 attribution and natural-language execution of what-if calculations remain
 unsupported.
 
@@ -291,10 +312,10 @@ Main files: `api_v1.py` (routes), `schemas.py` (contracts), `storage.py`
 ## Recovered data-layer drafts
 
 Earlier Backend #1 files are preserved under [drafts/](drafts/README.md) for
-team handoff. MongoDB was only a proposed design plus a dependency; no working
-MongoDB adapter existed to restore. The drafts are not imported by the API.
-See [MongoDB handoff](docs/MONGODB_HANDOFF.md) for the existing storage interface
-and remaining work. SQLite remains the active local store.
+team handoff. Those drafts contained a MongoDB proposal, not an implementation.
+The current event lab separately implements `mongo_store.py`; v1 retains SQLite.
+The draft Python modules are not imported by the API. See
+[MongoDB handoff](docs/MONGODB_HANDOFF.md) for the two storage boundaries.
 
 ## Runtime state and deployment boundary
 
@@ -302,19 +323,34 @@ and remaining work. SQLite remains the active local store.
 tells you whether the financial inputs are fictional or live. Gemini answering
 a fictional fixture is still a demo. `status: complete` means the explanation
 completed, not that live financial services are connected. Health also exposes
-the current data mode, storage backend and authentication status.
+the current data mode, storage backend and authentication configuration.
 
-The documented local command binds to loopback. The starter does not implement
-authentication, ownership checks or quota rate limiting. It is not ready for
-unrestricted public access. Before a shared deployment, agree on a protected
-demo environment or implement authentication/access controls and request limits.
+`GET /health` keeps HTTP 200 for a running server but reports `status: degraded`
+when required configuration is missing or the enabled event store failed to
+initialize. `configuration_issues` lists
+`AUTH_NOT_CONFIGURED`, `GEMINI_NOT_CONFIGURED` (in Gemini mode), and/or
+`MARKET_DATA_NOT_CONFIGURED` (in Twelve Data mode), plus
+`EVENT_LAB_NOT_CONFIGURED` when the enabled lab lacks required configuration.
+Whitespace-only keys do not count as configured. `analyst_ready`,
+`market_data_ready`, and `authentication_enabled` describe nonblank configuration,
+not successful vendor requests. Event readiness additionally requires the Mongo
+store to have initialized during startup. A startup failure can therefore leave
+`configuration_issues` empty while `status` is `degraded` and `event_lab_ready`
+is false. Health does not probe vendors or recheck Mongo connectivity on each
+request; it cannot confirm key validity, model access, quotas, or ongoing uptime.
+
+The documented local command binds to loopback. Portfolio endpoints enforce
+Supabase authentication and ownership. Market history and curated Research
+summary endpoints remain public, and application quota rate limiting is not
+implemented. The deployment owner should account for those public vendor calls.
 
 SQLite needs persistent storage if used for a hosted demo. Do not assume an
 ephemeral filesystem survives rebuilds or is shared across replicas. Confirm a
-single-instance persistent volume or complete the team's MongoDB adapter before
-claiming durable shared persistence. See the rollout gates in
+single-instance persistent volume for v1. V2 uses configured MongoDB; verify its
+deployment persistence separately. Neither path automatically migrates the
+other's portfolios. See the rollout gates in
 [INTEGRATION.md](INTEGRATION.md).
-# Investor ownership
+## Investor ownership
 
 Set `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` in `backend/.env` to the same project used by frontend authentication. V1 also accepts a legacy `SUPABASE_ANON_KEY`; when it is set, that key takes precedence for v1 Supabase Auth requests. The backend validates Bearer tokens through Supabase Auth. New portfolios are owned by the authenticated user; legacy SQLite rows are retained with no owner and are not returned to investors. `/api/v1/portfolios` lists only the caller's portfolios. No Supabase service role secret is needed.
 

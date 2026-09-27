@@ -11,19 +11,22 @@ reference code, not a MongoDB implementation or an active market-data pipeline.
 | `data_pipeline/sample_prices.json` | Clearly fictional test prices |
 | `requirements-data.txt` | Dependencies proposed for completing the data layer |
 
-**MongoDB status:** only the design and `pymongo` dependency were written.
-`mongo_store.py`, `price_store.py`, `service.py` and the proposed CLI do not
-exist yet. Neither MongoDB nor Tiger Data has been connected or tested.
-The current API uses `backend/storage.py` (SQLite).
+**Historical draft status:** these drafts only contained the MongoDB design and
+`pymongo` dependency, with no implemented store or CLI. Current main separately
+implements `backend/mongo_store.py` for the gated v2 event lab. V1 still uses
+`backend/storage.py` (SQLite). Restoring these drafts does not configure either
+store, migrate v1 portfolios, or connect Tiger Data.
 
 The fixture reader has been smoke-tested after restoration. The live market
 adapter has not been tested against a provider account. Do not enable it as a
 production data source without review of provider permissions, adjustment
 semantics, date coverage, error handling and credentials.
 
-These drafts are not imported by the running API. Financial formulas remain in
-the quant teammate's module. The fictional price fixture here is unrelated to
-the API's precomputed demo analytics and must not be presented as their source.
+The draft Python modules are not imported by the running API. However, the active
+`SamplePriceProvider` reads `data_pipeline/sample_prices.json` and passes those
+fictional prices to the quant engine for custom sample-mode analyses. That path
+is separate from the precomputed `fixtures/demo_analytics.json` used by legacy
+regression tests. Financial formulas remain in the quant teammate's module.
 
 See [MongoDB handoff](../docs/MONGODB_HANDOFF.md) and
 [quant integration review](../docs/QUANT_REVIEW.md) for the next boundaries.

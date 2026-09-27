@@ -1,126 +1,122 @@
-# API and Gemini integration update
+# Current API integration contract
 
-## Quant integration on quant-backend-integration
+This describes the integrated backend after the quant, Twelve Data, and Supabase
+portfolio-persistence and event-lab changes on main. The older findings in
+[QUANT_REVIEW.md](docs/QUANT_REVIEW.md) are historical, not pending implementation.
 
-The default `EngineQuantProvider` now calls `analyze_portfolio()` and
-`compare_portfolios()`. It reads the existing
-`drafts/data_pipeline/sample_prices.json` fixture: seven fictional daily price
-rows for NVDA, SPY, JPM and TLT. All results carry `data_mode=demo`,
-`data_source=synthetic_fixture`, unknown freshness, and an explicit fictional-price
-warning. UTC midnight represents the sample session date, not a market close.
-No live data service is called.
+## V1 request flow
 
-The adapter explicitly maps cumulative return, annualized portfolio/asset
-volatility, signed risk shares, correlations, observation count and end date.
-Quant warnings and assumptions survive snapshot persistence. Null risk shares
-and correlations remain null; numeric citations exclude nulls. Weight tolerance
-is 1e-10 with no renormalization. Correlation validation allows 1e-10 roundoff
-without clipping values.
+1. Supabase verifies the request's Bearer token and supplies the investor ID.
+2. The API reads that investor's portfolio from SQLite. Another investor's ID
+   returns 404, including on legacy portfolio routes.
+3. `EngineQuantProvider` reads aligned daily prices from the selected provider
+   and invokes the pure Python `analyze_portfolio()` function.
+4. The API validates portfolio identity, weights, units, provenance, and quant
+   output, then atomically saves a snapshot if the allocation is still current.
+5. Ask, Briefing, and Risk read the requested saved analysis. Gemini explains
+   those metrics; it does not replace the calculated values or save holdings.
 
-What-if resolves the saved portfolio, fetches the union of symbols once, and
-zero-fills absent weights only. Both reports use identical prices. It returns
-`current_analysis` and `proposed_analysis` as AnalyticsSnapshot payloads, with
-`delta.portfolio_return` and `delta.portfolio_volatility` taken from the engine's
-proposed-minus-baseline differences. Comparisons do not change or save holdings.
-Unsupported sample symbols fail as provider errors (502).
+What-if obtains one common price history for the saved/proposed symbol union and
+calls `compare_portfolios()`. The API accepts at most eight symbols across that
+union. Comparison does not mutate holdings; saving an edit is a separate
+owner-authenticated PUT. If the allocation changes, the store atomically deletes
+old analyses. A concurrent stale analysis save returns 409.
 
-To switch to real history, replace the sample loader and its demo-specific
-provenance mapping with a verified adjusted-close adapter supplying complete,
-aligned history for every requested symbol, source/freshness and agreed session
-timestamp semantics. The draft market provider is not activated or verified;
-credentials, plan coverage and an end-to-end real-history acceptance run remain
-outstanding. Changing the data-mode label alone is insufficient.
+## Prices and quantitative output
 
-Install dependencies from the repository root with `pip install -r
-backend/requirements-dev.txt`; this also installs the local quant package.
-Run `python -m pytest backend/tests -q` and
-`python -m pytest quant_engine/tests -q` using that environment.
+`MARKET_DATA_PROVIDER=sample` uses the fictional JSON price fixture through the
+real quant engine. `MARKET_DATA_PROVIDER=twelvedata` uses
+`TwelveDataPriceProvider` with a server-side key and adjusted daily closes.
+Vendor errors never silently switch to sample data. See
+[Twelve Data setup](docs/TWELVE_DATA.md) for coverage and deployment requirements.
+The inactive `DemoQuantProvider` serves precomputed legacy regression fixtures;
+it is not the application's default provider.
 
-The design and review notes below describe the pre-integration baseline; the
-status above supersedes their pending-quant statements.
+The adapter preserves nullable correlations/risk shares, signed risk
+contributions, source, session dates, observation counts, warnings, and
+assumptions. Weights must sum to one within 1e-10 and are not renormalized.
+UTC midnight is a historical session label, not an exchange closing instant.
+Daily historical analytics are not actual brokerage P&L or news attribution.
 
-## HLD
+Successful per-symbol histories are cached for 60 seconds in the API process.
+Preflight and immediate analysis reuse an analysis-length window. Failures are
+not cached; workers do not share this cache. Tiger Data is not connected.
 
-Goal: implement the API contract in PortfolioLens-HLD.md with a reproducible
-offline demo and a testable Gemini boundary.
+## Optional live quotes
 
-Flow: validated holdings -> portfolio store -> provider -> saved analysis ->
-question with analysis_id -> Gemini or explicit fallback. A question reads the
-specified snapshot, so it does not fetch prices or recalculate risk.
+`GET /api/v1/quotes` verifies the investor's Supabase session and requests Alpaca
+IEX snapshots for up to 25 symbols. Both `ALPACA_API_KEY` and `ALPACA_API_SECRET`
+stay on the backend. This display-only feed does not replace Twelve Data history,
+recalculate risk, or change saved analyses. Quote timestamps identify the last
+trade; they are not the portfolio analysis date.
 
-Use SQLite for the local demo because it is included in Python and survives
-restarts. MongoDB and the team's quant/data modules remain external integration
-work. Do not introduce a second financial calculation engine or invent missing
-returns, correlations, or timestamps.
+Missing credentials return 503/`ALPACA_NOT_CONFIGURED`, and the frontend hides
+the optional strip and stops polling until it remounts. Provider failures return
+safe 502 errors without falling back to sample prices. Missing optional Alpaca
+keys do not degrade the core `/health` result; validate quotes separately with
+the read-only check documented in [README.md](README.md).
 
-Keep the initial /api routes as deprecated compatibility endpoints. New frontend
-work uses /api/v1. Document additive fields and unavailable metrics explicitly.
+## Storage and identity
 
-## LLD
+Supabase Auth provides identity. V1 stores portfolios and analysis snapshots in
+SQLite. Configure the frontend and backend for the same Supabase project. V1
+uses a nonblank legacy anon key when configured, otherwise the publishable key.
+No service-role key is required. Legacy demo/unowned rows are preserved but never
+assigned to a signed-in investor. The initial `demo` ID is not a usable personal
+portfolio.
 
-- schemas.py: validate normalized holdings, totals, snapshot provenance and API
-  responses. Weights are decimals; risk contributions are relative volatility
-  contributions and may be negative.
-- storage.py: parameterized SQLite queries for portfolios and immutable analysis
-  snapshots. Lookups require both portfolio_id and analysis_id.
-- providers.py: analyze(Portfolio) is the replacement boundary for the team's
-  synchronous Python quant/data modules; sync calls run in FastAPI's thread pool.
-  Cache only the static fixture and return deep copies.
-- api_v1.py: portfolio creation/read, analysis creation/read, what-if and ask routes.
-  V1 errors use error.code/message. Legacy error envelopes stay compatible.
-- gemini_service.py and prompts/analyst.txt: bounded calls, a validated JSON
-  qualitative explanation and cited metric identifiers. The backend renders numeric
-  facts and rejects numeric model prose. Citation values come from the snapshot,
-  not the model. Preserve source indices and original grounding text.
+SQLite must use a persistent volume for a hosted v1 instance; those records are
+not shared across independent instances. V2 separately implements owner-scoped
+MongoDB portfolios, analyses, scenario jobs, and chat in `mongo_store.py`.
+Enabling the event lab does not migrate or expose existing v1 portfolios through
+v2. The storage boundaries and potential v1 migration requirements are listed in
+[MONGODB_HANDOFF.md](docs/MONGODB_HANDOFF.md).
 
-The analysis response uses the HLD field names. Unknown portfolio_return,
-asset_volatility, correlation_matrix, observation_count and as_of are null.
-Additional portfolio_id, created_at, weights, data_mode, units and assumptions
-make the demo's provenance explicit. An ask response includes the HLD's answer,
-citations and disclaimer plus status, metrics, warnings and web evidence.
+## V2 event lab
 
-Failure behavior: validation 422, missing portfolio/snapshot 404, unavailable
-quant integration 501, provider failure 502. AI failures return a successful
-partial response with status=unavailable and the saved metrics; they never
-silently switch to fabricated calculations. A custom allocation cannot reuse
-the demo's fixture values.
+The gated `/api/v2` routes preserve Supabase token verification, the internal
+user allowlist/public-release gates, adjusted Twelve Data inputs, Mongo-backed
+jobs and snapshots, and the event worker. Scenario research uses Tavily and
+DeepSeek; Gemini proposes assumptions and explains quant-engine results.
+See [README.md](README.md#authenticated-event-lab-apiv2),
+[the v2 contract](../docs/event-lab-api-contract.md), and
+[release gates](../docs/event-lab-release-gates.md) for setup and acceptance.
 
-Validation: portfolio -> analysis -> ask flow; persistence across app restarts;
-snapshot/portfolio matching; duplicate and invalid weights; malformed provider
-data; missing metric citations; Gemini timeout/invalid output; source indices;
-and existing legacy tests. Live Gemini remains unverified without credentials.
+## V1 Gemini boundary
 
-## Interface decisions and rollout gates
+Portfolio explanations are qualitative text plus exact metric IDs. The backend
+rejects unknown IDs and numeric prose, then renders numeric facts from the saved
+snapshot or comparison. This guard does not prove qualitative accuracy or detect
+every possible numerical paraphrase. Tests cover malformed output, invented
+numbers, timeouts, model fallback, and safe unavailable responses.
 
-Quant functions now exist: `analyze_portfolio(prices, weights, **options)`
-and `compare_portfolios(prices, baseline_weights, proposed_weights, **options)`.
-See docs/QUANT_REVIEW.md for their tested contract and reproducible mismatches.
-They are not wired into this branch yet.
+Ask uses no web tools by default. Explicit `web_search: true` enables Search and
+URL Context; explicit `source_urls` enables URL Context alone. Briefing, Risk,
+and What-if use their calculated context without web tools. Research summarizes
+an allowlisted issuer source using URL Context and requires successful retrieval.
 
-Proposed call ownership to confirm with the team:
-1. The application orchestration/provider asks Backend #1 for adjusted prices,
-   aligned dates and provenance for the portfolio's symbol set.
-2. The application calls the pure quant Python module with those prices and
-   validated weights; the quant module never fetches data or writes databases.
-3. The application validates/maps the report, then saves an immutable snapshot
-   through the shared portfolio store. Gemini reads only that saved snapshot.
-4. For what-if, obtain the union of symbols and a common observation window,
-   add zero weights for absent holdings, then map the comparison result to the
-   frontend contract. Do not fill missing prices.
+`ANALYST_MODE=demo` returns a labelled offline response. In Gemini mode a failed
+call returns `status: unavailable`; HTTP 200 alone is not AI success. Numeric
+citations refer to backend facts; external evidence retains the original source
+indices and raw grounding text. Ask cannot execute trades, change holdings, or
+run a natural-language What-if request.
 
-Storage is still SQLite. The recovered MongoDB material is only an inactive
-design/dependency draft; docs/MONGODB_HANDOFF.md lists the store methods to
-implement. Do not equate configuration placeholders with a connected database.
+## Readiness and verification
 
-Before a shared/public rollout, confirm:
-- Single-instance SQLite with a persistent volume, or a tested MongoDB adapter.
-- Authentication/portfolio ownership and quota limits, or a protected demo
-  environment with restricted access. No such access controls are implemented
-  by the application yet.
-- Frontend handling of demo/live data mode, explanation status, nullable
-  metrics, request IDs and source metadata.
-- A real custom-portfolio -> quant analysis -> persistent snapshot -> Gemini
-  acceptance run, including mismatched-number rejection and upstream outages.
+Health reports missing auth configuration and missing credentials for selected
+Gemini/Twelve Data modes. An enabled lab with missing settings adds
+`EVENT_LAB_NOT_CONFIGURED`; whitespace-only credentials are missing. Event
+readiness also requires successful event-store initialization during startup.
+If that initialization fails, status remains degraded even when every credential
+is present and `configuration_issues` is empty. V1 can still serve requests.
+No vendor calls, fresh Mongo pings, key validation, model-access checks, or quota
+checks run from `/health`.
+Use [README.md](README.md) for authenticated request examples and configuration.
+Use [VERIFICATION.md](VERIFICATION.md) for the tested scope and remaining live checks.
 
-Current request IDs and safe structured error logs support diagnosis; they are
-not a substitute for authentication, persistence or upstream integration.
+Before the shared demo, verify a real signed-in user's create/edit -> analysis ->
+snapshot -> AI explanation -> reload flow in the configured deployment. Check
+`data_mode`, dates, sources, and AI `status`, plus explicit upstream failures.
+Market history and Research summaries are public routes; application rate limits
+are still absent. The deployment owner must account for vendor capacity and
+persistent storage. Passing mocked tests is not proof of live credentials.
