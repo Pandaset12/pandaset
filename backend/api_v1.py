@@ -129,6 +129,17 @@ def require_portfolio(store: PortfolioStore, portfolio_id: str, owner_id: str) -
     return portfolio
 
 
+def require_portfolio_history(request: PortfolioInput, provider: QuantProvider) -> None:
+    try:
+        provider.market_history(sorted(request.weights), 2)
+    except RateLimitError as exc:
+        raise api_error(429, "PROVIDER_RATE_LIMIT", "Price history validation is rate limited. Try again shortly.") from exc
+    except MarketHistoryNotFound as exc:
+        raise api_error(422, "UNSUPPORTED_PORTFOLIO_SYMBOL", "We couldn't find price history for one or more holdings. Check the ticker and try again.") from exc
+    except ProviderUnavailable as exc:
+        raise api_error(502, "MARKET_HISTORY_UNAVAILABLE", "Could not verify price history right now. Try again shortly.") from exc
+
+
 def require_supported_symbol_union(saved_weights: dict[str, float], proposed_weights: dict[str, float]) -> None:
     symbol_count = len(set(saved_weights) | set(proposed_weights))
     if symbol_count > MAX_PORTFOLIO_SYMBOLS:
@@ -250,7 +261,8 @@ def analysis_response(metrics: AnalyticsSnapshot, analysis_id: str, created_at: 
 
 
 @router.post("/portfolios", response_model=Portfolio, status_code=201)
-def create_portfolio(request: PortfolioInput, store: PortfolioStore = Depends(get_store), owner_id: str = Depends(current_user_id)):
+def create_portfolio(request: PortfolioInput, store: PortfolioStore = Depends(get_store), provider: QuantProvider = Depends(get_provider), owner_id: str = Depends(current_user_id)):
+    require_portfolio_history(request, provider)
     return store.create(request, owner_id)
 
 
@@ -267,13 +279,24 @@ def get_portfolio(portfolio_id: str, store: PortfolioStore = Depends(get_store),
 @router.put("/portfolios/{portfolio_id}", response_model=Portfolio)
 def update_portfolio(
     portfolio_id: str, request: PortfolioInput,
-    store: PortfolioStore = Depends(get_store), owner_id: str = Depends(current_user_id),
+    store: PortfolioStore = Depends(get_store), provider: QuantProvider = Depends(get_provider),
+    owner_id: str = Depends(current_user_id),
 ):
     require_portfolio(store, portfolio_id, owner_id)
+    require_portfolio_history(request, provider)
     updated = store.update(portfolio_id, owner_id, request)
     if updated is None:
         raise api_error(404, "PORTFOLIO_NOT_FOUND", "Portfolio not found.")
     return updated
+
+
+@router.delete("/portfolios/{portfolio_id}", status_code=204)
+def delete_portfolio(
+    portfolio_id: str, store: PortfolioStore = Depends(get_store),
+    owner_id: str = Depends(current_user_id),
+):
+    if not store.delete(portfolio_id, owner_id):
+        raise api_error(404, "PORTFOLIO_NOT_FOUND", "Portfolio not found.")
 
 
 @router.post("/portfolios/{portfolio_id}/analysis", response_model=AnalysisResponse)

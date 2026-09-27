@@ -31,6 +31,7 @@ export type PortfolioOnboardingProps = {
   allowDirectEntry?: boolean;
   onRetryLoad?: () => void;
   searchTickers: SearchTickers;
+  verifyTicker?: (symbol: string) => Promise<void>;
   createPortfolio: (
     input: PortfolioInput,
     options: { signal: AbortSignal },
@@ -52,6 +53,7 @@ export function PortfolioOnboarding({
   allowDirectEntry = true,
   onRetryLoad,
   searchTickers,
+  verifyTicker,
   createPortfolio,
   onOpenPortfolio,
   onCancel,
@@ -418,6 +420,7 @@ export function PortfolioOnboarding({
               inputId={tickerInputId}
               selectedSymbols={holdings.map((row) => row.symbol)}
               searchTickers={searchTickers}
+              verifyTicker={verifyTicker}
               allowDirectEntry={allowDirectEntry}
               onSelect={addHolding}
               disabled={holdings.length >= maxHoldings}

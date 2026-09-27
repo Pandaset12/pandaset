@@ -122,6 +122,68 @@ def test_update_preserves_identity_and_owner_and_invalidates_old_analyses(client
     assert refreshed.json()["weights"] == {"TLT": 1.0}
 
 
+def test_delete_requires_owner_and_removes_saved_analyses(client):
+    api, users = client
+    owner = {"Authorization": "Bearer owner"}
+    other = {"Authorization": "Bearer other"}
+    created = api.post("/api/v1/portfolios", json={
+        "name": "Delete me", "holdings": [{"symbol": "SPY", "weight": 1.0}],
+    }, headers=owner).json()
+    path = f"/api/v1/portfolios/{created['portfolio_id']}"
+    analysis = api.post(path + "/analysis", headers=owner).json()
+    assert api.delete(path).status_code == 401
+    assert api.delete(path, headers=other).status_code == 404
+    assert api.get(path, headers=owner).status_code == 200
+    assert api.delete(path, headers=owner).status_code == 204
+    assert api.get(path, headers=owner).status_code == 404
+    assert api.delete(path, headers=owner).status_code == 404
+    assert api.get("/api/v1/portfolios", headers=owner).json() == []
+    with pytest.raises(SnapshotNotFound):
+        api.app.state.store.get_analysis(created["portfolio_id"], analysis["analysis_id"])
+    assert api.app.state.store.list_for_owner(users["other"]) == []
+
+
+def test_create_and_update_reject_missing_history_before_persistence(client):
+    api, _ = client
+    owner = {"Authorization": "Bearer owner"}
+    for symbol in ("AAPL", "MSFT", "SPY", "JPM"):
+        response = api.post("/api/v1/portfolios", json={
+            "name": symbol, "holdings": [{"symbol": symbol, "weight": 1.0}],
+        }, headers=owner)
+        assert response.status_code == 201, response.text
+    original = api.get("/api/v1/portfolios", headers=owner).json()
+    for symbol in ("SPACE", "BALLSS"):
+        rejected = api.post("/api/v1/portfolios", json={
+            "name": symbol, "holdings": [{"symbol": symbol, "weight": 1.0}],
+        }, headers=owner)
+        assert rejected.status_code == 422
+        assert rejected.json()["error"]["code"] == "UNSUPPORTED_PORTFOLIO_SYMBOL"
+        update = api.put(f"/api/v1/portfolios/{original[0]['portfolio_id']}", json={
+            "name": symbol, "holdings": [{"symbol": symbol, "weight": 1.0}],
+        }, headers=owner)
+        assert update.status_code == 422
+    assert api.get("/api/v1/portfolios", headers=owner).json() == original
+
+
+def test_provider_outage_does_not_persist_unverified_portfolio(client, monkeypatch):
+    from backend.market_data_errors import ProviderUnavailable
+    from backend.providers import SamplePriceProvider
+
+    api, _ = client
+    owner = {"Authorization": "Bearer owner"}
+
+    def unavailable(self, symbols, lookback_days=252):
+        raise ProviderUnavailable("Upstream unavailable")
+
+    monkeypatch.setattr(SamplePriceProvider, "prices", unavailable)
+    response = api.post("/api/v1/portfolios", json={
+        "name": "Not saved", "holdings": [{"symbol": "SPY", "weight": 1.0}],
+    }, headers=owner)
+    assert response.status_code == 502
+    assert response.json()["error"]["code"] == "MARKET_HISTORY_UNAVAILABLE"
+    assert api.get("/api/v1/portfolios", headers=owner).json() == []
+
+
 def test_preflight_history_is_reused_by_following_analysis(client, monkeypatch):
     from backend.providers import SamplePriceProvider
 
@@ -313,7 +375,7 @@ def test_what_if_uses_aligned_alpaca_history_for_added_holding(client, monkeypat
     }, headers=headers)
     assert result.status_code == 200, result.text
     payload = result.json()
-    assert calls == [("SPY", "TLT")]
+    assert calls == [("SPY",), ("SPY", "TLT")]
     assert payload["current_analysis"]["data_source"] == "alpaca_adjusted_daily"
     assert payload["proposed_analysis"]["data_source"] == "alpaca_adjusted_daily"
     assert any("IEX" in note for note in payload["proposed_analysis"]["notes"])

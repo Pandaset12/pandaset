@@ -250,6 +250,15 @@ export function updatePortfolio(portfolioId: string, input: PortfolioInput) {
   );
 }
 
+export function deletePortfolio(portfolioId: string) {
+  return request<null>(
+    `/api/v1/portfolios/${encodeURIComponent(portfolioId)}`,
+    {
+      method: "DELETE",
+    },
+  );
+}
+
 export function analyzeExistingPortfolio(portfolio: Portfolio) {
   return post<AnalysisResponse>(
     `/api/v1/portfolios/${encodeURIComponent(portfolio.portfolio_id)}/analysis`,
@@ -340,6 +349,22 @@ export async function verifyPortfolioHistory(
     }
   }
   if (signal?.aborted) throw new DOMException("Cancelled", "AbortError");
+}
+
+export async function verifyPortfolioSymbol(symbol: string) {
+  try {
+    await getMarketHistory([symbol], 2);
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 404)
+      throw new Error(`We couldn't find that ticker (${symbol}).`);
+    if (error instanceof ApiError && error.status === 429)
+      throw new Error(
+        "Price history validation is rate limited. Try again shortly.",
+      );
+    throw new Error(
+      `Could not verify price history for ${symbol}. Check the ticker and try again.`,
+    );
+  }
 }
 
 export async function getLiveQuotes(symbols: string[], signal?: AbortSignal) {

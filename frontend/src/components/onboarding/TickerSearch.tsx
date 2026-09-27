@@ -16,6 +16,7 @@ type Props = {
   inputId: string;
   selectedSymbols: string[];
   searchTickers: SearchTickers;
+  verifyTicker?: (symbol: string) => Promise<void>;
   onSelect: (ticker: TickerResult) => void;
   disabled?: boolean;
   allowDirectEntry?: boolean;
@@ -25,6 +26,7 @@ export function TickerSearch({
   inputId,
   selectedSymbols,
   searchTickers,
+  verifyTicker,
   onSelect,
   disabled = false,
   allowDirectEntry = true,
@@ -37,6 +39,8 @@ export function TickerSearch({
   );
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(-1);
+  const [verifying, setVerifying] = useState(false);
+  const [verificationError, setVerificationError] = useState("");
   const root = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -86,9 +90,25 @@ export function TickerSearch({
       });
   }, [active, expanded, listId]);
 
-  function select(index: number) {
+  async function select(index: number) {
     const option = options[index];
-    if (!option || selectedSymbols.includes(option.symbol)) return;
+    if (!option || selectedSymbols.includes(option.symbol) || verifying) return;
+    if (verifyTicker) {
+      setVerifying(true);
+      setVerificationError("");
+      try {
+        await verifyTicker(option.symbol);
+      } catch (error) {
+        setVerificationError(
+          error instanceof Error
+            ? error.message
+            : "Could not verify this ticker.",
+        );
+        setVerifying(false);
+        return;
+      }
+      setVerifying(false);
+    }
     onSelect(option);
     setQuery("");
     setResults([]);
@@ -123,7 +143,7 @@ export function TickerSearch({
         <input
           id={inputId}
           value={query}
-          disabled={disabled}
+          disabled={disabled || verifying}
           placeholder="Search a ticker or company"
           role="combobox"
           aria-autocomplete="list"
@@ -137,6 +157,7 @@ export function TickerSearch({
           spellCheck={false}
           onChange={(event) => {
             setQuery(event.target.value);
+            setVerificationError("");
             setOpen(true);
             setActive(-1);
           }}
@@ -154,7 +175,7 @@ export function TickerSearch({
             if (event.key === "Enter") {
               event.preventDefault();
               if (expanded)
-                select(
+                void select(
                   active >= 0
                     ? active
                     : options.findIndex(
@@ -173,21 +194,28 @@ export function TickerSearch({
           ? "Search by company name or symbol. Direct entry requires the exact ticker. Use arrows and Enter to select."
           : "Search supported instruments. Use arrows and Enter to select."}
       </p>
+      {verificationError && (
+        <p className="field-error" role="alert">
+          {verificationError}
+        </p>
+      )}
       {expanded && (
         <div className="po-search-menu">
           <div className="po-search-notice" role="status">
             {status === "loading"
               ? "Searching tickers…"
-              : status === "error"
-                ? allowDirectEntry
-                  ? "Search is unavailable. Add a holding only if you know its exact ticker."
-                  : "Search is unavailable. Try again in a moment."
-                : !results.length
+              : verifying
+                ? "Checking price history…"
+                : status === "error"
                   ? allowDirectEntry
-                    ? "No matching stock found. Direct entry requires the exact ticker."
-                    : "No supported instruments match this search."
-                  : results.length +
-                    (results.length === 1 ? " match" : " matches")}
+                    ? "Search is unavailable. Add a holding only if you know its exact ticker."
+                    : "Search is unavailable. Try again in a moment."
+                  : !results.length
+                    ? allowDirectEntry
+                      ? "No matching stock found. Direct entry requires the exact ticker."
+                      : "No supported instruments match this search."
+                    : results.length +
+                      (results.length === 1 ? " match" : " matches")}
           </div>
           <ul id={listId} role="listbox" aria-label="Ticker results">
             {options.map((option, index) => {
@@ -205,7 +233,7 @@ export function TickerSearch({
                   onMouseEnter={() => {
                     if (!exists) setActive(index);
                   }}
-                  onClick={() => select(index)}
+                  onClick={() => void select(index)}
                 >
                   <span className="po-result-symbol">{option.symbol}</span>
                   <span className="po-result-name">

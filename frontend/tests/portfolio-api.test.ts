@@ -13,6 +13,7 @@ import {
   searchAssets,
   setApiAccessToken,
   verifyPortfolioHistory,
+  verifyPortfolioSymbol,
   updatePortfolio,
 } from "../src/api/portfolio";
 
@@ -104,6 +105,30 @@ test("company lookup uses the authenticated backend and failed history suggests 
     "/api/v1/market-history?lookback_days=2&symbols=APPLE",
     "/api/v1/assets/search?q=APPLE",
   ]);
+});
+
+test("missing tickers and rate limits have distinct verification errors", async () => {
+  stubFetch(
+    () =>
+      ({
+        ok: false,
+        status: 404,
+        json: async () => ({ error: { message: "Missing" } }),
+      }) as Response,
+  );
+  await assert.rejects(
+    verifyPortfolioSymbol("SPACE"),
+    /couldn't find that ticker \(SPACE\)/,
+  );
+  stubFetch(
+    () =>
+      ({
+        ok: false,
+        status: 429,
+        json: async () => ({ error: { message: "Rate limited" } }),
+      }) as Response,
+  );
+  await assert.rejects(verifyPortfolioSymbol("SPY"), /rate limited/);
 });
 
 test("Edit sends an authenticated PUT for the existing portfolio ID", async () => {

@@ -18,6 +18,7 @@ export function EditPortfolio({
   busy,
   error,
   searchTickers,
+  verifyTicker,
   onClose,
   onSave,
 }: {
@@ -26,6 +27,7 @@ export function EditPortfolio({
   busy: boolean;
   error: string;
   searchTickers: SearchTickers;
+  verifyTicker?: (symbol: string) => Promise<void>;
   onClose: () => void;
   onSave: (weights: number[], symbols: string[]) => Promise<boolean>;
 }) {
@@ -102,6 +104,7 @@ export function EditPortfolio({
           inputId={inputId}
           selectedSymbols={rows.map(({ asset }) => asset.symbol)}
           searchTickers={searchTickers}
+          verifyTicker={verifyTicker}
           disabled={locked || rows.length >= MAX_HOLDINGS}
           onSelect={(ticker) => {
             if (rows.some(({ asset }) => asset.symbol === ticker.symbol))

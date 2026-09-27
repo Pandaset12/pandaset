@@ -1,19 +1,21 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { Check, ChevronDown, XMark as X } from "./components/icons";
 import {
   analyzeExistingPortfolio,
   createPortfolio,
+  deletePortfolio,
   createRequestGuard,
   searchAssets,
   verifyPortfolioHistory,
+  verifyPortfolioSymbol,
   listPortfolios,
   setApiAccessToken,
   updatePortfolio,
   type AnalysisResponse,
   type Portfolio,
 } from "./api/portfolio";
-import { Brand } from "./components/UI";
+import { Brand, Modal } from "./components/UI";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { EditPortfolio } from "./components/EditPortfolio";
 import { MethodologyModal } from "./components/MethodologyModal";
@@ -60,6 +62,11 @@ export function Application({ onSignOut }: { onSignOut: () => Promise<void> }) {
   const [portfolios, setPortfolios] = useState<Portfolio[]>([]);
   const [portfolioMenuOpen, setPortfolioMenuOpen] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [portfolioToDelete, setPortfolioToDelete] = useState<Portfolio | null>(
+    null,
+  );
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
   const analysisRequest = useRef(createRequestGuard());
 
   useEffect(() => {
@@ -126,6 +133,41 @@ export function Application({ onSignOut }: { onSignOut: () => Promise<void> }) {
     setAiWorkflow(null);
     setShowOnboarding(false);
     void loadAnalysis(portfolio);
+  }
+
+  async function confirmDeletePortfolio() {
+    if (!portfolioToDelete || deleteBusy) return;
+    setDeleteBusy(true);
+    setDeleteError("");
+    try {
+      await deletePortfolio(portfolioToDelete.portfolio_id);
+      const remaining = portfolios.filter(
+        (portfolio) =>
+          portfolio.portfolio_id !== portfolioToDelete.portfolio_id,
+      );
+      setPortfolios(remaining);
+      setPortfolioToDelete(null);
+      setPortfolioMenuOpen(false);
+      if (selectedPortfolio?.portfolio_id === portfolioToDelete.portfolio_id) {
+        analysisRequest.current.invalidate();
+        setActive(null);
+        setAnalysisLoading(false);
+        setAnalysisError("");
+        setEdit(false);
+        setAiWorkflow(null);
+        const next = remaining[0] ?? null;
+        setSelectedPortfolio(next);
+        if (next) void loadAnalysis(next);
+        else setPortfolioState("empty");
+      }
+      setToast(`Deleted ${portfolioToDelete.name}.`);
+    } catch (error) {
+      setDeleteError(
+        error instanceof Error ? error.message : "Could not delete portfolio.",
+      );
+    } finally {
+      setDeleteBusy(false);
+    }
   }
 
   useEffect(() => {
@@ -207,10 +249,11 @@ export function Application({ onSignOut }: { onSignOut: () => Promise<void> }) {
   const workspaceHoldings = selectedPortfolio
     ? workspaceAssets(selectedPortfolio)
     : [];
-  const searchTickers = async (
-    query: string,
-    { signal }: { signal: AbortSignal },
-  ) => (await searchAssets(query, signal)).results;
+  const searchTickers = useCallback(
+    async (query: string, { signal }: { signal: AbortSignal }) =>
+      (await searchAssets(query, signal)).results,
+    [],
+  );
 
   if (portfolioState !== "ready" || showOnboarding)
     return (
@@ -219,7 +262,7 @@ export function Application({ onSignOut }: { onSignOut: () => Promise<void> }) {
           <Brand />
           <span>Your investor workspace</span>
           <div className="onboarding-header-actions">
-            {showOnboarding && (
+            {showOnboarding && portfolios.length > 0 && (
               <button
                 className="text-button onboarding-header-back"
                 onClick={() => setShowOnboarding(false)}
@@ -245,6 +288,12 @@ export function Application({ onSignOut }: { onSignOut: () => Promise<void> }) {
             hasExistingPortfolios={portfolios.length > 0}
             onRetryLoad={() => void loadPortfolios()}
             searchTickers={searchTickers}
+            verifyTicker={verifyPortfolioSymbol}
+            onCancel={
+              showOnboarding && portfolios.length > 0
+                ? () => setShowOnboarding(false)
+                : undefined
+            }
             createPortfolio={async (input, options) => {
               await verifyPortfolioHistory(input.holdings, options.signal);
               return createPortfolio(input, options.signal);
@@ -312,7 +361,12 @@ export function Application({ onSignOut }: { onSignOut: () => Promise<void> }) {
               <span className="portfolio-initial">
                 {selectedPortfolio?.name.slice(0, 1).toUpperCase() ?? "P"}
               </span>
-              {selectedPortfolio?.name ?? "Choose portfolio"}
+              <span
+                className="portfolio-selector-name"
+                title={selectedPortfolio?.name}
+              >
+                {selectedPortfolio?.name ?? "Choose portfolio"}
+              </span>
               <ChevronDown size={14} />
             </button>
             {portfolioMenuOpen && (
@@ -322,19 +376,49 @@ export function Application({ onSignOut }: { onSignOut: () => Promise<void> }) {
                 aria-label="Saved portfolios"
               >
                 {portfolios.map((portfolio) => (
-                  <button
+                  <div
+                    className="portfolio-menu-row"
                     key={portfolio.portfolio_id}
-                    type="button"
-                    aria-current={
-                      portfolio.portfolio_id === selectedPortfolio?.portfolio_id
-                        ? "true"
-                        : undefined
-                    }
-                    onClick={() => selectPortfolio(portfolio)}
                   >
-                    {portfolio.name}
-                  </button>
+                    <button
+                      type="button"
+                      className="portfolio-menu-choice"
+                      aria-current={
+                        portfolio.portfolio_id ===
+                        selectedPortfolio?.portfolio_id
+                          ? "true"
+                          : undefined
+                      }
+                      title={portfolio.name}
+                      onClick={() => selectPortfolio(portfolio)}
+                    >
+                      {portfolio.name}
+                    </button>
+                    <button
+                      type="button"
+                      className="portfolio-menu-delete"
+                      aria-label={`Delete ${portfolio.name}`}
+                      title={`Delete ${portfolio.name}`}
+                      onClick={() => {
+                        setPortfolioMenuOpen(false);
+                        setDeleteError("");
+                        setPortfolioToDelete(portfolio);
+                      }}
+                    >
+                      Delete
+                    </button>
+                  </div>
                 ))}
+                <button
+                  type="button"
+                  className="portfolio-menu-new"
+                  onClick={() => {
+                    setPortfolioMenuOpen(false);
+                    setShowOnboarding(true);
+                  }}
+                >
+                  + New portfolio
+                </button>
               </div>
             )}
           </div>
@@ -464,6 +548,7 @@ export function Application({ onSignOut }: { onSignOut: () => Promise<void> }) {
           holdings={workspaceHoldings}
           weights={weights}
           searchTickers={searchTickers}
+          verifyTicker={verifyPortfolioSymbol}
           busy={analysisLoading}
           error={analysisError}
           onClose={() => setEdit(false)}
@@ -475,6 +560,40 @@ export function Application({ onSignOut }: { onSignOut: () => Promise<void> }) {
           analysis={active?.analysis ?? null}
           onClose={() => setMethod(false)}
         />
+      )}
+      {portfolioToDelete && (
+        <Modal
+          title="Delete portfolio?"
+          onClose={
+            deleteBusy ? () => undefined : () => setPortfolioToDelete(null)
+          }
+        >
+          <p>
+            Delete <strong>{portfolioToDelete.name}</strong> and its saved
+            analyses? This cannot be undone.
+          </p>
+          {deleteError && (
+            <p className="field-error" role="alert">
+              {deleteError}
+            </p>
+          )}
+          <div className="modal-actions">
+            <button
+              className="button subtle"
+              disabled={deleteBusy}
+              onClick={() => setPortfolioToDelete(null)}
+            >
+              Cancel
+            </button>
+            <button
+              className="button dark"
+              disabled={deleteBusy}
+              onClick={() => void confirmDeletePortfolio()}
+            >
+              {deleteBusy ? "Deleting…" : "Delete portfolio"}
+            </button>
+          </div>
+        </Modal>
       )}
       {aiWorkflow && active && (
         <AIWorkflowModal

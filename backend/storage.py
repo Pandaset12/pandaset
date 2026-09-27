@@ -111,6 +111,22 @@ class PortfolioStore:
             ).fetchall()
         return [Portfolio.model_validate_json(row[0]) for row in rows]
 
+    def delete(self, portfolio_id: str, owner_id: str) -> bool:
+        with self.connection() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            owned = connection.execute(
+                "SELECT 1 FROM portfolios WHERE portfolio_id = ? AND owner_id = ?",
+                (portfolio_id, owner_id),
+            ).fetchone()
+            if owned is None:
+                return False
+            connection.execute("DELETE FROM analyses WHERE portfolio_id = ?", (portfolio_id,))
+            connection.execute(
+                "DELETE FROM portfolios WHERE portfolio_id = ? AND owner_id = ?",
+                (portfolio_id, owner_id),
+            )
+        return True
+
     def save_analysis(self, metrics: AnalyticsSnapshot, owner_id: str) -> tuple[str, datetime]:
         analysis_id = "analysis_" + uuid4().hex
         created_at = datetime.now(timezone.utc)
