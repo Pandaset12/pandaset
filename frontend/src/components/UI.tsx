@@ -17,6 +17,9 @@ export function PandaMark({ className }: { className?: string }) {
       <path
         className="panda-face"
         d="M20 5.5c-8.7 0-14.5 6.4-14.5 15.1 0 8.1 6.4 14.2 14.5 14.2s14.5-6.1 14.5-14.2C34.5 11.9 28.7 5.5 20 5.5Z"
+        stroke="#171717"
+        strokeWidth="1.5"
+        strokeLinejoin="round"
       />
       <ellipse
         className="panda-dark"
