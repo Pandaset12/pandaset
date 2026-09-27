@@ -4,7 +4,7 @@ export function LandingPanda() {
     <svg
       viewBox="0 0 500 530"
       role="img"
-      aria-label="Panda watching over a portfolio chart"
+      aria-label="Pandaset panda mascot"
       className="landing-panda"
     >
       <ellipse
