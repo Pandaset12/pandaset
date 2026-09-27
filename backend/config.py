@@ -2,7 +2,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, SecretStr
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -24,7 +24,7 @@ class Settings(BaseSettings):
         "http://localhost:5175,http://127.0.0.1:5175,"
         "http://localhost:5176,http://127.0.0.1:5176"
     )
-    storage_path: Path = Path(__file__).parent / "data" / "portfoliolens.sqlite3"
+    storage_path: Path = Path.home() / ".pandaset" / "portfolios.sqlite3"
     gemini_timeout_seconds: float = Field(default=45, gt=0, le=120)
     event_lab_enabled: bool = False
     event_lab_public_enabled: bool = False
@@ -53,6 +53,11 @@ class Settings(BaseSettings):
     approved_news_domains: str = ""
     event_max_active_jobs_per_user: int = Field(default=3, ge=1, le=20)
     event_max_messages_per_run: int = Field(default=100, ge=1, le=1000)
+
+    @field_validator("storage_path")
+    @classmethod
+    def resolve_storage_path(cls, value: Path) -> Path:
+        return value.expanduser().resolve()
 
     @property
     def event_lab_ready(self) -> bool:
@@ -111,6 +116,10 @@ class Settings(BaseSettings):
     @property
     def authentication_enabled(self) -> bool:
         return bool(self.supabase_url.strip() and self.supabase_auth_api_key)
+
+    @property
+    def storage_path_source(self) -> str:
+        return "override" if "storage_path" in self.model_fields_set else "default"
 
 
 @lru_cache

@@ -153,8 +153,8 @@ def test_draft_worker_persists_enriched_evidence(monkeypatch):
     assert proposal["price_provenance"]["data_source"] == "twelve_data_adjusted_daily"
 
 
-def test_v2_requires_bearer_and_has_error_envelope():
-    app = create_app(Settings())
+def test_v2_requires_bearer_and_has_error_envelope(tmp_path):
+    app = create_app(Settings(storage_path=tmp_path / "portfolios.sqlite3"))
     with TestClient(app) as client:
         response = client.get("/api/v2/portfolios")
     assert response.status_code == 401

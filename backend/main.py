@@ -1,5 +1,6 @@
 from contextlib import asynccontextmanager
 from pathlib import Path
+import logging
 import sqlite3
 from uuid import uuid4
 
@@ -43,6 +44,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
+        logging.getLogger("uvicorn.error").info(
+            "Portfolio storage: %s (%s)",
+            settings.storage_path.expanduser().resolve(), settings.storage_path_source,
+        )
         store = await run_in_threadpool(PortfolioStore, settings.storage_path)
         await run_in_threadpool(store.seed_demo, demo_metrics())
         app.state.store = store

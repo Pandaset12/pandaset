@@ -1061,6 +1061,42 @@
   color: #c7c7c7;
   line-height: 1.65;
 }
+.po-state-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+.po-state-actions .button {
+  min-height: 50px;
+  margin-top: 0;
+}
+.po-state-actions .button.subtle {
+  border: 1px solid #aaa;
+  background: transparent;
+  color: #f8f8f8;
+}
+.po-state-actions .button.subtle:hover:not(:disabled) {
+  background: #333;
+}
+.po-state-actions .button:focus-visible,
+.po-retry-link:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 4px;
+}
+.po-retry-link {
+  align-self: center;
+  margin-top: 16px;
+  padding: 8px 12px;
+  border: 0;
+  background: transparent;
+  color: #f8f8f8;
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  cursor: pointer;
+}
 .portfolio-onboarding .button.dark {
   min-height: 50px;
   padding-inline: 24px;
@@ -1135,6 +1171,13 @@
   .po-state {
     min-height: 0;
     padding: 36px 26px;
+  }
+  .po-state-actions {
+    width: 100%;
+    flex-direction: column;
+  }
+  .po-state-actions .button {
+    width: 100%;
   }
   .po-state-illustration {
     width: 136px;

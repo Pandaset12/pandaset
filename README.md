@@ -24,10 +24,11 @@ Requires Node.js 22.22.2+ on the 22.x line, 24.15.0+ on the 24.x line, or 26+, p
    backend/.venv/bin/python -m pip install -r backend/requirements.txt
    backend/.venv/bin/python -m pip install -e quant_engine
    cp backend/.env.example backend/.env
+   backend/.venv/bin/python -m backend.storage_preflight
    backend/.venv/bin/python -m uvicorn backend.main:app --reload
    ```
 
-   Set `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` in `backend/.env` for the **same project** as the frontend. The backend verifies bearer tokens and scopes portfolios, current metrics, and event records to the signed-in user. `SUPABASE_ANON_KEY` is supported for legacy configuration. The backend guide includes Windows commands and more configuration detail.
+   Set `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` in `backend/.env` for the **same project** as the frontend. The backend verifies bearer tokens and scopes portfolios, current metrics, and event records to the signed-in user. `SUPABASE_ANON_KEY` is supported for legacy configuration. The preflight shows the portfolio database path before launch. Its default is shared across local worktrees; if an earlier checkout already holds your portfolios, follow the [non-destructive storage guide](docs/local-portfolio-storage.md) before switching paths. The backend guide includes Windows commands and more configuration detail.
 
 3. Start the frontend:
 
@@ -80,4 +81,4 @@ Import the repository root as the Vercel project. `vercel.json` runs `npm run bu
 
 Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` in the Vercel project for each deployment environment, then redeploy. Use the same Supabase project for Render's `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY`. Configure the production site URL and email confirmation redirects in Supabase Auth to use the Vercel domain. The publishable key is exposed in the frontend bundle; keep server secrets on Render.
 
-Check `https://pandaset.onrender.com/health` before deploying. It should report `status: ok` and `authentication_enabled: true`. After deployment, a request to the Vercel site's `/api/v1/portfolios` without a bearer token should return HTTP 401 from the backend. Render's v1 SQLite storage also needs a persistent disk and `STORAGE_PATH` pointing to it to keep saved portfolios across restarts.
+Check `https://pandaset.onrender.com/health` before deploying. It should report `status: ok` and `authentication_enabled: true`. After deployment, a request to the Vercel site's `/api/v1/portfolios` without a bearer token should return HTTP 401 from the backend. Render's v1 SQLite storage also needs a persistent disk and an explicit `STORAGE_PATH` pointing to it to keep saved portfolios across restarts; the user-home development default is not suitable for an ephemeral container.
