@@ -238,8 +238,8 @@ export function Application({ onSignOut }: { onSignOut: () => Promise<void> }) {
     : "/";
   const query = new URLSearchParams(search);
   useEffect(() => {
-    document.title = `${route === "/" ? "Overview" : route === "/risk" ? "Risk & exposure" : route === "/research" ? "Research" : "Scenario lab"} — Pandaset`;
-  }, [route]);
+    document.title = `${route === "/" ? (selectedPortfolio?.name ?? "Overview") : route === "/risk" ? "Risk & exposure" : route === "/research" ? "Research" : "Scenario lab"} — Pandaset`;
+  }, [route, selectedPortfolio?.name]);
 
   const workspaceHoldings = selectedPortfolio
     ? workspaceAssets(selectedPortfolio)
@@ -313,7 +313,6 @@ export function Application({ onSignOut }: { onSignOut: () => Promise<void> }) {
         <WorkspaceNavigation route={route} onSignOut={onSignOut} />
         <div className="workspace-bar">
           <div>
-            <span className="workspace-bar-label">Current portfolio</span>
             <div
               className="portfolio-picker"
               onKeyDown={(event) => {
@@ -322,6 +321,7 @@ export function Application({ onSignOut }: { onSignOut: () => Promise<void> }) {
             >
               <button
                 className="portfolio-selector"
+                aria-label={`Select portfolio: ${selectedPortfolio?.name ?? "Choose portfolio"}`}
                 aria-expanded={portfolioMenuOpen}
                 aria-controls="saved-portfolios"
                 onClick={() => setPortfolioMenuOpen((open) => !open)}
@@ -434,6 +434,7 @@ export function Application({ onSignOut }: { onSignOut: () => Promise<void> }) {
             <ErrorBoundary>
               {route === "/" ? (
                 <Overview
+                  portfolioName={active.portfolio.name}
                   holdings={workspaceHoldings}
                   analysis={active.analysis}
                   onEdit={() => setEdit(true)}

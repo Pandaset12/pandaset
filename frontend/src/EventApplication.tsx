@@ -216,8 +216,8 @@ export function EventApplication({
     : "/";
   const query = new URLSearchParams(search);
   useEffect(() => {
-    document.title = `${route === "/" ? "Overview" : route === "/risk" ? "Risk & exposure" : route === "/research" ? "Research" : "What-if lab"} — Pandaset`;
-  }, [route]);
+    document.title = `${route === "/" ? (selected?.name ?? "Overview") : route === "/risk" ? "Risk & exposure" : route === "/research" ? "Research" : "What-if lab"} — Pandaset`;
+  }, [route, selected?.name]);
   const analysisMismatch = Boolean(
     savedAnalysis &&
     selected &&
@@ -371,6 +371,7 @@ export function EventApplication({
             <ErrorBoundary>
               {route === "/" ? (
                 <Overview
+                  portfolioName={selected.name}
                   analysis={analysis}
                   assets={assets}
                   onEdit={() => setEdit(true)}

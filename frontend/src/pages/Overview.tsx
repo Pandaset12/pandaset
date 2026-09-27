@@ -24,12 +24,14 @@ import { allocationPercent } from "../workspace/holdings";
 import type { AnalysisResponse } from "../api/portfolio";
 
 export default function Overview({
+  portfolioName,
   analysis,
   holdings: portfolioAssets,
   onEdit,
   onBrief,
   onMethod,
 }: {
+  portfolioName: string;
   analysis: AnalysisResponse;
   holdings: Asset[];
   onEdit: () => void;
@@ -98,7 +100,7 @@ export default function Overview({
 
   return (
     <>
-      <PageHeading title="Portfolio overview">
+      <PageHeading title={portfolioName}>
         <button className="button subtle" onClick={onEdit}>
           <SlidersHorizontal size={16} />
           Edit portfolio

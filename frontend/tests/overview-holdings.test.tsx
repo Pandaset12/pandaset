@@ -75,6 +75,7 @@ function rowSymbols() {
 test("Overview holdings sort by allocation or descending signed return contribution", () => {
   render(
     createElement(Overview, {
+      portfolioName: "Long-term holdings",
       analysis,
       holdings: ["SPY", "AAPL", "JPM"].map(workspaceAsset),
       onEdit: () => {},
@@ -111,9 +112,30 @@ test("Overview holdings sort by allocation or descending signed return contribut
   cleanup();
 });
 
+test("overview heading follows the selected portfolio name", () => {
+  const props = {
+    analysis,
+    holdings: [workspaceAsset("SPY")],
+    onEdit: () => {},
+    onBrief: () => {},
+    onMethod: () => {},
+  };
+  const view = render(
+    createElement(Overview, { ...props, portfolioName: "Retirement" }),
+  );
+  assert.ok(screen.getByRole("heading", { level: 1, name: "Retirement" }));
+
+  view.rerender(
+    createElement(Overview, { ...props, portfolioName: "Travel fund" }),
+  );
+  assert.ok(screen.getByRole("heading", { level: 1, name: "Travel fund" }));
+  assert.equal(screen.queryByText("Retirement"), null);
+});
+
 function renderOverview(snapshot: AnalysisResponse, symbols: string[]) {
   return render(
     createElement(Overview, {
+      portfolioName: "Example portfolio",
       analysis: snapshot,
       holdings: symbols.map(workspaceAsset),
       onEdit: () => {},
@@ -224,6 +246,7 @@ test("Alpaca Overview uses the saved symbols, weights, session and available ben
   } as AnalysisResponse;
   view.rerender(
     createElement(Overview, {
+      portfolioName: "Example portfolio",
       analysis: withVti,
       holdings: ["TSLA", "VTI"].map(workspaceAsset),
       onEdit: () => {},
